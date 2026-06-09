@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// JsonSchema derives on the request-side types exist for rmcp's `ask_user`
+// tool: rmcp tool parameter structs must implement schemars::JsonSchema.
+// Wire shape (serde attrs) is unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Urgency {
     Low,
@@ -8,7 +11,7 @@ pub enum Urgency {
     High,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum InputKind {
     Text,
@@ -20,7 +23,7 @@ pub enum InputKind {
     None,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct InputSpec {
     #[serde(default = "default_kind")]
     pub kind: InputKind,
@@ -34,7 +37,7 @@ impl Default for InputSpec {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct AskRequest {
     pub title: String,
     #[serde(default)]

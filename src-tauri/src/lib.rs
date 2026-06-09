@@ -1,3 +1,4 @@
+pub mod mcp;
 pub mod protocol;
 pub mod registry;
 

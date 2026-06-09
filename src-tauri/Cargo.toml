@@ -24,4 +24,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 parking_lot = "0.12"
 tokio = { version = "1", features = ["full"] }
+# "server" + "macros" power CennoServer; "client" is needed by mcp::test_support
+# (always compiled — see the note on that module) and later by the stdio bridge.
+rmcp = { version = "1.7", features = ["server", "client", "macros"] }
+schemars = "1"
+anyhow = "1"
+
+[dev-dependencies]
+tempfile = "3"
 
