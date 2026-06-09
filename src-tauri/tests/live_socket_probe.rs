@@ -18,9 +18,16 @@ async fn live_ask_user_times_out_cleanly() {
         sock.display()
     );
 
+    // Override for tests that need the prompt to stay pending longer
+    // (e.g. the NSPanel focus-stealing check observes the app mid-ask).
+    let timeout_s: u64 = std::env::var("CENNO_PROBE_TIMEOUT_S")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+
     let result = cenno_lib::mcp::test_support::call_ask_user(
         &sock,
-        serde_json::json!({"title": "Live probe", "body_md": "automated E2E check", "timeout_s": 3}),
+        serde_json::json!({"title": "Live probe", "body_md": "automated E2E check", "timeout_s": timeout_s}),
     )
     .await
     .expect("ask_user call over live socket failed");

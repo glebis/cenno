@@ -30,6 +30,11 @@ rmcp = { version = "1.7", features = ["server", "client", "macros"] }
 schemars = "1"
 anyhow = "1"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# Swizzles the main window into a non-activating NSPanel (branch v2 targets
+# Tauri 2.x; exact rev pinned via Cargo.lock).
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
+
 [dev-dependencies]
 tempfile = "3"
 
