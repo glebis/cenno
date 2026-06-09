@@ -13,9 +13,11 @@
     "windows": [
       {
         "title": "cenno",
-        "width": 720,
-        "height": 520,
-        "visible": true
+        "width": 420,
+        "height": 240,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "visible": false
       }
     ],
     "security": {
