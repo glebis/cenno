@@ -19,12 +19,19 @@ export default function PromptPanel({
   return (
     <div className="prompt-panel">
       <h1>{prompt.title}</h1>
-      <ReactMarkdown>{prompt.body_md}</ReactMarkdown>
+      <div className="prompt-body">
+        <ReactMarkdown>{prompt.body_md}</ReactMarkdown>
+      </div>
+      {/* Empty submit is allowed on purpose: an empty answer is a deliberate ack/skip. */}
       <div className="prompt-row">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && onAnswer(prompt.id, text, "text")}
+          onKeyDown={(e) =>
+            e.key === "Enter" &&
+            !e.nativeEvent.isComposing && // IME: Enter confirms composition, not the answer
+            onAnswer(prompt.id, text, "text")
+          }
           autoFocus
         />
         <button onClick={() => onAnswer(prompt.id, text, "text")}>Send</button>

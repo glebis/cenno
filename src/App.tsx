@@ -28,12 +28,26 @@ function App() {
   }, []);
 
   async function handleAnswer(id: string, answer: string, via: "text") {
-    await invoke("answer_prompt", { id, answer, via });
+    let resolved: boolean;
+    try {
+      resolved = await invoke<boolean>("answer_prompt", { id, answer, via });
+    } catch (e) {
+      // Keep the panel up so the user can retry instead of silently losing it.
+      console.error("answer_prompt failed:", e);
+      return;
+    }
+    if (!resolved) {
+      // Prompt already timed out (or unknown id) — the agent never saw this
+      // answer. Skeleton behavior: log it, still clear and hide.
+      console.warn(`prompt ${id} already expired; answer was not delivered`);
+    }
     setPrompt(null);
     await getCurrentWindow().hide();
   }
 
-  return prompt ? <PromptPanel prompt={prompt} onAnswer={handleAnswer} /> : null;
+  // key={prompt.id}: a new prompt replacing the current one must remount the
+  // panel so it doesn't inherit the half-typed text of the old prompt.
+  return prompt ? <PromptPanel key={prompt.id} prompt={prompt} onAnswer={handleAnswer} /> : null;
 }
 
 export default App;

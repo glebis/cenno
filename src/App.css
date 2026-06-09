@@ -13,7 +13,11 @@ body {
 }
 
 .prompt-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   padding: 16px 20px;
+  overflow-wrap: anywhere;
 }
 
 .prompt-panel h1 {
@@ -22,8 +26,14 @@ body {
   font-weight: 600;
 }
 
-.prompt-panel p {
-  margin: 0 0 12px;
+.prompt-body {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.prompt-body p {
+  margin: 0 0 8px;
   color: #c8c8cc;
 }
 

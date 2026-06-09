@@ -53,7 +53,10 @@ pub fn run() {
                 })
                 .await;
                 if let Err(e) = result {
+                    // Without the socket server this app is an invisible zombie
+                    // (window starts hidden, no tray yet) — exit loudly instead.
                     eprintln!("cenno: failed to start MCP socket server: {e}");
+                    app_handle.exit(1);
                 }
             });
 
