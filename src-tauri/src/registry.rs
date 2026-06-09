@@ -10,10 +10,17 @@ pub struct PromptRegistry {
 }
 
 struct Pending {
+    /// None after a resolve() consumed the sender (including a late resolve on a timed-out prompt).
     tx: Option<oneshot::Sender<(String, Via)>>,
     // Will be read by the tray inbox in a later plan (Task 4 spec).
     #[allow(dead_code)]
     pub request: AskRequest,
+}
+
+impl Default for PromptRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PromptRegistry {
@@ -40,6 +47,7 @@ impl PromptRegistry {
                 self.inner.lock().remove(&id);
                 AskResponse::Answered { answer, via, elapsed_s: started.elapsed().as_secs_f64() }
             }
+            // Err(Elapsed) = real timeout; Ok(Err(_)) = sender dropped, structurally impossible here
             _ => AskResponse::TimedOut { answered: false, prompt_id: id },
         }
     }
@@ -47,7 +55,7 @@ impl PromptRegistry {
     pub fn resolve(&self, id: &str, answer: String, via: Via) -> bool {
         let mut map = self.inner.lock();
         match map.get_mut(id).and_then(|p| p.tx.take()) {
-            Some(tx) => { let _ = tx.send((answer, via)); true }
+            Some(tx) => tx.send((answer, via)).is_ok(),
             None => false,
         }
     }
