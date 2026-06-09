@@ -59,14 +59,17 @@ Harness wrapper:
 } as React.CSSProperties}>
 ```
 
-Measured with `getComputedStyle` in the running page:
+The harness calls `injectBasicCatalogStyles()` in `src/main.tsx`, so the table below was measured against *active* stock defaults, not undefined vars: the injected default was confirmed live at measurement time (`getComputedStyle(document.documentElement).getPropertyValue('--a2ui-color-primary')` → `#17e`), and the wrapper override still won for all descendants. Mechanism note: injection uses a constructed stylesheet pushed to `document.adoptedStyleSheets`, so no `<style>` tag appears in the DOM.
 
-| Element | Property | Computed value |
-|---|---|---|
-| our Button | background-color | `rgb(255, 0, 128)` |
-| our Button | color | `rgb(0, 255, 0)` |
-| our Button | border-radius | `13px` |
-| stock Card | background-color | `rgb(10, 20, 30)` |
+Measured with `getComputedStyle` in the running page (re-verified after adding the inject call — values unchanged):
+
+| Element | Property | Computed value | Injected `:root` default it overrode |
+|---|---|---|---|
+| our Button | background-color | `rgb(255, 0, 128)` | `--a2ui-color-primary: #17e` |
+| our Button | color | `rgb(0, 255, 0)` | `--a2ui-color-on-primary` |
+| our Button | border-radius | `13px` | `--a2ui-border-radius` |
+| stock Card | background-color | `rgb(10, 20, 30)` | `--a2ui-color-surface` |
+| stock Card | color | `rgb(200, 210, 220)` | `--a2ui-color-on-surface` |
 
 Token vocabulary available: `--a2ui-color-{primary,secondary,surface,background,input,border,...}` (+ `on-*`, `*-hover`, `*-light/dark`), `--a2ui-spacing-{xs..xl}`, `--a2ui-font-size-{xs..2xl}`, `--a2ui-font-family-*`, `--a2ui-border-radius`, `--a2ui-grid-base`, per-component vars like `--a2ui-card-*`. Our token pipeline can map straight onto these on the surface wrapper. Verdict: token pipeline viable.
 
