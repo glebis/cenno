@@ -65,10 +65,17 @@ pub enum Via {
     Choice,
 }
 
+/// Result of an `ask_user` call.
+///
+/// Serialized `#[serde(untagged)]`: the two variants are discriminated by
+/// their disjoint keys — `answer` (Answered) vs `answered` (TimedOut).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum AskResponse {
     Answered { answer: String, via: Via, elapsed_s: f64 },
+    /// Invariant: `answered` is always `false` on the wire. The presence of
+    /// this shape (`{"answered":false,"prompt_id":...}`) MEANS the prompt
+    /// timed out; the field exists only because the wire format requires it.
     TimedOut { answered: bool, prompt_id: String },
 }
 
@@ -92,12 +99,12 @@ mod tests {
     fn answered_response_serializes() {
         let resp = AskResponse::Answered { answer: "ok".into(), via: Via::Text, elapsed_s: 3.2 };
         let json = serde_json::to_string(&resp).unwrap();
-        assert!(json.contains("\"via\":\"text\""));
+        assert_eq!(json, r#"{"answer":"ok","via":"text","elapsed_s":3.2}"#);
     }
 
     #[test]
     fn timeout_response_serializes() {
         let resp = AskResponse::TimedOut { answered: false, prompt_id: "p_1".into() };
-        assert!(serde_json::to_string(&resp).unwrap().contains("\"answered\":false"));
+        assert_eq!(serde_json::to_string(&resp).unwrap(), r#"{"answered":false,"prompt_id":"p_1"}"#);
     }
 }
