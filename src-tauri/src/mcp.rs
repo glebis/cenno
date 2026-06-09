@@ -51,11 +51,13 @@ impl CennoServer {
                        {answered: false, prompt_id} on timeout."
     )]
     async fn ask_user(&self, Parameters(params): Parameters<AskRequest>) -> String {
+        // TODO(plan4): observe context.ct (client cancellation) so a dead agent
+        // unparks the prompt instead of burning the full timeout_s.
         let resp = self
             .registry
             .ask(params, |id, req| (self.notify)(id, req))
             .await;
-        serde_json::to_string(&resp).unwrap_or_else(|_| "{}".to_string())
+        serde_json::to_string(&resp).expect("AskResponse is always serializable")
     }
 }
 
@@ -97,6 +99,9 @@ pub async fn start_socket_server(
     registry: PromptRegistry,
     notify: impl Fn(&str, &AskRequest) + Send + Sync + 'static,
 ) -> anyhow::Result<()> {
+    // TODO(plan4): two concurrent launches can unlink each other's live socket —
+    // enforce single instance (tauri-plugin-single-instance) instead of smarter
+    // socket dancing.
     if sock_path.exists() {
         match tokio::net::UnixStream::connect(&sock_path).await {
             Ok(_) => anyhow::bail!(
@@ -124,6 +129,9 @@ pub async fn start_socket_server(
                 Ok(conn) => conn,
                 Err(e) => {
                     eprintln!("cenno mcp: accept failed: {e}");
+                    // Persistent accept errors (e.g. EMFILE under fd pressure)
+                    // are recoverable — back off instead of busy-spinning.
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     continue;
                 }
             };
