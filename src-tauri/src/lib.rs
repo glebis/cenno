@@ -7,6 +7,7 @@ pub mod protocol;
 pub mod registry;
 pub mod suppress;
 pub mod tray;
+pub mod updater;
 
 use tauri::{Emitter, Manager};
 
@@ -330,6 +331,10 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // GitHub-releases updater + the dialogs its tray-menu flow shows
+        // (updater.rs). Endpoint/pubkey live in tauri.conf.json `plugins.updater`.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         // Launch-at-login registration. LaunchAgent (not AppleScript): a
         // plist in ~/Library/LaunchAgents survives the app not being in
         // /Applications and needs no Automation permission. `--tray` keeps

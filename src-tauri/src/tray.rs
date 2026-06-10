@@ -89,6 +89,9 @@ pub fn setup_tray(
         None::<&str>,
     )?;
 
+    let check_updates =
+        MenuItem::with_id(app, "check_updates", "Check for updates…", true, None::<&str>)?;
+
     let quit = MenuItem::with_id(app, "quit", "Quit cenno", true, None::<&str>)?;
 
     let menu = Menu::with_items(
@@ -100,6 +103,7 @@ pub fn setup_tray(
             &hide_fullscreen,
             &launch_login,
             &PredefinedMenuItem::separator(app)?,
+            &check_updates,
             &quit,
         ],
     )?;
@@ -176,6 +180,15 @@ pub fn setup_tray(
                     // startup reconcile self-heals a failed plugin call.
                     persist(SETTING_LAUNCH_AT_LOGIN, if checked { "true" } else { "false" });
                     eprintln!("cenno: launch_at_login = {checked}");
+                }
+                "check_updates" => {
+                    // Off the menu-event (main) thread: the flow blocks on
+                    // dialogs and the download. Repeated clicks just queue
+                    // further checks — harmless, the dialog serializes them.
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        crate::updater::check_and_install(app).await;
+                    });
                 }
                 "quit" => {
                     app.exit(0);

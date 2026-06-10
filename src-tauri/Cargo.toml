@@ -1,8 +1,9 @@
 [package]
 name = "cenno"
 version = "0.1.0"
-description = "cenno"
-authors = []
+description = "Agent UX runtime — agents ask, you answer"
+authors = ["Gleb Kalinin <glebis@gmail.com>"]
+license = "Apache-2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -38,6 +39,11 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 csv = "1"
 tauri-plugin-autostart = "2"
+# In-app updates from GitHub releases (latest.json endpoint, minisign-verified).
+tauri-plugin-updater = "2"
+# Native message dialogs for the update flow (a tray app has no other surface
+# for "you're up to date" / "install and restart?" feedback).
+tauri-plugin-dialog = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Swizzles the main window into a non-activating NSPanel. Rev is the tip of
