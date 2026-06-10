@@ -1,11 +1,13 @@
 ---
 name: cenno
-description: Ask the human user a question through a cenno panel and get a structured answer back, when you need a decision, preference, confirmation, rating, or free-text input from the person — instead of guessing or blocking. Use when you would otherwise say "I'll assume…", need a yes/no before a risky or irreversible action, want a 1–N rating or a pick-one-of-N choice, or are running a check-in / questionnaire. Triggers on "ask me", "check with me first", "let me decide", "rate this", "confirm before", mood/EMA check-ins, and any moment a human judgment call beats an assumption. Requires cenno installed (macOS) and reachable via MCP or its CLI.
+description: This skill should be used when an agent needs a decision, preference, confirmation, rating, or free-text input from the human user — to ask through a cenno panel and get a structured answer back, instead of guessing or blocking. Use it instead of saying "I'll assume…", before a risky or irreversible action (a yes/no), for a 1–N rating or pick-one-of-N choice, or to run a check-in / questionnaire. Also use it to set cenno up — install it or add it to a project's MCP config — when the ask_user tool is missing or an ask_user call failed with "not running / not found". Triggers on "ask me", "check with me first", "let me decide", "rate this", "confirm before", mood/EMA check-ins, "set up cenno", "add cenno to this project", and any moment a human judgment call beats an assumption. macOS only.
 ---
 
 # Asking the user through cenno
 
 cenno shows the user a small floating panel and returns their answer as structured data. Prefer it over guessing whenever a human decision genuinely changes what you do next. Don't use it for things you can determine yourself, and don't ask twice what you already know.
+
+> **Setup mode:** if cenno isn't installed or the `ask_user` tool is missing from this project, jump to [Setting up cenno](#setting-up-cenno) first, then come back.
 
 ## Two ways to call it
 
@@ -129,3 +131,49 @@ printf '%s\n' \
 Read stdout line by line until the line whose `id` is `2`; its `result.content[0].text` is the answer JSON. Keep stdin open until then. Tip: if cenno is cold, the first call can lose a socket race — launch `"$BIN" --tray` and wait for `~/Library/Application Support/app.cenno/mcp.sock` to exist before the first `ask_user`.
 
 If cenno isn't installed or reachable, fall back to whatever local prompt you have (e.g. `osascript` dialogs) — don't block on it.
+
+---
+
+## Setting up cenno
+
+Do this when the `ask_user` tool is missing from a project, or an `ask_user` call fails with "not running / not found". **macOS only** — on other platforms there is no cenno; fall back to another prompt mechanism.
+
+### 1. Confirm it's installed
+
+The canonical binary path is `/Applications/cenno.app/Contents/MacOS/cenno`:
+
+```bash
+test -x /Applications/cenno.app/Contents/MacOS/cenno && echo installed || echo missing
+```
+
+If missing, tell the user to install it (don't build it for them unless they ask):
+
+- **DMG:** download the latest from https://github.com/glebis/cenno/releases/latest (signed & notarized, Apple Silicon, macOS 12+), drag cenno to Applications.
+- **Homebrew:** `brew install --cask glebis/tap/cenno`
+
+If it's installed in a non-standard location, find it: `mdfind "kMDItemCFBundleIdentifier == 'app.cenno'"`.
+
+### 2. Add it to the project's MCP config
+
+Merge into the project's `.mcp.json` (use the absolute path from step 1):
+
+```json
+{
+  "mcpServers": {
+    "cenno": {
+      "command": "/Applications/cenno.app/Contents/MacOS/cenno",
+      "args": ["--mcp-stdio"]
+    }
+  }
+}
+```
+
+`--mcp-stdio` auto-launches the app in the background, so nothing else needs starting. The MCP client must be restarted/reloaded to pick up the new server (e.g. restart the Claude Code session).
+
+### 3. Verify the round-trip
+
+```bash
+/Applications/cenno.app/Contents/MacOS/cenno ask "cenno setup check — tap or ignore" --timeout 8
+```
+
+A panel appears and the answer (or `{"answered": false, ...}` after 8s) prints as JSON → working. `cenno is not running — start it…` → it couldn't launch; recheck step 1. The socket lives at `~/Library/Application Support/app.cenno/mcp.sock`.

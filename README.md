@@ -22,7 +22,11 @@ Built for time-sensitive, low-friction interactions: mood check-ins, EMA questio
 
 ## Install
 
-**[Download the latest DMG](https://github.com/glebis/cenno/releases/latest)** (signed & notarized, Apple Silicon, macOS 12+), drag cenno to Applications.
+**[Download the latest DMG](https://github.com/glebis/cenno/releases/latest)** (signed & notarized, Apple Silicon, macOS 12+), drag cenno to Applications. Or via Homebrew:
+
+```bash
+brew install --cask glebis/tap/cenno
+```
 
 On first launch cenno lives in your menu bar, registers itself to launch at login (you can turn that off in the tray menu), and waits for prompts.
 
@@ -66,7 +70,7 @@ Note for contributors: a plain `cargo build` binary loads the Vite dev server (p
 
 A panel appears; your answer prints as JSON. cenno auto-launches if it isn't running.
 
-Want your agent to ask *well* — right input kind, sensible flows, graceful timeouts? Drop in the ready-made [agent skills](skills/) (`cenno` for usage, `cenno-setup` for wiring it into a project).
+Want your agent to ask *well* — right input kind, sensible flows, graceful timeouts? Drop in the ready-made [agent skill](skills/) (it also has a setup mode that wires cenno into a project).
 
 ## Why not just a terminal prompt or a dialog box?
 
