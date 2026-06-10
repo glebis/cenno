@@ -1,14 +1,18 @@
 pub mod a2ui_guard;
 pub mod bridge;
 pub mod cli;
+pub mod db;
 pub mod mcp;
 pub mod protocol;
 pub mod registry;
+pub mod suppress;
+pub mod tray;
 
 use tauri::{Emitter, Manager};
 
 use crate::protocol::{AskRequest, Via};
 use crate::registry::PromptRegistry;
+use crate::suppress::SuppressionState;
 
 /// Payload of the `prompt` event emitted to the webview when an agent asks.
 /// Also returned by the `pending_prompts` command (same wire shape) so the
@@ -46,6 +50,93 @@ fn answer_prompt(state: tauri::State<PromptRegistry>, id: String, answer: String
         _ => Via::Text,
     };
     state.resolve(&id, answer, via)
+}
+
+/// The display-gating decision for an arriving (or replaying) prompt, plus
+/// the persistence side-effect the lazy pause-expiry implies: when
+/// `check()` reports it just cleared an expired pause, the stored
+/// "pause_until" setting is cleared too so a restart doesn't resurrect it.
+///
+/// Public (not pub(crate)) so the socket-level integration test can exercise
+/// the exact decision the notify closure uses.
+pub fn should_display(
+    suppress: &SuppressionState,
+    db: Option<&crate::db::Db>,
+    fullscreen_check: impl Fn() -> bool,
+) -> bool {
+    let check = suppress.check(fullscreen_check);
+    if check.pause_cleared {
+        if let Some(db) = db {
+            if let Err(e) = db.set_setting(crate::tray::SETTING_PAUSE_UNTIL, "") {
+                eprintln!("cenno: failed to clear persisted pause: {e}");
+            }
+        }
+    }
+    !check.suppress
+}
+
+/// Newest answerable prompt = highest numeric id suffix ("p_10" > "p_9").
+/// Generic over the request payload so the test needs no AskRequest fixture.
+fn pick_replay<T>(pending: Vec<(String, T, u64)>) -> Option<(String, T, u64)> {
+    pending.into_iter().max_by_key(|(id, _, _)| {
+        id.strip_prefix("p_").and_then(|n| n.parse::<u64>().ok()).unwrap_or(0)
+    })
+}
+
+/// Re-show the newest still-answerable prompt after suppression lifts
+/// (tray "Resume now", fullscreen checkbox toggled off, pause-expiry timer).
+///
+/// Re-checks suppression first: "Resume now" clicked while another app is
+/// fullscreen (with hide-in-fullscreen on) must stay quiet — the pending
+/// prompt then reappears on the next trigger or the next prompt arrival.
+/// Replays via the same PromptEvent path as fresh prompts; remaining_s
+/// carries what's left of the budget so the webview's auto-hide stays honest.
+pub(crate) fn replay_pending(handle: &tauri::AppHandle) {
+    let suppress = handle.state::<SuppressionState>();
+    if suppress.should_suppress(crate::suppress::fullscreen_app_present) {
+        eprintln!("cenno: replay skipped — still suppressed");
+        return;
+    }
+    let registry = handle.state::<PromptRegistry>();
+    if let Some((id, request, remaining_s)) = pick_replay(registry.pending()) {
+        eprintln!("cenno: replaying pending prompt {id} ({remaining_s}s left)");
+        let payload = PromptEvent { id, request, remaining_s };
+        if let Err(e) = handle.emit("prompt", payload) {
+            eprintln!("cenno: failed to emit replayed prompt: {e}");
+        }
+        show_prompt_window(handle);
+    }
+}
+
+/// Arm a one-shot timer that fires at `until` and, if THIS pause is still the
+/// active one (generation unchanged — no re-pause/resume happened meanwhile),
+/// clears it, persists the clear, and replays any pending prompt.
+///
+/// Called when a pause is set via the tray and when a persisted pause is
+/// restored at startup. A stale timer (generation moved) is a no-op.
+pub(crate) fn arm_pause_expiry_timer(
+    handle: &tauri::AppHandle,
+    db: Option<crate::db::Db>,
+    until: chrono::DateTime<chrono::Utc>,
+) {
+    let suppress = handle.state::<SuppressionState>().inner().clone();
+    let generation = suppress.pause_generation();
+    let handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        let wait = (until - chrono::Utc::now()).to_std().unwrap_or_default();
+        tokio::time::sleep(wait).await;
+        if suppress.pause_generation() != generation {
+            return; // re-paused or resumed meanwhile — not our pause anymore
+        }
+        suppress.resume(); // clears the (just-expired) pause, bumps generation
+        if let Some(db) = &db {
+            if let Err(e) = db.set_setting(crate::tray::SETTING_PAUSE_UNTIL, "") {
+                eprintln!("cenno: failed to clear persisted pause: {e}");
+            }
+        }
+        eprintln!("cenno: pause expired — replaying pending prompts if any");
+        replay_pending(&handle);
+    });
 }
 
 /// macOS: swizzle the (hidden) main window into a non-activating NSPanel.
@@ -115,7 +206,7 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run(tray: bool) {
+pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         // Restore the panel's last position on launch (POSITION only — size
@@ -148,17 +239,98 @@ pub fn run(tray: bool) {
             let registry = PromptRegistry::new();
             app.manage(registry.clone());
 
-            // tray flag reserved for future tray-icon setup — panel conversion
-            // must always happen: it shows nothing (hidden startup is already
-            // guaranteed by visible:false in tauri.conf.json), and prompt
-            // display depends on the window being a panel.
-            let _ = tray;
+            // The tray icon always runs — the menu-bar presence IS the app's
+            // home, regardless of how cenno was launched. Panel conversion
+            // must also always happen: it shows nothing (hidden startup is
+            // already guaranteed by visible:false in tauri.conf.json), and
+            // prompt display depends on the window being a panel.
             #[cfg(target_os = "macos")]
             convert_to_panel(app)?;
 
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let sock_path = data_dir.join("mcp.sock");
+
+            // Open (or create) the history database. Failure is non-fatal:
+            // the app runs without history rather than refusing to launch.
+            let db_path = data_dir.join("cenno.db");
+            let db = match crate::db::Db::open(&db_path) {
+                Ok(db) => {
+                    // Defense in depth: answers are stored as plaintext; restrict
+                    // file access to the current user only.
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt as _;
+                        if let Err(e) = std::fs::set_permissions(
+                            &db_path,
+                            std::fs::Permissions::from_mode(0o600),
+                        ) {
+                            eprintln!("cenno: could not set DB permissions: {e}");
+                        }
+                    }
+                    eprintln!("cenno: history DB opened at {}/cenno.db", data_dir.display());
+                    Some(db)
+                }
+                Err(e) => {
+                    eprintln!("cenno: failed to open history DB: {e}");
+                    None
+                }
+            };
+
+            // Suppression state, seeded from persisted settings when the DB
+            // is available. Defaults: not paused, hide-in-fullscreen ON.
+            // `restored_until` (a still-future persisted pause) is carried
+            // out so its expiry timer can be armed once state is managed.
+            let (suppress, restored_until) = {
+                use crate::tray::{SETTING_HIDE_IN_FULLSCREEN, SETTING_PAUSE_UNTIL};
+
+                // hide_in_fullscreen: absent → default true → write it back
+                // so the settings row exists from first launch on.
+                let hide_in_fullscreen = match db
+                    .as_ref()
+                    .and_then(|db| db.get_setting(SETTING_HIDE_IN_FULLSCREEN).ok().flatten())
+                {
+                    Some(v) => v == "true",
+                    None => {
+                        if let Some(db) = &db {
+                            if let Err(e) = db.set_setting(SETTING_HIDE_IN_FULLSCREEN, "true") {
+                                eprintln!("cenno: failed to seed hide_in_fullscreen: {e}");
+                            }
+                        }
+                        true
+                    }
+                };
+                let suppress = crate::suppress::SuppressionState::new(hide_in_fullscreen);
+
+                // pause_until: restore only if it parses AND is still in the
+                // future — an expired (or cleared/garbled) value means no pause.
+                let mut restored_until = None;
+                if let Some(raw) = db
+                    .as_ref()
+                    .and_then(|db| db.get_setting(SETTING_PAUSE_UNTIL).ok().flatten())
+                {
+                    if let Ok(until) = chrono::DateTime::parse_from_rfc3339(&raw) {
+                        let until = until.with_timezone(&chrono::Utc);
+                        if until > chrono::Utc::now() {
+                            suppress.restore_pause_until(until);
+                            restored_until = Some(until);
+                            eprintln!("cenno: restored pause until {until}");
+                        }
+                    }
+                }
+                (suppress, restored_until)
+            };
+            app.manage(suppress.clone());
+
+            // Tray icon + menu — always, in both windowed and --tray modes.
+            tray::setup_tray(app.handle(), suppress.clone(), db.clone())?;
+
+            // A restored pause needs its expiry timer re-armed, otherwise
+            // prompts suppressed after this restart would only replay
+            // lazily (next prompt arrival) instead of at pause end.
+            if let Some(until) = restored_until {
+                arm_pause_expiry_timer(app.handle(), db.clone(), until);
+            }
 
             // Invariant: mcp::socket_path() must agree with what Tauri resolves.
             // Catch any divergence early in debug builds.
@@ -172,23 +344,38 @@ pub fn run(tray: bool) {
             }
 
             let app_handle = app.handle().clone();
+            let suppress_gate = suppress.clone();
+            let db_gate = db.clone();
             tauri::async_runtime::spawn(async move {
                 let handle = app_handle.clone();
-                let result = mcp::start_socket_server(sock_path, registry, move |id, req| {
-                    // Called from the socket server's tokio runtime; both
-                    // emit() and window calls are thread-safe in Tauri 2.
-                    let payload = PromptEvent {
-                        id: id.to_string(),
-                        request: req.clone(),
-                        // A notify fires at ask() registration: nothing has
-                        // elapsed yet, so the full budget remains.
-                        remaining_s: req.timeout_s,
-                    };
-                    if let Err(e) = handle.emit("prompt", payload) {
-                        eprintln!("cenno: failed to emit prompt event: {e}");
-                    }
-                    show_prompt_window(&handle);
-                })
+                let result = mcp::start_socket_server(
+                    sock_path,
+                    registry,
+                    move |id, req| {
+                        // Display gate: paused or fullscreen → no emit, no
+                        // show. The prompt stays pending (registry already
+                        // registered it; agent timeout contract unchanged)
+                        // and replays when suppression lifts.
+                        if !should_display(&suppress_gate, db_gate.as_ref(), crate::suppress::fullscreen_app_present) {
+                            eprintln!("cenno: prompt {id} suppressed (paused or fullscreen) — queued for replay");
+                            return;
+                        }
+                        // Called from the socket server's tokio runtime; both
+                        // emit() and window calls are thread-safe in Tauri 2.
+                        let payload = PromptEvent {
+                            id: id.to_string(),
+                            request: req.clone(),
+                            // A notify fires at ask() registration: nothing has
+                            // elapsed yet, so the full budget remains.
+                            remaining_s: req.timeout_s,
+                        };
+                        if let Err(e) = handle.emit("prompt", payload) {
+                            eprintln!("cenno: failed to emit prompt event: {e}");
+                        }
+                        show_prompt_window(&handle);
+                    },
+                    db,
+                )
                 .await;
                 if let Err(e) = result {
                     // Without the socket server this app is an invisible zombie
@@ -203,4 +390,52 @@ pub fn run(tray: bool) {
         .invoke_handler(tauri::generate_handler![answer_prompt, pending_prompts])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pick_replay_picks_newest_by_numeric_id() {
+        // Numeric, not lexicographic: p_10 beats p_9.
+        let pending = vec![("p_2".to_string(), (), 5), ("p_10".to_string(), (), 9), ("p_9".to_string(), (), 1)];
+        assert_eq!(pick_replay(pending).unwrap().0, "p_10");
+        assert!(pick_replay::<()>(vec![]).is_none());
+    }
+
+    #[test]
+    fn should_display_true_when_unsuppressed() {
+        let s = SuppressionState::new(true);
+        assert!(should_display(&s, None, || false));
+    }
+
+    #[test]
+    fn should_display_false_when_paused_or_fullscreen() {
+        let s = SuppressionState::new(true);
+        s.pause_for(15);
+        assert!(!should_display(&s, None, || false));
+        s.resume();
+        assert!(!should_display(&s, None, || true));
+        s.set_hide_in_fullscreen(false);
+        assert!(should_display(&s, None, || true));
+    }
+
+    #[test]
+    fn should_display_clears_expired_pause_from_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = crate::db::Db::open(&dir.path().join("t.db")).unwrap();
+        db.set_setting(crate::tray::SETTING_PAUSE_UNTIL, "2020-01-01T00:00:00Z").unwrap();
+
+        let s = SuppressionState::new(false);
+        s.restore_pause_until(chrono::Utc::now() - chrono::Duration::seconds(1));
+
+        assert!(should_display(&s, Some(&db), || false), "expired pause must not suppress");
+        assert_eq!(s.snapshot().0, None, "in-memory pause cleared");
+        assert_eq!(
+            db.get_setting(crate::tray::SETTING_PAUSE_UNTIL).unwrap().as_deref(),
+            Some(""),
+            "persisted pause cleared so a restart can't resurrect it"
+        );
+    }
 }

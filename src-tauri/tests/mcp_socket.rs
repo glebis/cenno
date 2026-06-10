@@ -1,4 +1,4 @@
-use cenno_lib::{mcp::start_socket_server, protocol::Via, registry::PromptRegistry};
+use cenno_lib::{db::Db, mcp::start_socket_server, protocol::Via, registry::PromptRegistry};
 use rmcp::{model::CallToolRequestParams, ServiceExt};
 
 #[tokio::test]
@@ -6,7 +6,7 @@ async fn ask_user_over_socket_resolves() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("mcp.sock");
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req| {})
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req| {}, None)
         .await
         .unwrap();
 
@@ -41,7 +41,7 @@ async fn ask_user_with_invalid_a2ui_errors_without_registering_prompt() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("mcp.sock");
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req| {})
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req| {}, None)
         .await
         .unwrap();
 
@@ -82,4 +82,124 @@ async fn ask_user_with_invalid_a2ui_errors_without_registering_prompt() {
         reg.pending_ids()
     );
     let _ = client.cancel().await;
+}
+
+/// An answered ask writes an 'answered' row to the database.
+#[tokio::test]
+async fn answered_ask_writes_history_row() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("mcp.sock");
+    let db_path = dir.path().join("cenno.db");
+    let db = Db::open(&db_path).unwrap();
+
+    let reg = PromptRegistry::new();
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req| {}, Some(db.clone()))
+        .await
+        .unwrap();
+
+    // auto-answer any prompt after 100ms
+    let reg2 = reg.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            for id in reg2.pending_ids() {
+                reg2.resolve(&id, "ship it".into(), Via::Choice);
+            }
+        }
+    });
+
+    let result = cenno_lib::mcp::test_support::call_ask_user(
+        &sock,
+        serde_json::json!({"title": "Release v2?", "timeout_s": 5}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result["answer"], "ship it");
+
+    // Give the recording task a moment to write (it's spawned async after ask returns)
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // Assert the row was written with the correct status/answer/via.
+    let conn = db.raw_conn();
+    let conn = conn.lock();
+    let (status, answer, via): (String, Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT status, answer, via FROM prompts WHERE title = 'Release v2?'",
+            [],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, Option<String>>(2)?)),
+        )
+        .expect("expected a row in prompts for 'Release v2?'");
+
+    assert_eq!(status, "answered");
+    assert_eq!(answer.as_deref(), Some("ship it"));
+    assert_eq!(via.as_deref(), Some("choice"));
+}
+
+/// Suppression gates the DISPLAY side-effect only: with a paused
+/// SuppressionState wired into the notify closure (mirroring lib.rs's
+/// gating), the display probe never fires, but the prompt still registers
+/// and the agent still gets the normal TimedOut contract.
+#[tokio::test]
+async fn suppressed_notify_skips_display_but_prompt_still_registers() {
+    use cenno_lib::suppress::SuppressionState;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("mcp.sock");
+    let reg = PromptRegistry::new();
+
+    let suppress = SuppressionState::new(true);
+    suppress.pause_for(60);
+
+    let displayed = Arc::new(AtomicBool::new(false));
+    let displayed_probe = displayed.clone();
+    let gate = suppress.clone();
+    start_socket_server(
+        sock.clone(),
+        reg.clone(),
+        move |_id, _req| {
+            // Exact decision lib.rs's notify closure makes before emit+show.
+            if cenno_lib::should_display(&gate, None, || false) {
+                displayed_probe.store(true, Ordering::SeqCst);
+            }
+        },
+        None,
+    )
+    .await
+    .unwrap();
+
+    let result = cenno_lib::mcp::test_support::call_ask_user(
+        &sock,
+        serde_json::json!({"title": "Quiet hour?", "timeout_s": 1}),
+    )
+    .await
+    .unwrap();
+
+    // Agent contract unchanged: timed out, prompt_id returned.
+    assert_eq!(result["answered"], false, "unseen prompt must time out: {result}");
+    // No display side-effect fired...
+    assert!(!displayed.load(Ordering::SeqCst), "suppressed prompt must not display");
+    // ...but the prompt registered (and stays as inbox leftover).
+    assert_eq!(reg.pending_ids().len(), 1);
+
+    // After resume, a fresh ask displays normally.
+    suppress.resume();
+    let reg2 = reg.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            for id in reg2.pending_ids() {
+                reg2.resolve(&id, "back".into(), Via::Text);
+            }
+        }
+    });
+    let result = cenno_lib::mcp::test_support::call_ask_user(
+        &sock,
+        serde_json::json!({"title": "Back?", "timeout_s": 5}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result["answer"], "back");
+    assert!(displayed.load(Ordering::SeqCst), "post-resume prompt must display");
 }

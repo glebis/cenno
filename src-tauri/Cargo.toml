@@ -18,7 +18,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# tray-icon: menu-bar presence; image-png: decode the template tray PNG at runtime.
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
 # Persists/restores window position across restarts (POSITION flag only).
 tauri-plugin-window-state = "2"
@@ -33,12 +34,19 @@ schemars = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 dirs = "5"
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+csv = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Swizzles the main window into a non-activating NSPanel. Rev is the tip of
 # branch `v2` (Tauri 2.x); pinned by rev so the pin survives lockfile churn.
 # (Cargo forbids specifying both `branch` and `rev`.)
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1a" }
+# Fullscreen detection: CGWindowList + CGDisplay bounds heuristic
+# (suppress.rs). Both crates are already in tauri's macOS dep tree.
+core-graphics = "0.25"
+core-foundation = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
