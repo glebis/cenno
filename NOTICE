@@ -1,0 +1,16 @@
+cenno
+Copyright 2026-present Gleb Kalinin
+
+cenno is licensed under the Apache License, Version 2.0.
+
+Implementation was assisted by AI coding tools (Claude, Anthropic) under
+human product, design, and review direction. See AUTHORSHIP.md for the
+current authorship record; the full spec → plan → review trail is in
+docs/superpowers/.
+
+Third-party packages and runtime dependencies are distributed under their
+own licenses. The source tree does not intentionally vendor GPL, AGPL, or
+LGPL code.
+
+Brand and visual assets (docs/design/) are documented in
+docs/design/BRAND.md.

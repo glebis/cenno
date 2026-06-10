@@ -2,6 +2,8 @@
   "name": "cenno",
   "private": true,
   "version": "0.1.0",
+  "license": "Apache-2.0",
+  "author": "Gleb Kalinin <glebis@gmail.com>",
   "type": "module",
   "scripts": {
     "validate:tokens": "node scripts/validate-tokens.mjs",
