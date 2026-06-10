@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22" role="img" aria-label="cenno mark — arc over dot">
+  <!--
+    cenno mark: arc-over-dot. Ported 1:1 from the tray icon generator
+    (src-tauri/icons/tray/tray_template_icon.py), authored in 22px space:
+      arc: center (11, 9), r 5.5, stroke 2.5, sweep 195°..345° (over the top)
+           endpoints: (11 ± 5.5·cos 15°, 9 − 5.5·sin 15°) = (5.6874|16.3126, 7.5765)
+      dot: center (11, 16.25), r 2.75
+    Geometry also recorded in tokens/tokens.json → brand.$extensions["app.cenno.mark"].
+    Draws in currentColor: black/template in system contexts, any flow hue in brand contexts.
+  -->
+  <path d="M 5.6874 7.5765 A 5.5 5.5 0 0 1 16.3126 7.5765" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="butt"/>
+  <circle cx="11" cy="16.25" r="2.75" fill="currentColor"/>
+</svg>
