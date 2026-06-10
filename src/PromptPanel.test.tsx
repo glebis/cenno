@@ -113,4 +113,58 @@ describe("PromptPanel", () => {
     );
     expect(container.querySelector('[data-flow="question"]')).toBeTruthy();
   });
+
+  it("renders an a2ui payload that targets a non-'main' surfaceId", () => {
+    const prompt: Prompt = {
+      ...base,
+      id: "p_8",
+      a2ui: [
+        { createSurface: { surfaceId: "alt", catalogId: "cenno:catalog/v1" } },
+        {
+          updateComponents: {
+            surfaceId: "alt",
+            components: [
+              { id: "root", component: "Column", children: ["t"] },
+              { id: "t", component: "Text", text: "alt surface" },
+            ],
+          },
+        },
+      ],
+    };
+    render(<PromptPanel prompt={prompt} onAnswer={() => {}} />);
+    expect(screen.getByText("alt surface")).toBeTruthy();
+  });
+
+  it("falls back to the desugared prompt when a guard-valid a2ui payload cannot render", () => {
+    const errorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const onAnswer = vi.fn();
+    // Guard-shape-valid (array, createSurface with the right catalog,
+    // components array) but render-breaking: no component connects to the
+    // "root" id the renderer mounts.
+    const prompt: Prompt = {
+      ...base,
+      id: "p_9",
+      a2ui: [
+        { createSurface: { surfaceId: "main", catalogId: "cenno:catalog/v1" } },
+        {
+          updateComponents: {
+            surfaceId: "main",
+            components: [{ id: "orphan", component: "Text", text: "never shown" }],
+          },
+        },
+      ],
+    };
+    render(<PromptPanel prompt={prompt} onAnswer={onAnswer} />);
+    // Falls back to desugar(prompt): title renders instead of a blank panel.
+    expect(screen.getByText("Check-in")).toBeTruthy();
+    expect(screen.queryByText("never shown")).toBeNull();
+    expect(errorSpy).toHaveBeenCalled();
+    // The fallback is fully usable: submit still answers the prompt.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "ok" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    expect(onAnswer).toHaveBeenCalledWith("p_9", "ok", "text");
+    errorSpy.mockRestore();
+  });
 });
