@@ -72,7 +72,7 @@ function submitAction(name: string, value: unknown, via: Via) {
 function button(
   id: string,
   label: string,
-  variant: "primary" | "borderless",
+  variant: "primary" | "borderless" | "quiet",
   action: unknown,
 ): A2uiComponent[] {
   return [
@@ -90,12 +90,17 @@ function desugarInput(req: Prompt): {
   switch (req.input?.kind) {
     case "choice": {
       const options = (req.choices ?? []).map((c) => ({ label: c, value: c }));
+      // Mood flow renders choices as bare oversized words in one row
+      // (panel-mood-checkin.png), not outline pills. Other flows omit the
+      // variant and keep the default chip rendering.
+      const wordsVariant = req.flow === "mood" ? { variant: "words" } : {};
       return {
         childIds: ["choices"],
         components: [
           {
             id: "choices",
             component: "ChoicePicker",
+            ...wordsVariant,
             options,
             value: { path: "/choice" },
             selectAction: submitAction(
@@ -172,7 +177,9 @@ function desugarInput(req: Prompt): {
             ...(voice ? { voice: true } : {}),
             submitAction: submit,
           },
-          ...button("send", "Send", "primary", submit),
+          // Quiet text Send, bottom-right (panel-free-text.png) — not a
+          // white primary pill. Confirm Yes/No stay pills (panel-reminder.png).
+          ...button("send", "Send", "quiet", submit),
         ],
         dataModel: { draft: "" },
       };

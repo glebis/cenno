@@ -93,6 +93,42 @@
   border-color: var(--cenno-text);
 }
 
+/* ---- words: bare oversized choices in one centered row ---- */
+/* Mood flow (panel-mood-checkin.png): no pill outline, no background — just
+   the option labels as large white text, generous horizontal gap, wrapping
+   if the row is too narrow. */
+
+.cenno-chips--words {
+  justify-content: center;
+  align-items: center;
+  gap: var(--cenno-space-3);
+}
+
+.cenno-word {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--cenno-text);
+  font-size: var(--cenno-type-question-m);
+  font-weight: 600;
+  line-height: 1;
+  /* >= 44px tap target via vertical padding, never font inflation */
+  padding: var(--cenno-space-2) 0;
+  cursor: pointer;
+}
+
+.cenno-word:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Selected/pressed word: underlined emphasis (heavier than the bare rest). */
+.cenno-word[aria-pressed="true"] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
 /* ---- scale: outlined circle targets (fullscreen-ema-1-scale.png) ---- */
 
 .cenno-scale {
@@ -310,6 +346,22 @@
   color: var(--cenno-text-dim);
 }
 
+/* Quiet Send (panel-free-text.png): text-only, full --cenno-text, no pill
+   background or border, aligned to the bottom-right of the column. Keeps a
+   >= 44px tap target via the inherited min-height + padding (never font
+   inflation). align-self overrides the base flex-start so it hugs the
+   right edge. */
+.cenno-button--quiet {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--cenno-text);
+  align-self: flex-end;
+  /* horizontal padding only on the trailing side keeps the label flush with
+     the panel's right inset while preserving the tap target via min-height */
+  padding: var(--cenno-space-1) 0;
+}
+
 /* ---- dots pagination ---- */
 
 .cenno-dots {
@@ -317,7 +369,10 @@
   justify-content: center;
   gap: var(--cenno-space-1);
   list-style: none;
-  margin: 0;
+  /* margin-top:auto pins the dots to the bottom edge of the (full-height)
+     surface column (fullscreen-ema-1-scale.png); the flex chain that gives
+     the column its height lives in App.css. The other margins stay 0. */
+  margin: auto 0 0 0;
   padding: 0;
 }
 

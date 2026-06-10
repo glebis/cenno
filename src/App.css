@@ -37,16 +37,83 @@ body {
   background: var(--cenno-surface);
 }
 
-/* Measurement wrapper for content-driven window height (panelResize.ts):
-   the root is 100vh, so its own scrollHeight can never report a height
-   SMALLER than the window. This wrapper stays at its natural height
-   (flex: none — a shrinkable flex child would compress to the viewport
-   instead of overflowing), so wrapper.scrollHeight + root padding = the
-   window height the prompt actually needs. */
+/* Surface wrapper — fills the panel height so the A2UI columns inside can
+   push the Dots row to the bottom edge (fullscreen-ema-1-scale.png: dots
+   pinned bottom-center, content top). `flex: 1; min-height: 0` makes this
+   grow to the panel's inner height; the nested .cenno-column chain inherits
+   the fill and the dots get margin-top:auto (catalog.css).
+
+   Window sizing still works (panelResize.ts): the panel root is 100vh and
+   the window is sized to content via this wrapper's scrollHeight. As a
+   flex:1 child of a content-fitted window it settles at exactly the content
+   height, so the |desired − current| ≤ 4px guard converges (a too-tall
+   prompt overflows and the root scrolls, same as before). */
 .prompt-panel__content {
   display: flex;
   flex-direction: column;
-  flex: none;
+  flex: 1;
+  min-height: 0;
+  /* Reserve room under the chrome row (wordmark + ✕, ~45px tall) so the
+     title never collides with it; the chrome sits in the panel's top
+     padding band. space-4 (40px) clears the chrome with margin to spare. */
+  padding-top: var(--cenno-space-4);
+}
+
+/* The A2UI renderer mounts component id "root" (a Column → .cenno-column),
+   which wraps the inner "col" Column. Both must fill the wrapper height so
+   margin-top:auto on the last child (the Dots row) can push it to the
+   bottom. Scoped under the content wrapper so freestanding .cenno-column
+   uses (Row/Column inside the surface) keep their natural height. */
+.prompt-panel__content > .cenno-column,
+.prompt-panel__content > .cenno-column > .cenno-column {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Chrome row — fixed across the top of every panel (PromptPanel renders it
+   OUTSIDE the A2UI surface, so simple and rich payloads share it). Wordmark
+   left, dismiss ✕ right. z-index above the drag strip so the ✕ is clickable;
+   the row itself is inset so the strip still covers the empty top corners for
+   dragging. Caption type, dim — quiet, never competing with the question. */
+.prompt-panel__chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--cenno-space-2) var(--cenno-space-3);
+  font-size: var(--cenno-type-caption);
+  color: var(--cenno-text-dim);
+}
+
+/* Lowercase on purpose (matches the comps); no text-transform needed. */
+.prompt-panel__wordmark {
+  letter-spacing: 0.04em;
+}
+
+/* Dim ✕ with a ≥24px hit target. Interactive — no data-tauri-drag-region —
+   so acceptFirstMouse lets the single click both key the panel and dismiss. */
+.prompt-panel__dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  color: var(--cenno-text-dim);
+  font-size: var(--cenno-type-caption);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.prompt-panel__dismiss:hover {
+  color: var(--cenno-text);
 }
 
 /* Invisible always-grabbable drag handle over the panel's top edge (the

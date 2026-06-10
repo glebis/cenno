@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, it, expect, vi, type MockInstance } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import PromptPanel, { Prompt } from "./PromptPanel";
@@ -45,7 +45,9 @@ describe("PromptPanel", () => {
       choices: ["Deep work", "Email"],
     };
     render(<PromptPanel prompt={prompt} onAnswer={onAnswer} />);
-    const chips = screen.getAllByRole("button");
+    // Scope to the surface so the always-present chrome ✕ doesn't count.
+    const surface = document.querySelector(".prompt-panel__content")!;
+    const chips = within(surface as HTMLElement).getAllByRole("button");
     expect(chips).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Deep work" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Email" }));
@@ -82,6 +84,41 @@ describe("PromptPanel", () => {
       <PromptPanel prompt={prompt} onAnswer={() => {}} />,
     );
     expect(container.querySelectorAll(".cenno-dot")).toHaveLength(3);
+  });
+
+  describe("dots pinned to the bottom edge", () => {
+    // jsdom can't compute layout, so we assert the structural hooks that pin
+    // the dots: the content wrapper and the A2UI columns are full-height flex
+    // columns, and the dots carry the .cenno-dots class whose CSS sets
+    // margin-top:auto (visual confirmed in Task 5).
+    it("a prompt with progress renders 3 dots in a pinned dots container", () => {
+      const prompt: Prompt = {
+        ...base,
+        id: "p_dots",
+        progress: { step: 2, total: 3 },
+      };
+      const { container } = render(
+        <PromptPanel prompt={prompt} onAnswer={() => {}} />,
+      );
+      const dots = container.querySelector(".cenno-dots");
+      expect(dots).toBeTruthy();
+      expect(dots!.querySelectorAll(".cenno-dot")).toHaveLength(3);
+      // The flex chain that lets margin-top:auto push the dots down: content
+      // wrapper → root Column → col Column are all present as flex columns.
+      expect(container.querySelector(".prompt-panel__content")).toBeTruthy();
+      expect(container.querySelectorAll(".cenno-column").length).toBeGreaterThanOrEqual(2);
+      // Dots are the LAST child of the inner column so margin-top:auto pins
+      // them to the bottom (content sits above).
+      const innerCol = container.querySelectorAll(".cenno-column")[1];
+      expect(innerCol.lastElementChild).toBe(dots);
+    });
+
+    it("a prompt without progress renders no dots container", () => {
+      const { container } = render(
+        <PromptPanel prompt={{ ...base, id: "p_no_dots" }} onAnswer={() => {}} />,
+      );
+      expect(container.querySelector(".cenno-dots")).toBeNull();
+    });
   });
 
   it("sets data-flow on the panel root from prompt.flow", () => {
@@ -178,6 +215,46 @@ describe("PromptPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     expect(onAnswer).toHaveBeenCalledWith("p_9", "ok", "text");
     errorSpy.mockRestore();
+  });
+
+  describe("panel chrome", () => {
+    it("renders the cenno wordmark and a Dismiss button", () => {
+      render(<PromptPanel prompt={base} onAnswer={() => {}} />);
+      expect(screen.getByText("cenno")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
+    });
+
+    it("calls onDismiss with the prompt id when ✕ is clicked", () => {
+      const onDismiss = vi.fn();
+      render(
+        <PromptPanel prompt={base} onAnswer={() => {}} onDismiss={onDismiss} />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(onDismiss).toHaveBeenCalledWith("p_1");
+    });
+
+    it("renders chrome around a native a2ui payload too", () => {
+      const prompt: Prompt = {
+        ...base,
+        id: "p_chrome_a2ui",
+        a2ui: [
+          { createSurface: { surfaceId: "main", catalogId: "cenno:catalog/v1" } },
+          {
+            updateComponents: {
+              surfaceId: "main",
+              components: [
+                { id: "root", component: "Column", children: ["t"] },
+                { id: "t", component: "Text", text: "rich surface" },
+              ],
+            },
+          },
+        ],
+      };
+      render(<PromptPanel prompt={prompt} onAnswer={() => {}} />);
+      expect(screen.getByText("rich surface")).toBeTruthy();
+      expect(screen.getByText("cenno")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
+    });
   });
 
   describe("content-driven panel height", () => {

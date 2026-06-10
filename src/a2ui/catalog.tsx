@@ -134,14 +134,37 @@ export const CennoColumn = createComponentImplementation(
 );
 
 /* ------------------------------------------------------------------ */
-/* Button — standard ButtonApi; borderless maps to the dim secondary   */
+/* Button — standard ButtonApi widened with the cenno "quiet" variant. */
+/* borderless -> dim secondary; quiet -> text-only bottom-right Send    */
+/* (panel-free-text.png); everything else -> primary pill.             */
 /* ------------------------------------------------------------------ */
 
+export const CennoButtonApi = {
+  name: "Button",
+  schema: ButtonApi.schema.extend({
+    // Widen the stock primary/borderless/default hint with the cenno
+    // "quiet" treatment: text-only Send aligned bottom-right.
+    variant: z
+      .enum(["default", "primary", "borderless", "quiet"])
+      .optional()
+      .describe(
+        "Button style hint: 'primary' call-to-action pill, 'borderless' " +
+          "link-like, or the cenno 'quiet' text-only Send (bottom-right).",
+      ),
+  }),
+};
+
 export const CennoButton = createComponentImplementation(
-  ButtonApi,
+  CennoButtonApi,
   ({ props, buildChild }) => (
     <ButtonView
-      variant={props.variant === "borderless" ? "secondary" : "primary"}
+      variant={
+        props.variant === "borderless"
+          ? "secondary"
+          : props.variant === "quiet"
+            ? "quiet"
+            : "primary"
+      }
       disabled={props.isValid === false}
       onClick={props.action}
     >
@@ -194,6 +217,16 @@ export const CennoChoicePickerApi = {
     selectAction: ActionSchema.optional().describe(
       "Action fired after a choice is made (tap-to-answer flows).",
     ),
+    // Widen the stock selection-behavior variant with a cenno display
+    // variant: "words" renders options as bare oversized text (mood flow,
+    // panel-mood-checkin.png) instead of outline pill chips.
+    variant: z
+      .enum(["multipleSelection", "mutuallyExclusive", "words"])
+      .optional()
+      .describe(
+        "Selection behavior (multipleSelection / mutuallyExclusive) or the " +
+          "cenno 'words' display variant for bare-word mood choices.",
+      ),
   }),
 };
 
@@ -209,6 +242,7 @@ export const CennoChoicePicker = createComponentImplementation(
       <ChipsView
         choices={options}
         selected={values}
+        variant={props.variant === "words" ? "words" : undefined}
         onSelect={(value) => {
           if (props.variant === "multipleSelection") {
             props.setValue(

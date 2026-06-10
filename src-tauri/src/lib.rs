@@ -87,6 +87,15 @@ fn answer_prompt(state: tauri::State<PromptRegistry>, id: String, answer: String
     state.resolve(&id, answer, via)
 }
 
+/// User dismissed the panel (clicked ✕): end the parked `ask()` as a
+/// no-answer (TimedOut), the same wire shape the agent already handles on
+/// timeout — no protocol change. Returns false if the prompt already
+/// resolved/timed out (unknown or already-consumed id).
+#[tauri::command]
+fn dismiss_prompt(state: tauri::State<PromptRegistry>, id: String) -> bool {
+    state.dismiss(&id)
+}
+
 /// Startup decision for launch-at-login: `(enabled, persist_default)`.
 /// Pure — the actual plugin call is glue (see `reconcile_launch_at_login`).
 ///
@@ -535,7 +544,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![answer_prompt, pending_prompts, resize_panel])
+        .invoke_handler(tauri::generate_handler![answer_prompt, dismiss_prompt, pending_prompts, resize_panel])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

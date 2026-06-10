@@ -108,26 +108,33 @@ export function ScaleView({
 }
 
 /**
- * Choice chips: outline pills. Identity is the choice VALUE (labels may
- * collide); a tap reports the value. `selected` carries every selected value
- * — single-select callers pass a 1-element array.
+ * Choice chips. Identity is the choice VALUE (labels may collide); a tap
+ * reports the value. `selected` carries every selected value — single-select
+ * callers pass a 1-element array.
+ *
+ * Default `variant` = outline pills. `variant: "words"` renders bare oversized
+ * words in one centered row, no border/background (panel-mood-checkin.png);
+ * pressed = underlined. Both keep a >= 44px tap target via vertical padding.
  */
 export function ChipsView({
   choices,
   selected = [],
+  variant,
   onSelect,
 }: {
   choices: { label: string; value: string }[];
   selected?: string[];
+  variant?: "words";
   onSelect: (value: string) => void;
 }) {
+  const words = variant === "words";
   return (
-    <div className="cenno-chips">
+    <div className={words ? "cenno-chips cenno-chips--words" : "cenno-chips"}>
       {choices.map(({ label, value }) => (
         <button
           key={value}
           type="button"
-          className="cenno-chip"
+          className={words ? "cenno-word" : "cenno-chip"}
           aria-pressed={selected.includes(value)}
           onClick={() => onSelect(value)}
         >
@@ -353,14 +360,19 @@ export function ImageView({
   );
 }
 
-/** Primary = solid white on flow color; secondary = text-only dim. */
+/**
+ * primary  = solid white pill on the flow color.
+ * secondary = text-only dim (borderless link-like).
+ * quiet    = text-only Send, --cenno-text, pinned bottom-right
+ *            (panel-free-text.png) — no pill background, no border.
+ */
 export function ButtonView({
   variant = "primary",
   disabled = false,
   onClick,
   children,
 }: {
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "quiet";
   disabled?: boolean;
   onClick: () => void;
   children?: ReactNode;
