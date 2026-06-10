@@ -10,7 +10,7 @@ pub struct Cli {
     #[arg(long)]
     pub tray: bool,
 
-    /// Bridge stdin/stdout to the MCP socket (launching the app if needed) — implemented in Task 9
+    /// Bridge stdin/stdout to the MCP socket, launching the app if needed (not yet implemented)
     #[arg(long)]
     pub mcp_stdio: bool,
 }
@@ -19,9 +19,12 @@ pub struct Cli {
 pub enum Command {
     /// Ask the user a question and print the JSON result
     Ask {
+        /// The question shown to the user
         title: String,
+        /// Markdown body shown under the title
         #[arg(long, default_value = "")]
         body: String,
+        /// Seconds to wait for an answer
         #[arg(long, default_value = "120")]
         timeout: u64,
     },

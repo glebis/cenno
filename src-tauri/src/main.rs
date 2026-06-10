@@ -46,23 +46,34 @@ fn run_ask(title: String, body: String, timeout: u64) {
 
     match result {
         Ok(value) => {
-            println!("{}", serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string()));
-            // Determine exit code from shape:
-            // TimedOut shape: {"answered": false, "prompt_id": "..."}
-            // Answered shape: {"answer": ..., "via": ..., "elapsed_s": ...}
-            if value.get("answered").and_then(|v| v.as_bool()) == Some(false) {
-                std::process::exit(2);
+            // Always print the raw JSON first, whatever its shape.
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
+            );
+            use cenno_lib::protocol::AskResponse;
+            match serde_json::from_value::<AskResponse>(value.clone()) {
+                Ok(AskResponse::Answered { .. }) => {} // exit 0
+                Ok(AskResponse::TimedOut { .. }) => std::process::exit(2),
+                Err(e) => {
+                    eprintln!("cenno ask: unrecognized response shape ({e}): {value}");
+                    std::process::exit(1);
+                }
             }
-            // Answered — exit 0 (default)
         }
         Err(e) => {
-            // Connection refused or similar → app likely not running
-            let msg = e.to_string();
-            if msg.contains("Connection refused") || msg.contains("No such file") {
+            // Socket gone or nobody listening → app not running.
+            let not_running = e.downcast_ref::<std::io::Error>().is_some_and(|io| {
+                matches!(
+                    io.kind(),
+                    std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::NotFound
+                )
+            });
+            if not_running {
                 eprintln!("cenno is not running — start it or use 'cenno --mcp-stdio'");
-                std::process::exit(1);
+            } else {
+                eprintln!("cenno ask: error: {e}");
             }
-            eprintln!("cenno ask: error: {e}");
             std::process::exit(1);
         }
     }

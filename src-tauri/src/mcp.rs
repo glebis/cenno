@@ -12,6 +12,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// Bundle identifier — must match `identifier` in `tauri.conf.json`
+/// (asserted by the `identifier_matches_tauri_conf` unit test below).
+pub const APP_IDENTIFIER: &str = "com.glebkalinin.cenno";
+
 /// Canonical path to the MCP Unix socket.
 ///
 /// This MUST return the same directory that Tauri's `app.path().app_data_dir()`
@@ -25,7 +29,7 @@ pub fn socket_path() -> PathBuf {
     // Linux: ~/.local/share
     // Windows: %APPDATA%
     let base = dirs::data_dir().expect("could not determine user data directory");
-    base.join("com.glebkalinin.cenno").join("mcp.sock")
+    base.join(APP_IDENTIFIER).join("mcp.sock")
 }
 
 use rmcp::{
@@ -215,3 +219,18 @@ pub mod client {
 /// (Prefer `mcp::client` in new code.)
 #[doc(hidden)]
 pub use client as test_support;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `socket_path()` derives the app-data dir from APP_IDENTIFIER while the
+    /// running app derives it from tauri.conf.json — if the conf's identifier
+    /// ever changes, this turns silent release drift into a test failure.
+    #[test]
+    fn identifier_matches_tauri_conf() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
+            .expect("tauri.conf.json is valid JSON");
+        assert_eq!(conf["identifier"], APP_IDENTIFIER);
+    }
+}

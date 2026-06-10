@@ -11,7 +11,7 @@
 #[tokio::test]
 #[ignore = "requires the cenno app to be running"]
 async fn live_ask_user_times_out_cleanly() {
-    let sock = dirs_path();
+    let sock = cenno_lib::mcp::socket_path();
     assert!(
         sock.exists(),
         "socket not found at {} — is the cenno app running?",
@@ -37,10 +37,4 @@ async fn live_ask_user_times_out_cleanly() {
         result["prompt_id"].as_str().is_some_and(|s| s.starts_with("p_")),
         "expected prompt_id, got: {result}"
     );
-}
-
-fn dirs_path() -> std::path::PathBuf {
-    let home = std::env::var("HOME").expect("HOME not set");
-    std::path::PathBuf::from(home)
-        .join("Library/Application Support/com.glebkalinin.cenno/mcp.sock")
 }
