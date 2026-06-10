@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/design/brand/banner.png" alt="cenno — agents ask. you answer." width="800">
+</p>
+
 # cenno
 
 *fare un cenno* — Italian: to beckon.
