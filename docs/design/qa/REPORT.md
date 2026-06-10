@@ -5,18 +5,33 @@ Captured with `scripts/visual-qa.sh` (release binary, 420x240 panel,
 are raster comps — per TOKENS.md, type metrics come from TOKENS.md, not from
 measuring the images.
 
-Two capture rounds: round 1 found the gaps, fixes were applied inline, round 2
-(the `qa-*.png` files committed here) shows the post-fix state.
+Three capture rounds: round 1 found the gaps, round 2 applied inline catalog
+fixes. Round 3 (the `qa-*.png` files committed here) is the post-polish state
+after the visual-polish branch landed Tasks 1–4: panel chrome (wordmark + ✕),
+bare-word mood, bottom-pinned dots, and quiet bottom-right Send.
 
-## Per-state verdicts (post-fix)
+## Per-state verdicts (post-polish, visual-polish branch)
 
 | Capture | Reference frame | Verdict |
 |---|---|---|
-| qa-mood.png | panel-mood-checkin.png | **Matches direction.** Coral surface, question-m title, white text, ≥44px tap targets. Deviates: choices render as outline pill chips (the shared ChoicePicker treatment from panel-choice.png), while the mood frame shows bare oversized words in a single row. Also no `cenno` wordmark / close ✕ chrome (all frames have it; the panel has none yet). |
-| qa-text.png | panel-free-text.png | **Matches direction.** Cobalt, question-m title, underline-only field with dim placeholder, Send fully visible. Deviates: Send is a white primary pill bottom-left, frame shows a quiet text "Send" bottom-right; mic circle only appears for `voice`/`voice_text` kinds (frame always shows it — voice is plan 3); a 3+ line body will still scroll. |
-| qa-choice.png | panel-choice.png | **Matches.** Outline pill chips, body-size labels, cobalt surface — the closest state to its frame. Chips wrap to two rows at 420px where the frame fits four in one row (frame's chips are smaller-padded); acceptable at this window size. |
-| qa-scale.png | fullscreen-ema-1-scale.png | **Matches design language** (frame is fullscreen, ours is the 420x240 panel — compared treatment, not geometry). Outlined 44px circle targets with numerals, dim end labels under the row ends, centered dot pagination with active-step emphasis. Deviates: no top "CHECK-IN — 1 OF 3" caption; dots sit after content, not pinned to the bottom edge; title is question-m not question-l (correct for the panel surface per TOKENS.md). |
-| qa-confirm.png | panel-reminder.png | **Matches direction.** Slate surface, white primary pill + quiet text secondary side by side — same shape language as Done/Snooze/Dismiss. Deviates: labels are Yes/No (the `confirm` protocol kind is binary; Snooze is a protocol-level concept that doesn't exist yet). |
+| qa-mood.png | panel-mood-checkin.png | **Matches.** Coral surface, `cenno` wordmark top-left + dim ✕ top-right, question-m title, and the five choices render as **bare oversized words in a single row** (Awful · Bad · Okay · Good · Great) — no pill chips. This is the frame. Only deviation: title + words are left-aligned where the frame centers them (deliberate panel convention, applies to every state). ✕ does not overlap the wordmark or content. |
+| qa-text.png | panel-free-text.png | **Matches.** Cobalt, chrome present, underline-only field with dim "Your reply" placeholder, and a **quiet text "Send" pinned bottom-right** — no primary pill. Deviates only where voice is out of scope: the frame shows a mic circle in the field and "type or speak" (voice = plan 3); a 3+ line body still scrolls (structural, backlog §1). |
+| qa-scale.png | fullscreen-ema-1-scale.png | **Matches design language** (frame is fullscreen, ours is the 420×240 panel — treatment, not geometry). Chrome present, outlined 44px circle targets 1–7 with the selected one ringed, dim "not at all"/"completely" end labels, and the **pagination dots are pinned to the bottom edge** (content sits at the top, dots at the bottom, step 1-of-3 active). Deviates: no top "CHECK-IN — 1 OF 3" caption (the panel carries the wordmark instead; caption is content not styling — backlog §1). |
+| qa-confirm.png | panel-reminder.png | **Matches direction, intentionally unchanged.** Slate surface, chrome present, **white primary pill + quiet secondary still in pill/quiet pair form** — the quiet-Send treatment from Task 4 correctly did NOT bleed into confirm actions. Deviates: labels are Yes/No (the `confirm` kind is binary; the frame's Done/Snooze/Dismiss are protocol concepts that don't exist yet). |
+
+### Inline fix this round
+None. All four polished states render cleanly against their frames and no
+cheap CSS gap was spotted (no ✕/content overlap, no flicker-resize on the
+short confirm/mood titles, dots pin reliably). The one cross-state deviation —
+left-aligned vs the frames' centered title/actions — is a deliberate panel
+convention, not a regression, and re-centering globally is not a safe ≤20-min
+change (would touch every state's layout); left for a design decision in
+backlog.
+
+### Capture note
+The panel's text field autofocuses; if the terminal sends typeahead during the
+~4s render wait it leaks into the field (round-3 first text capture caught a
+stray "wr"). Re-captured clean. Not an app bug — a capture-harness artifact.
 
 ## Gaps found in round 1 → classification → action
 
@@ -31,32 +46,40 @@ Two capture rounds: round 1 found the gaps, fixes were applied inline, round 2
 | Scale overflow at narrow width (known item). | n/a at this window | Not reproduced at 420px: 7×44px circles + gaps ≈ 352px, fits the 372px content width. Would overflow below ~400px window width — backlog note only. |
 | WebKit text-selection artifact on title autofocus (known item). | n/a | **Not reproduced** in either round on the release build. |
 
-## Backlog (not ≤30min token/CSS/desugar fixes)
+## Done ✓ (closed by the visual-polish branch, verified this round)
+
+- **Panel chrome** (was backlog §2): `cenno` wordmark top-left + dim ✕ top-right
+  now render on every panel state and the ✕ resolves the prompt as dismissed.
+  Confirmed in all four captures; no overlap with title/content.
+- **Mood choice treatment** (was backlog §3): mood flow now renders bare
+  oversized words in one row instead of pill chips. Confirmed in qa-mood.png.
+- **Dots pinned to the bottom edge** (was backlog §5): the surface column fills
+  the panel height, pagination dots sit at the bottom edge across steps.
+  Confirmed in qa-scale.png.
+- **Send placement** (was backlog §6): text prompts now show a quiet text
+  "Send" bottom-right instead of a primary pill bottom-left. Confirmed in
+  qa-text.png; the quiet treatment correctly does NOT apply to confirm pills.
+
+## Backlog (still open)
 
 1. **Window height vs content (structural):** 240px fits title + 2-line body +
    input + button at question-m, but longer bodies scroll. Want
-   content-driven `set_size` (Rust) before showing the window.
-2. **Panel chrome (structural):** every frame shows a `cenno` wordmark
-   (top-left, caption style) and a close ✕ (top-right). The panel has no
-   chrome; ✕ should resolve the prompt as dismissed.
-3. **Mood choice treatment (structural):** mood frame uses bare oversized
-   words in one row, not pill chips — needs a flow-aware ChoicePicker variant,
-   not a CSS tweak.
-4. **EMA header caption (structural):** frame shows "CHECK-IN — 1 OF 3" top
-   center; desugar could synthesize it from `flow`+`progress`, but the
-   wording is content, not styling — needs a protocol decision.
-5. **Dots not pinned to the bottom edge:** frame fixes pagination at bottom
-   center across steps; ours flows after content. Needs the surface column to
-   fill the panel height (renderer wrapper markup, not plain CSS on .cenno-dots).
-6. **Send placement:** frame has a quiet bottom-right "Send"; ours is a
-   primary pill bottom-left. Revisit with the window-height work (1).
-7. **Top-level navigation hardening (Rust):** links are now intercepted in
+   content-driven `set_size` (Rust) before showing the window. Also covers the
+   EMA "CHECK-IN — 1 OF 3" header caption (frame top-center) — desugar could
+   synthesize it from `flow`+`progress`, but the wording is content, not
+   styling, so it needs a protocol decision alongside the height work.
+2. **Centered vs left-aligned (design decision):** the Reporter frames center
+   title/actions; the panel left-aligns every state. Consistent across our
+   states and arguably cleaner at panel size — left as a deliberate convention
+   pending a design call, not a defect.
+3. **Top-level navigation hardening (Rust):** links are now intercepted in
    the catalog, but a rich `a2ui` payload could still inject an anchor via a
    future component; a WebView navigation handler denying non-app URLs would
    close the class.
-8. **visual-qa.sh polish:** expired prompts keep the panel visible (Dismiss
-   state), so the between-state wait always runs its full budget and warns;
-   captures are correct because each new prompt replaces the surface.
+4. **visual-qa.sh / capture polish:** expired prompts keep the panel visible
+   (Dismiss state), so the between-state wait runs its full budget; and the
+   autofocused text field can swallow terminal typeahead during the render
+   wait. Both are harness artifacts — captures are correct on retry.
 
 ## Gates
 
