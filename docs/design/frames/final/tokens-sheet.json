@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-06-10T02:51:55.131180",
+  "prompt": "Flat minimal macOS UI design mockup in the visual style of the Reporter app by Nicholas Felton: full-bleed solid color background filling the entire image edge to edge, one question per screen, large quiet grotesque sans-serif typography (like SF Pro), white and semi-transparent white text, no gradients, no drop shadows, no cards, no window chrome, no menu bar, no decoration, no illustration, no photographic elements, generous negative space. A precise flat UI screenshot. Design-token reference sheet on a solid warm off-white (#FAF8F5) background with near-black (#14171A) text, flat and typographic like a Swiss specimen page. Small title top left: 'cenno tokens'. Top area: a row of five large solid square color swatches labeled underneath in small text: 'coral #FF6250', 'cobalt #1E4FD8', 'teal #0E7C6B', 'slate #4A5568', 'ink #14171A' \u2014 render these hex codes letter-perfect, exactly as written; next to them three smaller swatches labeled 'text #FFFFFF', 'text-dim 60%', 'line 40%'. Middle area: a type scale specimen, four lines of the word 'Question' at decreasing sizes labeled '44', '22', '17', '13'. Bottom area: a spacing scale of five small black bars increasing in length labeled '8 16 24 40 64', a rounded square labeled 'radius 10' and a pill shape labeled 'pill 999'.",
+  "preset": null,
+  "platform": null,
+  "thinking": "off",
+  "quality": "high",
+  "provider": "openai",
+  "n": 1,
+  "seed": 112,
+  "output": "/Users/glebkalinin/ai_projects/cenno/docs/design/frames/final/tokens-sheet.png",
+  "project": null,
+  "estimated_cost": 0.21
+}

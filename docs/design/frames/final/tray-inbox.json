@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-06-10T02:48:01.516703",
+  "prompt": "Flat minimal macOS UI design mockup in the visual style of the Reporter app by Nicholas Felton: full-bleed solid color background filling the entire image edge to edge, one question per screen, large quiet grotesque sans-serif typography (like SF Pro), white and semi-transparent white text, no gradients, no drop shadows, no cards, no window chrome, no menu bar, no decoration, no illustration, no photographic elements, generous negative space. A precise flat UI screenshot. Portrait orientation. Solid near-black ink (#14171A) background. A header row with small white wordmark 'cenno' on the left and tiny dim text link 'history' on the right, positioned about 15% down from the top edge. Tiny dim uppercase section label 'WAITING', then two minimal list rows separated by hairline semi-transparent divider lines: first row white text 'How are you feeling?' with right-aligned dim '2m'; second row 'Where did this hour go?' with right-aligned dim '18m'. Further down a tiny dim uppercase section label 'MISSED' with one dimmer row 'How focused were you this hour?' with right-aligned '1h'. No icons, no buttons, just quiet text rows. All content stays at least 12% away from the top and bottom edges.",
+  "preset": null,
+  "platform": null,
+  "thinking": "off",
+  "quality": "high",
+  "provider": "openai",
+  "n": 1,
+  "seed": 110,
+  "output": "/Users/glebkalinin/ai_projects/cenno/docs/design/frames/final/tray-inbox.png",
+  "project": null,
+  "estimated_cost": 0.21
+}

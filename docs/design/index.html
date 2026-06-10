@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cenno — design frames</title>
+<style>
+  :root{
+    --coral:#FF6250; --cobalt:#1E4FD8; --teal:#0E7C6B;
+    --slate:#4A5568; --ink:#14171A; --paper:#FAF8F5;
+  }
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:15px/1.5 -apple-system,"SF Pro Text",Helvetica,Arial,sans-serif;padding:48px}
+  h1{font-size:28px;font-weight:600;margin:0 0 4px}
+  p.sub{color:#777;margin:0 0 40px}
+  h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#999;
+    margin:48px 0 16px;font-weight:600}
+  .grid{display:grid;gap:24px}
+  .panels{grid-template-columns:repeat(auto-fill,minmax(360px,1fr))}
+  .full{grid-template-columns:repeat(auto-fill,minmax(560px,1fr))}
+  .tray{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+  figure{margin:0}
+  img{width:100%;height:auto;display:block;border-radius:6px}
+  figcaption{font-size:13px;color:#666;margin-top:8px}
+  figcaption b{color:var(--ink);font-weight:600}
+  .sw{display:flex;gap:12px;margin:12px 0 0}
+  .sw div{width:72px;height:72px;border-radius:6px}
+  .sw span{display:block;font-size:11px;color:#666;margin-top:6px}
+</style>
+</head>
+<body>
+<h1>cenno</h1>
+<p class="sub">Floating question surfaces · Reporter-style design language · generated frames</p>
+
+<h2>Floating panel — 420×240 (2x)</h2>
+<div class="grid panels">
+  <figure><img src="frames/final/panel-mood-checkin.png"><figcaption><b>panel/mood-checkin</b> — coral · 5 mood words</figcaption></figure>
+  <figure><img src="frames/final/panel-free-text.png"><figcaption><b>panel/free-text</b> — cobalt · underlined input + mic + send</figcaption></figure>
+  <figure><img src="frames/final/panel-choice.png"><figcaption><b>panel/choice</b> — cobalt · 4 pill chips</figcaption></figure>
+  <figure><img src="frames/final/panel-reminder.png"><figcaption><b>panel/reminder</b> — slate · Done / Snooze / Dismiss</figcaption></figure>
+  <figure><img src="frames/final/panel-expired.png"><figcaption><b>panel/expired</b> — ink · "this moment passed"</figcaption></figure>
+</div>
+
+<h2>Fullscreen takeover — 1440×900</h2>
+<div class="grid full">
+  <figure><img src="frames/final/fullscreen-ema-1-scale.png"><figcaption><b>fullscreen/ema-1-scale</b> — teal · 1–7 focus scale · dots 1/3</figcaption></figure>
+  <figure><img src="frames/final/fullscreen-ema-2-choice.png"><figcaption><b>fullscreen/ema-2-choice</b> — teal · attention chips · dots 2/3</figcaption></figure>
+  <figure><img src="frames/final/fullscreen-ema-3-voice.png"><figcaption><b>fullscreen/ema-3-voice</b> — teal · voice/text + ambient 38 dB · dots 3/3</figcaption></figure>
+  <figure><img src="frames/final/fullscreen-ema-done.png"><figcaption><b>fullscreen/ema-done</b> — teal · "Noted." auto-dismiss</figcaption></figure>
+</div>
+
+<h2>Tray popover — 360×480 (2x)</h2>
+<div class="grid tray">
+  <figure><img src="frames/final/tray-inbox.png"><figcaption><b>tray/inbox</b> — ink · waiting + missed prompts</figcaption></figure>
+  <figure><img src="frames/final/tray-history.png"><figcaption><b>tray/history</b> — ink · answered items</figcaption></figure>
+</div>
+
+<h2>Tokens</h2>
+<div class="grid full">
+  <figure><img src="frames/final/tokens-sheet.png"><figcaption><b>tokens/sheet</b> — palette, type scale, spacing, radius (DTCG-ready)</figcaption></figure>
+</div>
+<div class="sw">
+  <div style="background:var(--coral)"><span>coral #FF6250</span></div>
+  <div style="background:var(--cobalt)"><span>cobalt #1E4FD8</span></div>
+  <div style="background:var(--teal)"><span>teal #0E7C6B</span></div>
+  <div style="background:var(--slate)"><span>slate #4A5568</span></div>
+  <div style="background:var(--ink)"><span>ink #14171A</span></div>
+</div>
+</body>
+</html>
