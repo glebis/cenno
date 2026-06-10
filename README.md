@@ -70,7 +70,7 @@ cenno ask "Question" --body "Optional markdown body" --timeout 30
 
 # Exit codes: 0 = answered, 2 = timed out, 1 = not running / error
 
-# Run headless — tray icon ready, no main window shown until a prompt arrives
+# Run headless — no main window shown until a prompt arrives (tray icon: plan 4)
 cenno --tray
 
 # MCP bridge: pipe stdin/stdout to the socket, launching the app if needed

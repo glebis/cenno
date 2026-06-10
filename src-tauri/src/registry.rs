@@ -3,6 +3,9 @@ use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
 use tokio::sync::oneshot;
 
+/// In-memory pending-prompt store. Timed-out prompts stay in the map by design
+/// (tray-inbox semantics) — the map grows unboundedly until plan 4 adds
+/// eviction/persistence and `get_response`.
 #[derive(Clone)]
 pub struct PromptRegistry {
     inner: Arc<Mutex<HashMap<String, Pending>>>,
