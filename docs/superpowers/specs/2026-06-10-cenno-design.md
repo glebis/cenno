@@ -85,6 +85,17 @@ macOS platform facts the design relies on:
 - Focus-stealing from background is restricted (Sonoma+ cooperative activation) — the non-activating panel sidesteps it entirely.
 - Microphone permission prompts on first voice use (standard, unavoidable).
 
+## Visual design direction (added 2026-06-10, user)
+
+**Not a cull clone.** cull is the *process architecture* reference only (socket/CLI/bridge); cenno shares zero UI with it. The visual reference is **Reporter App** (Nicholas Felton, [App Store](https://apps.apple.com/de/app/reporter-app/id779697486)): full-bleed solid color, one question per screen, large quiet typography, minimal chrome, dot pagination for multi-step flows, instant tap-to-answer.
+
+Primary planned experiences (these drive the component catalog in plan 2):
+- **EMA questionnaires** (ecological momentary assessment): short multi-step flows — scale, choice chips, free text/voice — with dot progress
+- **Mood check-ins**: single-screen, one tap or one sentence, optionally voice
+- **Reminders**: glanceable, dismiss/snooze/done, no typing required
+
+**Optional ambient noise sampling**: like Reporter's "SILENCE 18.71 dB" metric — when the user opts in, a check-in may sample background audio level (dB estimate only, no recording stored) and attach it to the response metadata. Requires the same Microphone permission voice input already needs; strictly opt-in per policy settings. Deferred to the voice plan (plan 3) since it shares the audio capture stack.
+
 ## Rendering & design primitives
 
 Three independently replaceable layers:
