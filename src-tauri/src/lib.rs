@@ -75,6 +75,37 @@ pub fn should_display(
     !check.suppress
 }
 
+/// The display target for the fullscreen check: where would the panel
+/// appear right now? Resolved at CHECK time (not startup) so a panel the
+/// user dragged to another monitor is honored.
+///
+/// Preferred: the panel window's current monitor, as a logical-points rect —
+/// the same top-left-origin global space as `CGDisplay::bounds()`, which is
+/// what `fullscreen_on_display` compares against. Fallback: the panel's own
+/// frame (an ordered-out NSPanel can report no screen); the detector maps
+/// its center to a display. Returns None when even the window lookup fails —
+/// the detector then falls back to cursor position, then the main display.
+fn panel_display_target(handle: &tauri::AppHandle) -> Option<crate::suppress::Rect> {
+    let win = handle.get_webview_window("main")?;
+    if let Ok(Some(mon)) = win.current_monitor() {
+        let scale = mon.scale_factor();
+        let pos = mon.position().to_logical::<f64>(scale);
+        let size = mon.size().to_logical::<f64>(scale);
+        return Some(crate::suppress::Rect { x: pos.x, y: pos.y, w: size.width, h: size.height });
+    }
+    let scale = win.scale_factor().ok()?;
+    let pos = win.outer_position().ok()?.to_logical::<f64>(scale);
+    let size = win.outer_size().ok()?.to_logical::<f64>(scale);
+    Some(crate::suppress::Rect { x: pos.x, y: pos.y, w: size.width, h: size.height })
+}
+
+/// The production fullscreen check: scoped to the display the panel lives
+/// on. Built fresh per call so every suppression decision re-resolves the
+/// panel's display.
+fn fullscreen_on_panel_display(handle: &tauri::AppHandle) -> bool {
+    crate::suppress::fullscreen_on_display(panel_display_target(handle))
+}
+
 /// Newest answerable prompt = highest numeric id suffix ("p_10" > "p_9").
 /// Generic over the request payload so the test needs no AskRequest fixture.
 fn pick_replay<T>(pending: Vec<(String, T, u64)>) -> Option<(String, T, u64)> {
@@ -93,7 +124,7 @@ fn pick_replay<T>(pending: Vec<(String, T, u64)>) -> Option<(String, T, u64)> {
 /// carries what's left of the budget so the webview's auto-hide stays honest.
 pub(crate) fn replay_pending(handle: &tauri::AppHandle) {
     let suppress = handle.state::<SuppressionState>();
-    if suppress.should_suppress(crate::suppress::fullscreen_app_present) {
+    if suppress.should_suppress(|| fullscreen_on_panel_display(handle)) {
         eprintln!("cenno: replay skipped — still suppressed");
         return;
     }
@@ -352,11 +383,12 @@ pub fn run() {
                     sock_path,
                     registry,
                     move |id, req| {
-                        // Display gate: paused or fullscreen → no emit, no
-                        // show. The prompt stays pending (registry already
-                        // registered it; agent timeout contract unchanged)
-                        // and replays when suppression lifts.
-                        if !should_display(&suppress_gate, db_gate.as_ref(), crate::suppress::fullscreen_app_present) {
+                        // Display gate: paused or fullscreen ON THE PANEL'S
+                        // display → no emit, no show. The prompt stays
+                        // pending (registry already registered it; agent
+                        // timeout contract unchanged) and replays when
+                        // suppression lifts.
+                        if !should_display(&suppress_gate, db_gate.as_ref(), || fullscreen_on_panel_display(&handle)) {
                             eprintln!("cenno: prompt {id} suppressed (paused or fullscreen) — queued for replay");
                             return;
                         }
