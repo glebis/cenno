@@ -4,7 +4,7 @@ All notable changes to cenno are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0] — 2026-06-11
 
 ### Added
 
@@ -23,7 +23,7 @@ All notable changes to cenno are documented here. The format follows
 - Repository meta: LICENSE (Apache-2.0), NOTICE, AUTHORSHIP, SECURITY,
   CONTRIBUTING, CODE_OF_CONDUCT, CHANGELOG.
 
-## [0.1.0] — 2026-06-09
+## [0.1.0] — 2026-06-10
 
 Initial release.
 
