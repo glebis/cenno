@@ -19,6 +19,7 @@ use crate::suppress::SuppressionState;
 /// Settings keys shared with the startup loader in lib.rs.
 pub const SETTING_PAUSE_UNTIL: &str = "pause_until";
 pub const SETTING_HIDE_IN_FULLSCREEN: &str = "hide_in_fullscreen";
+pub const SETTING_LAUNCH_AT_LOGIN: &str = "launch_at_login";
 
 /// (menu id, label, minutes) for the fixed pause durations.
 const PAUSE_ITEMS: &[(&str, &str, i64)] = &[
@@ -42,6 +43,7 @@ pub fn setup_tray(
     app: &AppHandle,
     suppress: SuppressionState,
     db: Option<Db>,
+    launch_at_login: bool,
 ) -> tauri::Result<()> {
     // Template icon: ship the @2x (44px) bytes; macOS downscales to menu-bar
     // size crisply on retina. icon_as_template(true) tells AppKit to treat
@@ -76,6 +78,17 @@ pub fn setup_tray(
         None::<&str>,
     )?;
 
+    // Checked state seeded from the reconciled setting (lib.rs ran the
+    // default-on/reconcile logic before building the tray).
+    let launch_login = CheckMenuItem::with_id(
+        app,
+        "launch_at_login",
+        "Launch at login",
+        true,
+        launch_at_login,
+        None::<&str>,
+    )?;
+
     let quit = MenuItem::with_id(app, "quit", "Quit cenno", true, None::<&str>)?;
 
     let menu = Menu::with_items(
@@ -85,6 +98,7 @@ pub fn setup_tray(
             &resume,
             &PredefinedMenuItem::separator(app)?,
             &hide_fullscreen,
+            &launch_login,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -93,6 +107,7 @@ pub fn setup_tray(
     // CheckMenuItem toggles its own checked state on click; the handler reads
     // it back. Keep a handle alive inside the closure for that.
     let hide_fullscreen_handle = hide_fullscreen.clone();
+    let launch_login_handle = launch_login.clone();
 
     TrayIconBuilder::with_id("cenno-tray")
         .icon(icon)
@@ -146,6 +161,21 @@ pub fn setup_tray(
                         // Quiet mode just turned off — surface whatever queued.
                         crate::replay_pending(app);
                     }
+                }
+                "launch_at_login" => {
+                    let checked = launch_login_handle.is_checked().unwrap_or(true);
+                    use tauri_plugin_autostart::ManagerExt as _;
+                    let autolaunch = app.autolaunch();
+                    let result =
+                        if checked { autolaunch.enable() } else { autolaunch.disable() };
+                    if let Err(e) = result {
+                        let verb = if checked { "enable" } else { "disable" };
+                        eprintln!("cenno: failed to {verb} launch at login: {e}");
+                    }
+                    // Persist regardless: the setting records intent, and the
+                    // startup reconcile self-heals a failed plugin call.
+                    persist(SETTING_LAUNCH_AT_LOGIN, if checked { "true" } else { "false" });
+                    eprintln!("cenno: launch_at_login = {checked}");
                 }
                 "quit" => {
                     app.exit(0);

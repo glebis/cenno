@@ -86,6 +86,51 @@ fn answer_prompt(state: tauri::State<PromptRegistry>, id: String, answer: String
     state.resolve(&id, answer, via)
 }
 
+/// Startup decision for launch-at-login: `(enabled, persist_default)`.
+/// Pure — the actual plugin call is glue (see `reconcile_launch_at_login`).
+///
+/// Absent setting → ON and write the default back so the settings row exists
+/// from first launch on (mirror of the hide_in_fullscreen seeding pattern).
+/// Present → honor it verbatim ("true" → ON, anything else → OFF).
+fn launch_at_login_decision(stored: Option<&str>) -> (bool, bool) {
+    match stored {
+        Some(v) => (v == "true", false),
+        None => (true, true),
+    }
+}
+
+/// Reconcile the persisted `launch_at_login` setting with the OS autostart
+/// registration at startup, and return the resulting enabled state (used to
+/// seed the tray checkbox).
+///
+/// `apply` performs the actual OS-level enable/disable (the autostart plugin
+/// in production, a probe in tests). Calling it unconditionally on every
+/// startup is idempotent and self-heals an entry the user removed (or an
+/// enable that never happened because the DB write raced a crash).
+pub fn reconcile_launch_at_login(
+    db: Option<&crate::db::Db>,
+    apply: impl FnOnce(bool) -> Result<(), String>,
+) -> bool {
+    let stored = db.and_then(|db| {
+        db.get_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN)
+            .ok()
+            .flatten()
+    });
+    let (enabled, persist_default) = launch_at_login_decision(stored.as_deref());
+    if persist_default {
+        if let Some(db) = db {
+            if let Err(e) = db.set_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN, "true") {
+                eprintln!("cenno: failed to seed launch_at_login: {e}");
+            }
+        }
+    }
+    if let Err(e) = apply(enabled) {
+        let verb = if enabled { "enable" } else { "disable" };
+        eprintln!("cenno: failed to {verb} launch at login: {e}");
+    }
+    enabled
+}
+
 /// The display-gating decision for an arriving (or replaying) prompt, plus
 /// the persistence side-effect the lazy pause-expiry implies: when
 /// `check()` reports it just cleared an expired pause, the stored
@@ -285,6 +330,14 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // Launch-at-login registration. LaunchAgent (not AppleScript): a
+        // plist in ~/Library/LaunchAgents survives the app not being in
+        // /Applications and needs no Automation permission. `--tray` keeps
+        // the login launch headless (panel hidden until a prompt arrives).
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--tray"]),
+        ))
         // Restore the panel's last position on launch (POSITION only — size
         // is fixed by design, and VISIBLE must stay out so the window keeps
         // its hidden-until-asked startup from tauri.conf.json).
@@ -398,8 +451,21 @@ pub fn run() {
             };
             app.manage(suppress.clone());
 
+            // Launch at login: default ON. Decide from the persisted setting
+            // (absent → enable + write back) and reconcile the OS state to
+            // match — idempotent on every startup, so a login item the user
+            // deleted out-of-band comes back while the setting says ON.
+            let launch_at_login = {
+                use tauri_plugin_autostart::ManagerExt as _;
+                let manager = app.autolaunch();
+                reconcile_launch_at_login(db.as_ref(), |enable| {
+                    if enable { manager.enable() } else { manager.disable() }
+                        .map_err(|e| e.to_string())
+                })
+            };
+
             // Tray icon + menu — always, in both windowed and --tray modes.
-            tray::setup_tray(app.handle(), suppress.clone(), db.clone())?;
+            tray::setup_tray(app.handle(), suppress.clone(), db.clone(), launch_at_login)?;
 
             // A restored pause needs its expiry timer re-armed, otherwise
             // prompts suppressed after this restart would only replay
@@ -514,6 +580,81 @@ mod tests {
         assert!(!should_display(&s, None, || true));
         s.set_hide_in_fullscreen(false);
         assert!(should_display(&s, None, || true));
+    }
+
+    #[test]
+    fn launch_at_login_decision_defaults_on_and_persists() {
+        // Absent → ON, write the default back (default-on requirement).
+        assert_eq!(launch_at_login_decision(None), (true, true));
+        // Present → honored verbatim, no re-persist.
+        assert_eq!(launch_at_login_decision(Some("true")), (true, false));
+        assert_eq!(launch_at_login_decision(Some("false")), (false, false));
+        // Garbled value fails closed (no autostart) rather than guessing.
+        assert_eq!(launch_at_login_decision(Some("yes")), (false, false));
+    }
+
+    #[test]
+    fn reconcile_launch_at_login_seeds_default_and_enables() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = crate::db::Db::open(&dir.path().join("t.db")).unwrap();
+
+        let applied = std::cell::Cell::new(None);
+        let enabled = reconcile_launch_at_login(Some(&db), |on| {
+            applied.set(Some(on));
+            Ok(())
+        });
+
+        assert!(enabled);
+        assert_eq!(applied.get(), Some(true), "OS autostart enabled");
+        assert_eq!(
+            db.get_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN).unwrap().as_deref(),
+            Some("true"),
+            "default written back so the settings row exists from first launch"
+        );
+    }
+
+    #[test]
+    fn reconcile_launch_at_login_honors_stored_setting() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = crate::db::Db::open(&dir.path().join("t.db")).unwrap();
+
+        // Stored OFF → disable on startup (reconciles a stale OS entry).
+        db.set_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN, "false").unwrap();
+        let applied = std::cell::Cell::new(None);
+        assert!(!reconcile_launch_at_login(Some(&db), |on| {
+            applied.set(Some(on));
+            Ok(())
+        }));
+        assert_eq!(applied.get(), Some(false));
+        assert_eq!(
+            db.get_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN).unwrap().as_deref(),
+            Some("false"),
+            "stored setting not overwritten"
+        );
+
+        // Stored ON → enable (idempotent self-heal of a removed entry).
+        db.set_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN, "true").unwrap();
+        let applied = std::cell::Cell::new(None);
+        assert!(reconcile_launch_at_login(Some(&db), |on| {
+            applied.set(Some(on));
+            Ok(())
+        }));
+        assert_eq!(applied.get(), Some(true));
+    }
+
+    #[test]
+    fn reconcile_launch_at_login_survives_no_db_and_apply_failure() {
+        // No DB → default ON still applied (app runs without history).
+        let applied = std::cell::Cell::new(None);
+        assert!(reconcile_launch_at_login(None, |on| {
+            applied.set(Some(on));
+            Ok(())
+        }));
+        assert_eq!(applied.get(), Some(true));
+
+        // A failing plugin call must not panic and still reports the
+        // intended state (the tray checkbox shows intent, not OS truth).
+        assert!(reconcile_launch_at_login(None, |_| Err("nope".into())));
     }
 
     #[test]
