@@ -32,7 +32,7 @@ nothing else — it survives 22px in a menu bar, which is where it lives.
   `color.flow` hue, or white on a flow surface.
 - Never multi-color, never outlined dot, never redrawn — regenerate from the
   generator or reuse the SVG.
-- Clear space: one dot-diameter (5.5 units at 22px) on all sides.
+- Clear space: one arc-radius (5.5 units at 22px) on all sides.
 
 ## The typographic solution
 
