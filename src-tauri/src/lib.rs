@@ -17,6 +17,12 @@ use crate::registry::PromptRegistry;
 struct PromptEvent {
     id: String,
     request: AskRequest,
+    /// Seconds left before the Rust side times this prompt out. Fresh
+    /// prompts carry the full timeout_s; prompts replayed via
+    /// pending_prompts carry only what remains of their budget. The webview
+    /// arms its auto-hide timer from this so a stale prompt never lingers
+    /// past the moment the agent already received TimedOut.
+    remaining_s: u64,
 }
 
 /// Cold-start race recovery: the agent's first ask can arrive (and emit the
@@ -28,7 +34,7 @@ fn pending_prompts(state: tauri::State<PromptRegistry>) -> Vec<PromptEvent> {
     state
         .pending()
         .into_iter()
-        .map(|(id, request)| PromptEvent { id, request })
+        .map(|(id, request, remaining_s)| PromptEvent { id, request, remaining_s })
         .collect()
 }
 
@@ -110,7 +116,31 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(tray: bool) {
-    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        // Restore the panel's last position on launch (POSITION only — size
+        // is fixed by design, and VISIBLE must stay out so the window keeps
+        // its hidden-until-asked startup from tauri.conf.json).
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(tauri_plugin_window_state::StateFlags::POSITION)
+                .build(),
+        )
+        // The plugin only persists on graceful exit / window close, but this
+        // app lives until it's killed (no quit UI yet) — save on every move
+        // instead so a drag survives a SIGTERM. Writes are a tiny JSON file;
+        // move events are rare (user repositioning the panel by hand).
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Moved(_) = event {
+                use tauri_plugin_window_state::AppHandleExt as _;
+                if let Err(e) = window
+                    .app_handle()
+                    .save_window_state(tauri_plugin_window_state::StateFlags::POSITION)
+                {
+                    eprintln!("cenno: failed to save window position: {e}");
+                }
+            }
+        });
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
     builder
@@ -147,7 +177,13 @@ pub fn run(tray: bool) {
                 let result = mcp::start_socket_server(sock_path, registry, move |id, req| {
                     // Called from the socket server's tokio runtime; both
                     // emit() and window calls are thread-safe in Tauri 2.
-                    let payload = PromptEvent { id: id.to_string(), request: req.clone() };
+                    let payload = PromptEvent {
+                        id: id.to_string(),
+                        request: req.clone(),
+                        // A notify fires at ask() registration: nothing has
+                        // elapsed yet, so the full budget remains.
+                        remaining_s: req.timeout_s,
+                    };
                     if let Err(e) = handle.emit("prompt", payload) {
                         eprintln!("cenno: failed to emit prompt event: {e}");
                     }
