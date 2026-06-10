@@ -34,6 +34,31 @@ nothing else — it survives 22px in a menu bar, which is where it lives.
   generator or reuse the SVG.
 - Clear space: one arc-radius (5.5 units at 22px) on all sides.
 
+## The lockup — the dot joins the word
+
+The canonical lockup deconstructs the mark: the dot drops onto the text
+baseline and becomes the bullet of **cenno**; the arc stays above it,
+centered. The app summons (arc), the person answers (dot) — and the answer
+is the name.
+
+Everything is parametric in **D**, the dot diameter, which equals the
+wordmark x-height. Arc and dot keep their canonical proportions and are
+rendered from the SVG geometry, never redrawn.
+
+| Relation | Value |
+|---|---|
+| dot diameter D | wordmark x-height (= 5.5 canonical units) |
+| dot position | on the baseline, first "character" of the word |
+| gap dot → word | 1.0 D |
+| arc outer width | 2.4545 D (canonical 13.5u/5.5u), centered over the dot |
+| gap arc → dot | 1.0 D |
+| clear space | 1.0 D on all sides (= one arc radius) |
+
+Wordmark: **cenno**, lowercase, SF Pro (`font.family.default`) weight 600.
+Generator: [`brand/renders/make_inline_lockup.py`](brand/renders/make_inline_lockup.py).
+Primary colorway: white on `color.flow.mood`; also black on transparent,
+white on `color.flow.ambient`, `color.flow.question` on `color.paper`.
+
 ## The typographic solution
 
 One face. SF Pro through the system stack (`font.family.default`). Hierarchy
@@ -52,6 +77,26 @@ tabular-nums` so they hold still.
 The wordmark is not lettering: it is the word **cenno**, lowercase, caption
 treatment (600 where it must carry weight, `font.tracking.caption`, uppercase
 optional in caption rows). The mark does the identifying; the word just names it.
+
+## Large-format assets
+
+Exact renders, regenerated from the SVG/generator — never redrawn
+(`brand/renders/`):
+
+- `cenno-mark-2048-{black,question,mood,ema,reminder}.png` — mark at 2048px,
+  one per permitted hue, transparent background.
+- `cenno-mark-2048-white-on-ambient.png` — white mark on `color.flow.ambient`.
+- `cenno-lockup-inline-{white-on-mood,black,white-on-ambient,question-on-paper}.png`
+  — **the canonical lockup** (dot on the baseline, arc above; see "The lockup"),
+  ~6900×3100px. Generator: `renders/make_inline_lockup.py`.
+- `cenno-lockup-{black,question-on-paper,white-on-ambient}.png` — legacy
+  side-by-side lockup: mark + lowercase **cenno** (SF Pro 600), ~5700×2100px.
+- `cenno-flow-grid-2048.png` — white mark tiled over the four flow hues.
+
+AI stylizations for brand contexts only — splash, poster, icon explorations
+(`brand/generated/`, GPT Image 2, prompts in the `.json` sidecars):
+`splash-ambient`, `poster-paper`, `app-icon`, `flow-grid`. These are mood
+pieces; any shipped mark must come from the renders above.
 
 ## Voice
 
