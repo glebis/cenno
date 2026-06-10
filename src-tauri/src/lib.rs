@@ -5,6 +5,8 @@ pub mod db;
 pub mod mcp;
 pub mod protocol;
 pub mod registry;
+pub mod suppress;
+pub mod tray;
 
 use tauri::{Emitter, Manager};
 
@@ -149,10 +151,12 @@ pub fn run(tray: bool) {
             let registry = PromptRegistry::new();
             app.manage(registry.clone());
 
-            // tray flag reserved for future tray-icon setup — panel conversion
-            // must always happen: it shows nothing (hidden startup is already
-            // guaranteed by visible:false in tauri.conf.json), and prompt
-            // display depends on the window being a panel.
+            // The --tray flag no longer gates the tray icon — the menu-bar
+            // presence IS the app's home, so setup_tray runs in both modes.
+            // Panel conversion must also always happen: it shows nothing
+            // (hidden startup is already guaranteed by visible:false in
+            // tauri.conf.json), and prompt display depends on the window
+            // being a panel.
             let _ = tray;
             #[cfg(target_os = "macos")]
             convert_to_panel(app)?;
@@ -186,6 +190,50 @@ pub fn run(tray: bool) {
                     None
                 }
             };
+
+            // Suppression state, seeded from persisted settings when the DB
+            // is available. Defaults: not paused, hide-in-fullscreen ON.
+            let suppress = {
+                use crate::tray::{SETTING_HIDE_IN_FULLSCREEN, SETTING_PAUSE_UNTIL};
+
+                // hide_in_fullscreen: absent → default true → write it back
+                // so the settings row exists from first launch on.
+                let hide_in_fullscreen = match db
+                    .as_ref()
+                    .and_then(|db| db.get_setting(SETTING_HIDE_IN_FULLSCREEN).ok().flatten())
+                {
+                    Some(v) => v == "true",
+                    None => {
+                        if let Some(db) = &db {
+                            if let Err(e) = db.set_setting(SETTING_HIDE_IN_FULLSCREEN, "true") {
+                                eprintln!("cenno: failed to seed hide_in_fullscreen: {e}");
+                            }
+                        }
+                        true
+                    }
+                };
+                let suppress = crate::suppress::SuppressionState::new(hide_in_fullscreen);
+
+                // pause_until: restore only if it parses AND is still in the
+                // future — an expired (or cleared/garbled) value means no pause.
+                if let Some(raw) = db
+                    .as_ref()
+                    .and_then(|db| db.get_setting(SETTING_PAUSE_UNTIL).ok().flatten())
+                {
+                    if let Ok(until) = chrono::DateTime::parse_from_rfc3339(&raw) {
+                        let until = until.with_timezone(&chrono::Utc);
+                        if until > chrono::Utc::now() {
+                            suppress.restore_pause_until(until);
+                            eprintln!("cenno: restored pause until {until}");
+                        }
+                    }
+                }
+                suppress
+            };
+            app.manage(suppress.clone());
+
+            // Tray icon + menu — always, in both windowed and --tray modes.
+            tray::setup_tray(app.handle(), suppress, db.clone())?;
 
             // Invariant: mcp::socket_path() must agree with what Tauri resolves.
             // Catch any divergence early in debug builds.

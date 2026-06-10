@@ -1,0 +1,144 @@
+//! Menu-bar tray: cenno's persistent home.
+//!
+//! The panel only appears when an agent asks something, so the tray icon is
+//! the app's one always-visible surface — it carries the suppression controls
+//! (pause / fullscreen quiet mode) and Quit. The icon is a template image
+//! (monochrome black + alpha) generated via Codex CLI; macOS recolors it to
+//! match the menu bar (light/dark/tinted).
+
+use tauri::{
+    image::Image,
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
+    tray::TrayIconBuilder,
+    AppHandle, Runtime,
+};
+
+use crate::db::Db;
+use crate::suppress::SuppressionState;
+
+/// Settings keys shared with the startup loader in lib.rs.
+pub const SETTING_PAUSE_UNTIL: &str = "pause_until";
+pub const SETTING_HIDE_IN_FULLSCREEN: &str = "hide_in_fullscreen";
+
+/// (menu id, label, minutes) for the fixed pause durations.
+const PAUSE_ITEMS: &[(&str, &str, i64)] = &[
+    ("pause_15", "15 min", 15),
+    ("pause_30", "30 min", 30),
+    ("pause_60", "1 hour", 60),
+    ("pause_120", "2 hours", 120),
+    ("pause_300", "5 hours", 300),
+    ("pause_480", "8 hours", 480),
+];
+
+/// Build the tray icon + menu and install the menu-event handlers.
+///
+/// Called from setup in BOTH windowed and `--tray` modes — the menu-bar
+/// presence IS the app's home; the panel is just its transient prompt UI.
+pub fn setup_tray<R: Runtime>(
+    app: &AppHandle<R>,
+    suppress: SuppressionState,
+    db: Option<Db>,
+) -> tauri::Result<()> {
+    // Template icon: ship the @2x (44px) bytes; macOS downscales to menu-bar
+    // size crisply on retina. icon_as_template(true) tells AppKit to treat
+    // it as a mask (alpha only) and recolor for the current appearance.
+    let icon = Image::from_bytes(include_bytes!("../icons/tray/trayTemplate@2x.png"))?;
+
+    let pause_items: Vec<MenuItem<R>> = PAUSE_ITEMS
+        .iter()
+        .map(|(id, label, _)| MenuItem::with_id(app, *id, *label, true, None::<&str>))
+        .collect::<Result<_, _>>()?;
+    let pause_tomorrow =
+        MenuItem::with_id(app, "pause_tomorrow", "Until tomorrow", true, None::<&str>)?;
+    let pause_refs: Vec<&dyn tauri::menu::IsMenuItem<R>> = pause_items
+        .iter()
+        .map(|i| i as &dyn tauri::menu::IsMenuItem<R>)
+        .chain(std::iter::once(&pause_tomorrow as &dyn tauri::menu::IsMenuItem<R>))
+        .collect();
+    let pause_menu = Submenu::with_id_and_items(app, "pause_for", "Pause for", true, &pause_refs)?;
+
+    // Always present; a no-op when nothing is paused (simplest correct UX).
+    let resume = MenuItem::with_id(app, "resume", "Resume now", true, None::<&str>)?;
+
+    // Checked state mirrors SuppressionState, which lib.rs seeded from
+    // persisted settings (default ON).
+    let (_, hide_fs) = suppress.snapshot();
+    let hide_fullscreen = CheckMenuItem::with_id(
+        app,
+        "hide_fullscreen",
+        "Don't show in fullscreen",
+        true,
+        hide_fs,
+        None::<&str>,
+    )?;
+
+    let quit = MenuItem::with_id(app, "quit", "Quit cenno", true, None::<&str>)?;
+
+    let menu = Menu::with_items(
+        app,
+        &[
+            &pause_menu,
+            &resume,
+            &PredefinedMenuItem::separator(app)?,
+            &hide_fullscreen,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )?;
+
+    // CheckMenuItem toggles its own checked state on click; the handler reads
+    // it back. Keep a handle alive inside the closure for that.
+    let hide_fullscreen_handle = hide_fullscreen.clone();
+
+    TrayIconBuilder::with_id("cenno-tray")
+        .icon(icon)
+        .icon_as_template(true)
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(move |app, event| {
+            let id = event.id().as_ref();
+
+            // Persist helper — settings writes must never break the menu.
+            let persist = |key: &str, value: &str| {
+                if let Some(db) = &db {
+                    if let Err(e) = db.set_setting(key, value) {
+                        eprintln!("cenno: failed to persist {key}: {e}");
+                    }
+                }
+            };
+
+            if let Some((_, _, minutes)) = PAUSE_ITEMS.iter().find(|(pid, _, _)| *pid == id) {
+                let until = suppress.pause_for(*minutes);
+                persist(SETTING_PAUSE_UNTIL, &until.to_rfc3339());
+                eprintln!("cenno: paused until {until}");
+                return;
+            }
+
+            match id {
+                "pause_tomorrow" => {
+                    let until = suppress.pause_until_tomorrow();
+                    persist(SETTING_PAUSE_UNTIL, &until.to_rfc3339());
+                    eprintln!("cenno: paused until tomorrow ({until})");
+                }
+                "resume" => {
+                    suppress.resume();
+                    // Empty value = no pause (loader treats unparseable as none).
+                    persist(SETTING_PAUSE_UNTIL, "");
+                    eprintln!("cenno: resumed");
+                }
+                "hide_fullscreen" => {
+                    let checked = hide_fullscreen_handle.is_checked().unwrap_or(true);
+                    suppress.set_hide_in_fullscreen(checked);
+                    persist(SETTING_HIDE_IN_FULLSCREEN, if checked { "true" } else { "false" });
+                    eprintln!("cenno: hide_in_fullscreen = {checked}");
+                }
+                "quit" => {
+                    app.exit(0);
+                }
+                _ => {}
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
