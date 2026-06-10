@@ -104,5 +104,5 @@ Spike and research docs: `docs/superpowers/research/`
 ## Security notes
 
 - The Unix socket is user-only (`0600`) in the app-data directory.
-- `src-tauri/tauri.conf.json` ships with `"csp": null` (scaffold default; JSON has no comments, hence this note). Tighten the Content-Security-Policy before any release build that exposes remote HTTP content.
+- CSP is set: `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'`. Tauri 2 automatically appends its own IPC directives (nonces/hashes for injected scripts) when a CSP string is present. If future features load remote content, extend the policy explicitly rather than relaxing the defaults.
 - Never expose the HTTP server without authentication tokens (addressed in plan 4).
