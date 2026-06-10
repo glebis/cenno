@@ -198,6 +198,20 @@ describe("ButtonView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it("quiet Send is text-only (no primary pill class) and still fires", () => {
+    const onClick = vi.fn();
+    render(
+      <ButtonView variant="quiet" onClick={onClick}>
+        Send
+      </ButtonView>,
+    );
+    const btn = screen.getByRole("button", { name: "Send" });
+    expect(btn.className).toContain("cenno-button--quiet");
+    expect(btn.className).not.toContain("cenno-button--primary");
+    fireEvent.click(btn);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
 });
 
 // Adapters are covered by the Task 6 integration; this only proves the

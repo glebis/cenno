@@ -134,14 +134,37 @@ export const CennoColumn = createComponentImplementation(
 );
 
 /* ------------------------------------------------------------------ */
-/* Button — standard ButtonApi; borderless maps to the dim secondary   */
+/* Button — standard ButtonApi widened with the cenno "quiet" variant. */
+/* borderless -> dim secondary; quiet -> text-only bottom-right Send    */
+/* (panel-free-text.png); everything else -> primary pill.             */
 /* ------------------------------------------------------------------ */
 
+export const CennoButtonApi = {
+  name: "Button",
+  schema: ButtonApi.schema.extend({
+    // Widen the stock primary/borderless/default hint with the cenno
+    // "quiet" treatment: text-only Send aligned bottom-right.
+    variant: z
+      .enum(["default", "primary", "borderless", "quiet"])
+      .optional()
+      .describe(
+        "Button style hint: 'primary' call-to-action pill, 'borderless' " +
+          "link-like, or the cenno 'quiet' text-only Send (bottom-right).",
+      ),
+  }),
+};
+
 export const CennoButton = createComponentImplementation(
-  ButtonApi,
+  CennoButtonApi,
   ({ props, buildChild }) => (
     <ButtonView
-      variant={props.variant === "borderless" ? "secondary" : "primary"}
+      variant={
+        props.variant === "borderless"
+          ? "secondary"
+          : props.variant === "quiet"
+            ? "quiet"
+            : "primary"
+      }
       disabled={props.isValid === false}
       onClick={props.action}
     >

@@ -360,14 +360,19 @@ export function ImageView({
   );
 }
 
-/** Primary = solid white on flow color; secondary = text-only dim. */
+/**
+ * primary  = solid white pill on the flow color.
+ * secondary = text-only dim (borderless link-like).
+ * quiet    = text-only Send, --cenno-text, pinned bottom-right
+ *            (panel-free-text.png) — no pill background, no border.
+ */
 export function ButtonView({
   variant = "primary",
   disabled = false,
   onClick,
   children,
 }: {
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "quiet";
   disabled?: boolean;
   onClick: () => void;
   children?: ReactNode;

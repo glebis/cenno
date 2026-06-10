@@ -346,6 +346,22 @@
   color: var(--cenno-text-dim);
 }
 
+/* Quiet Send (panel-free-text.png): text-only, full --cenno-text, no pill
+   background or border, aligned to the bottom-right of the column. Keeps a
+   >= 44px tap target via the inherited min-height + padding (never font
+   inflation). align-self overrides the base flex-start so it hugs the
+   right edge. */
+.cenno-button--quiet {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--cenno-text);
+  align-self: flex-end;
+  /* horizontal padding only on the trailing side keeps the label flush with
+     the panel's right inset while preserving the tap target via min-height */
+  padding: var(--cenno-space-1) 0;
+}
+
 /* ---- dots pagination ---- */
 
 .cenno-dots {

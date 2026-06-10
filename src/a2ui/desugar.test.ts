@@ -8,10 +8,10 @@ import {
   TextApi,
   RowApi,
   ColumnApi,
-  ButtonApi,
 } from "@a2ui/web_core/v0_9/basic_catalog";
 import { desugar } from "./desugar";
 import {
+  CennoButtonApi,
   CennoTextFieldApi,
   CennoChoicePickerApi,
   ScaleApi,
@@ -93,7 +93,7 @@ describe("desugar mapping table", () => {
     expect(col.children).not.toContain("body");
   });
 
-  it("text: TextField (no voice) + primary Send button, both firing submit {value, via:'text'}", () => {
+  it("text: TextField (no voice) + quiet Send button, both firing submit {value, via:'text'}", () => {
     const { byId, col, dataModel } = parts(prompt({ input: { kind: "text" } }));
     const submit = {
       event: {
@@ -108,9 +108,11 @@ describe("desugar mapping table", () => {
       submitAction: submit,
     });
     expect(byId.get("input").voice).toBeUndefined();
+    // Send is quiet text bottom-right (panel-free-text.png), not a primary
+    // pill; the action is unchanged (still submit).
     expect(byId.get("send")).toMatchObject({
       component: "Button",
-      variant: "primary",
+      variant: "quiet",
       child: "sendLabel",
       action: submit,
     });
@@ -264,7 +266,7 @@ describe("desugar mapping table", () => {
         TextApi,
         RowApi,
         ColumnApi,
-        ButtonApi,
+        CennoButtonApi,
         CennoTextFieldApi,
         CennoChoicePickerApi,
         ScaleApi,

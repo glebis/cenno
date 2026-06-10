@@ -72,7 +72,7 @@ function submitAction(name: string, value: unknown, via: Via) {
 function button(
   id: string,
   label: string,
-  variant: "primary" | "borderless",
+  variant: "primary" | "borderless" | "quiet",
   action: unknown,
 ): A2uiComponent[] {
   return [
@@ -177,7 +177,9 @@ function desugarInput(req: Prompt): {
             ...(voice ? { voice: true } : {}),
             submitAction: submit,
           },
-          ...button("send", "Send", "primary", submit),
+          // Quiet text Send, bottom-right (panel-free-text.png) — not a
+          // white primary pill. Confirm Yes/No stay pills (panel-reminder.png).
+          ...button("send", "Send", "quiet", submit),
         ],
         dataModel: { draft: "" },
       };
