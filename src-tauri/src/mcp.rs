@@ -12,6 +12,22 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+/// Canonical path to the MCP Unix socket.
+///
+/// This MUST return the same directory that Tauri's `app.path().app_data_dir()`
+/// resolves to on macOS (`~/Library/Application Support/com.glebkalinin.cenno/`).
+/// In debug builds, `lib.rs`'s setup function asserts the two paths match so
+/// any divergence is caught at startup rather than silently.
+///
+/// Using `dirs::data_dir()` here avoids a Tauri dependency in the CLI path.
+pub fn socket_path() -> PathBuf {
+    // macOS: ~/Library/Application Support
+    // Linux: ~/.local/share
+    // Windows: %APPDATA%
+    let base = dirs::data_dir().expect("could not determine user data directory");
+    base.join("com.glebkalinin.cenno").join("mcp.sock")
+}
+
 use rmcp::{
     handler::server::{router::tool::ToolRouter, tool::ToolCallContext, wrapper::Parameters},
     model::{CallToolRequestParams, CallToolResult, ServerCapabilities, ServerInfo},
@@ -153,15 +169,14 @@ pub async fn start_socket_server(
     Ok(())
 }
 
-/// Test/diagnostic client helpers.
+/// MCP client helpers — used by `cenno ask`, integration tests, and (Task 9) the stdio bridge.
 ///
 /// Always compiled (not `#[cfg(test)]`): integration tests in `tests/` build
 /// the lib WITHOUT `cfg(test)`, and gating this behind a `test-support`
 /// feature would need a dev-dependency self-reference to enable it. Keeping
 /// it unconditional is the simplest thing that compiles everywhere; the only
-/// extra cost is rmcp's small "client" feature. Hidden from docs instead.
-#[doc(hidden)]
-pub mod test_support {
+/// extra cost is rmcp's small "client" feature.
+pub mod client {
     use super::*;
 
     /// Connect to the cenno MCP socket, call `ask_user` with `params`, and
@@ -195,3 +210,8 @@ pub mod test_support {
         Ok(value)
     }
 }
+
+/// Backward-compat alias so existing integration tests keep compiling without edits.
+/// (Prefer `mcp::client` in new code.)
+#[doc(hidden)]
+pub use client as test_support;

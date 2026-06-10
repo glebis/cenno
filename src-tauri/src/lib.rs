@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod mcp;
 pub mod protocol;
 pub mod registry;
@@ -91,21 +92,36 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub fn run(tray: bool) {
     let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
     builder
-        .setup(|app| {
+        .setup(move |app| {
             let registry = PromptRegistry::new();
             app.manage(registry.clone());
 
+            // tray mode: skip panel conversion — window stays hidden until the
+            // first prompt arrives. Full tray icon UI is a later plan (Task 9).
             #[cfg(target_os = "macos")]
-            convert_to_panel(app)?;
+            if !tray {
+                convert_to_panel(app)?;
+            }
 
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let sock_path = data_dir.join("mcp.sock");
+
+            // Invariant: mcp::socket_path() must agree with what Tauri resolves.
+            // Catch any divergence early in debug builds.
+            #[cfg(debug_assertions)]
+            {
+                let canonical = mcp::socket_path();
+                assert_eq!(
+                    sock_path, canonical,
+                    "socket path mismatch: lib.rs={sock_path:?} mcp::socket_path()={canonical:?}"
+                );
+            }
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
