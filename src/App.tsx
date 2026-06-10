@@ -21,24 +21,45 @@ interface PromptEvent {
   };
 }
 
+function toPrompt({ id, request }: PromptEvent): Prompt {
+  return {
+    id,
+    title: request.title,
+    body_md: request.body_md,
+    input: request.input,
+    choices: request.choices,
+    flow: request.flow,
+    progress: request.progress,
+    a2ui: request.a2ui,
+  };
+}
+
 function App() {
   const [prompt, setPrompt] = useState<Prompt | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const unlisten = listen<PromptEvent>("prompt", (event) => {
-      const { id, request } = event.payload;
-      setPrompt({
-        id,
-        title: request.title,
-        body_md: request.body_md,
-        input: request.input,
-        choices: request.choices,
-        flow: request.flow,
-        progress: request.progress,
-        a2ui: request.a2ui,
-      });
+      setPrompt(toPrompt(event.payload));
+    });
+    // Cold-start race: on a bridge autolaunch the agent's ask (and its
+    // `prompt` event) can land before this listener existed — the event is
+    // lost and the panel window sits blank. Once the listener is registered,
+    // pull anything still answerable and show the newest. The functional
+    // update keeps this idempotent: a live event that already set state wins
+    // over the (same-or-older) pulled prompt.
+    unlisten.then(async () => {
+      try {
+        const pending = await invoke<PromptEvent[]>("pending_prompts");
+        if (cancelled || pending.length === 0) return;
+        const newest = pending[pending.length - 1];
+        setPrompt((current) => current ?? toPrompt(newest));
+      } catch (e) {
+        console.error("pending_prompts failed:", e);
+      }
     });
     return () => {
+      cancelled = true;
       unlisten.then((fn) => fn());
     };
   }, []);

@@ -11,10 +11,25 @@ use crate::protocol::{AskRequest, Via};
 use crate::registry::PromptRegistry;
 
 /// Payload of the `prompt` event emitted to the webview when an agent asks.
+/// Also returned by the `pending_prompts` command (same wire shape) so the
+/// webview can replay prompts it missed.
 #[derive(Clone, serde::Serialize)]
 struct PromptEvent {
     id: String,
     request: AskRequest,
+}
+
+/// Cold-start race recovery: the agent's first ask can arrive (and emit the
+/// `prompt` event) before the webview has mounted its listener. The webview
+/// calls this right after registering `listen("prompt")` to pull anything
+/// still answerable. Ordered oldest→newest.
+#[tauri::command]
+fn pending_prompts(state: tauri::State<PromptRegistry>) -> Vec<PromptEvent> {
+    state
+        .pending()
+        .into_iter()
+        .map(|(id, request)| PromptEvent { id, request })
+        .collect()
 }
 
 #[tauri::command]
@@ -149,7 +164,7 @@ pub fn run(tray: bool) {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![answer_prompt])
+        .invoke_handler(tauri::generate_handler![answer_prompt, pending_prompts])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
