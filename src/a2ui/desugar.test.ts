@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TextApi,
+  RowApi,
   ColumnApi,
   ButtonApi,
 } from "@a2ui/web_core/v0_9/basic_catalog";
@@ -73,9 +74,11 @@ describe("desugar mapping table", () => {
     });
     expect(col.component).toBe("Column");
     expect(col.children.slice(0, 2)).toEqual(["title", "body"]);
+    // h2 -> question-m (22px): TOKENS.md maps type.question.m to PANEL
+    // questions; h1/question-l is the fullscreen size (Task 9 visual QA).
     expect(byId.get("title")).toMatchObject({
       component: "Text",
-      variant: "h1",
+      variant: "h2",
       text: "How focused are you?",
     });
     expect(byId.get("body")).toMatchObject({
@@ -173,9 +176,15 @@ describe("desugar mapping table", () => {
     expect(byId.has("send")).toBe(false);
   });
 
-  it("confirm: Yes (primary, submit-yes) and No (borderless, submit-no); no text input", () => {
+  it("confirm: actions Row of Yes (primary, submit-yes) and No (borderless, submit-no); no text input", () => {
     const { byId, col } = parts(prompt({ input: { kind: "confirm" } }));
-    expect(col.children).toEqual(["title", "body", "yes", "no"]);
+    // Row so the buttons hug their labels side by side (panel-reminder.png)
+    // instead of stacking as full-width slabs (Task 9 visual QA).
+    expect(col.children).toEqual(["title", "body", "actions"]);
+    expect(byId.get("actions")).toMatchObject({
+      component: "Row",
+      children: ["yes", "no"],
+    });
     expect(byId.get("yes")).toMatchObject({
       component: "Button",
       variant: "primary",
@@ -200,7 +209,7 @@ describe("desugar mapping table", () => {
   it("none: just title and body, no input components", () => {
     const { byId, col } = parts(prompt({ input: { kind: "none" } }));
     expect(col.children).toEqual(["title", "body"]);
-    for (const id of ["input", "send", "choices", "scale", "yes", "no"]) {
+    for (const id of ["input", "send", "choices", "scale", "actions", "yes", "no"]) {
       expect(byId.has(id)).toBe(false);
     }
   });
@@ -228,6 +237,7 @@ describe("desugar mapping table", () => {
     const schemaByName = new Map(
       [
         TextApi,
+        RowApi,
         ColumnApi,
         ButtonApi,
         CennoTextFieldApi,

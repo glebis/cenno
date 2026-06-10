@@ -29,6 +29,19 @@
   margin: 0;
 }
 
+/* Markdown links: inherit the flow's text color (UA default blue is
+   invisible on cobalt), underline with the hairline tint. */
+.cenno-text a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--cenno-line);
+  text-underline-offset: 3px;
+}
+
+.cenno-text a:hover {
+  text-decoration-color: var(--cenno-text);
+}
+
 .cenno-text--question-l {
   font-size: var(--cenno-type-question-l);
   font-weight: 600;
@@ -80,7 +93,7 @@
   border-color: var(--cenno-text);
 }
 
-/* ---- scale: large bare numerals, no boxes ---- */
+/* ---- scale: outlined circle targets (fullscreen-ema-1-scale.png) ---- */
 
 .cenno-scale {
   display: flex;
@@ -97,26 +110,27 @@
 .cenno-scale__num {
   appearance: none;
   background: transparent;
-  border: none;
+  border: 1px solid var(--cenno-line);
+  border-radius: 50%;
   color: var(--cenno-text);
-  opacity: 0.7;
-  font-size: var(--cenno-type-question-m);
+  font-size: var(--cenno-type-body);
   font-variant-numeric: tabular-nums;
-  min-width: 44px;
-  min-height: 44px;
-  padding: var(--cenno-space-1);
+  width: 44px;
+  height: 44px;
+  flex: none;
+  padding: 0;
   cursor: pointer;
 }
 
 .cenno-scale__num:hover {
-  opacity: 1;
+  border-color: var(--cenno-text);
 }
 
+/* Selected target: filled circle, numeral flips to the flow color. */
 .cenno-scale__num.is-selected {
-  opacity: 1;
-  text-decoration: underline;
-  text-underline-offset: 6px;
-  text-decoration-thickness: 2px;
+  border-color: var(--cenno-text);
+  background: var(--cenno-text);
+  color: var(--cenno-surface);
 }
 
 .cenno-scale__labels {
@@ -172,12 +186,15 @@
 .cenno-button {
   appearance: none;
   border: none;
-  border-radius: var(--cenno-radius-control);
+  border-radius: var(--cenno-radius-pill);
   font-size: var(--cenno-type-body);
   line-height: 1;
   min-height: 44px;
   padding: var(--cenno-space-1) var(--cenno-space-3);
   cursor: pointer;
+  /* hug the label (panel-reminder.png pills), don't stretch to the
+     column width like a slab */
+  align-self: flex-start;
 }
 
 .cenno-button:disabled {

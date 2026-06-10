@@ -7,7 +7,7 @@
  * Deterministic component ids — tests and the Task 6 renderer reference them
  * by name: "root", "col", "title", "body", "input", "send", "dots",
  * "choices", "scale" (plus button-label children "sendLabel" / "yesLabel" /
- * "noLabel", and "yes" / "no" for confirm).
+ * "noLabel", and "actions" / "yes" / "no" for confirm).
  *
  * Action contract (Task 6 builds on this):
  * - Every user-completing interaction fires an event action whose name
@@ -130,9 +130,12 @@ function desugarInput(req: Prompt): {
         dataModel: {},
       };
     case "confirm":
+      // Buttons sit in a Row ("actions") so they hug their labels side by
+      // side (panel-reminder.png) instead of stacking as full-width slabs.
       return {
-        childIds: ["yes", "no"],
+        childIds: ["actions"],
         components: [
+          { id: "actions", component: "Row", children: ["yes", "no"] },
           ...button(
             "yes",
             "Yes",
@@ -192,7 +195,11 @@ export function desugar(req: Prompt): A2uiMessages {
   const components: A2uiComponent[] = [
     { id: "root", component: "Column", children: ["col"] },
     { id: "col", component: "Column", children: childIds },
-    { id: "title", component: "Text", variant: "h1", text: req.title },
+    // h2 -> question-m (22px): TOKENS.md maps type.question.m to PANEL
+    // questions; question-l (44px, h1) is reserved for fullscreen surfaces
+    // which don't exist yet. Visual QA (Task 9) showed h1 titles eating
+    // half the 420x240 panel and clipping the input/button below.
+    { id: "title", component: "Text", variant: "h2", text: req.title },
     ...(hasBody
       ? [{ id: "body", component: "Text", text: req.body_md }]
       : []),

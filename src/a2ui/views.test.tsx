@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   TextView,
   ScaleView,
@@ -9,10 +10,26 @@ import {
   DotsView,
 } from "./views";
 
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe("TextView", () => {
   it("renders markdown strong", () => {
     render(<TextView markdown="is **bold**" role="body" />);
     expect(screen.getByText("bold").tagName).toBe("STRONG");
+  });
+
+  it("opens markdown links externally instead of navigating the panel", () => {
+    // A plain <a href> click would replace the whole webview with the
+    // linked page (Task 9 visual QA caught the panel turning into
+    // example.com). Default must be prevented and the opener plugin used.
+    render(<TextView markdown="see [the plan](https://example.com/plan)" />);
+    const link = screen.getByRole("link", { name: "the plan" });
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(openUrl).toHaveBeenCalledWith("https://example.com/plan");
   });
 });
 

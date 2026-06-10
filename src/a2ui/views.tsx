@@ -12,11 +12,35 @@
  * transparent — the panel root owns --cenno-surface.
  */
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import "./catalog.css";
 
 export type TextRole = "question-l" | "question-m" | "body" | "caption";
+
+/**
+ * Markdown links must NEVER navigate the panel webview: a plain <a href>
+ * click replaces the whole app with the linked page (CSP does not cover
+ * top-level navigation — observed in Task 9 visual QA). Open externally
+ * via the opener plugin instead.
+ */
+function ExternalLink(props: AnchorHTMLAttributes<HTMLAnchorElement>) {
+  const { href, children, ...rest } = props;
+  const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (href) {
+      openUrl(href).catch((err) =>
+        console.error("cenno: failed to open link externally:", err),
+      );
+    }
+  };
+  return (
+    <a {...rest} href={href} onClick={onClick}>
+      {children}
+    </a>
+  );
+}
 
 /** Markdown text. Role maps onto the type scale (TOKENS.md). */
 export function TextView({
@@ -28,7 +52,7 @@ export function TextView({
 }) {
   return (
     <div className={`cenno-text cenno-text--${role}`}>
-      <ReactMarkdown>{markdown}</ReactMarkdown>
+      <ReactMarkdown components={{ a: ExternalLink }}>{markdown}</ReactMarkdown>
     </div>
   );
 }
