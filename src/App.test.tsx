@@ -1,6 +1,19 @@
 import { act, render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import App, { ANSWERED_LINGER_MS } from "./App";
+import { NOTED_WORDS } from "./notedWords";
+
+/** The confirmation card, if shown. Its text rotates through NOTED_WORDS,
+ *  so tests assert membership rather than the literal "noted.". */
+function confirmationEl() {
+  return document.querySelector(".answered-note");
+}
+
+function expectConfirmationShown() {
+  const el = confirmationEl();
+  expect(el).toBeTruthy();
+  expect(NOTED_WORDS).toContain(el!.textContent);
+}
 
 // Shared, hoisted so the vi.mock factories (hoisted above imports) see them.
 const mocks = vi.hoisted(() => ({
@@ -79,6 +92,9 @@ beforeEach(() => {
   mocks.hide.mockClear();
   mocks.listeners.length = 0;
   mocks.pending = [];
+  // Deterministic confirmation rotation per test (nextNotedWord persists
+  // its cursor in localStorage).
+  window.localStorage.clear();
 });
 
 afterEach(() => {
@@ -104,15 +120,25 @@ describe("App answered state machine", () => {
     await act(async () => {}); // flush answer_prompt invoke
 
     // Confirmation lingers — panel did NOT vanish, window not hidden yet.
-    expect(screen.getByText("noted.")).toBeTruthy();
+    expectConfirmationShown();
     expect(mocks.hide).not.toHaveBeenCalled();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(ANSWERED_LINGER_MS);
     });
     expect(mocks.hide).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("noted.")).toBeNull();
+    expect(confirmationEl()).toBeNull();
     expect(screen.queryByText("How are you feeling?")).toBeNull();
+  });
+
+  it("asks Rust to shrink the panel to min height for the confirmation card", async () => {
+    const { invoke } = await import("@tauri-apps/api/core"); // the mock above
+    vi.mocked(invoke).mockClear();
+    await renderApp();
+    emitPrompt(moodEvent(40));
+    fireEvent.click(screen.getByRole("button", { name: "good" }));
+    await act(async () => {});
+    expect(invoke).toHaveBeenCalledWith("resize_panel", { height: 240 });
   });
 
   it("a new prompt during the linger cancels the hide and shows the prompt", async () => {
@@ -120,7 +146,7 @@ describe("App answered state machine", () => {
     emitPrompt(moodEvent(40));
     fireEvent.click(screen.getByRole("button", { name: "good" }));
     await act(async () => {});
-    expect(screen.getByText("noted.")).toBeTruthy();
+    expectConfirmationShown();
 
     emitPrompt(secondEvent(40));
     expect(screen.getByText("Second question?")).toBeTruthy();
@@ -146,7 +172,7 @@ describe("App hide-timer generation guard (new-prompt races)", () => {
     emitPrompt(moodEvent(40));
     fireEvent.click(screen.getByRole("button", { name: "good" }));
     await act(async () => {}); // linger armed for P1
-    expect(screen.getByText("noted.")).toBeTruthy();
+    expectConfirmationShown();
 
     // P2 arrives but React has not committed; P1's linger timer is still
     // armed and fires first.
@@ -208,7 +234,7 @@ describe("App timeout auto-hide", () => {
     emitPrompt(moodEvent(2));
     fireEvent.click(screen.getByRole("button", { name: "good" }));
     await act(async () => {});
-    expect(screen.getByText("noted.")).toBeTruthy();
+    expectConfirmationShown();
 
     // The old 2s timeout firing mid-linger must not double-hide; only the
     // linger hide (at 900ms) runs.

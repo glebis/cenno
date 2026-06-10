@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import PromptPanel, { Prompt, Via } from "./PromptPanel";
+import { nextNotedWord } from "./notedWords";
+import { PANEL_MIN_HEIGHT } from "./panelResize";
 import "./App.css";
 
 // The Rust side emits the whole AskRequest as `request` (see PromptEvent in
@@ -64,6 +66,10 @@ function App() {
   const [active, setActive] = useState<ActivePrompt | null>(null);
   // Post-answer linger: true between a delivered answer and the hide.
   const [answered, setAnswered] = useState(false);
+  // The confirmation word for THIS answer — drawn from the rotating cycle
+  // once per answer (state, not a render-time call: re-renders during the
+  // linger must not advance the cycle).
+  const [confirmation, setConfirmation] = useState("");
   // Bumped synchronously whenever a prompt is installed (live event or
   // cold-start pull). Hide timers capture the value at arm time and bail if
   // it moved: effect cleanup only clears a timer at the next React commit,
@@ -160,22 +166,30 @@ function App() {
       // answer. Skeleton behavior: log it, still confirm-and-hide.
       console.warn(`prompt ${id} already expired; answer was not delivered`);
     }
+    setConfirmation(nextNotedWord());
     setAnswered(true);
+    // The confirmation card needs no more than the minimum panel: shrink a
+    // tall prompt's window back down for the linger. Best-effort — the card
+    // centers correctly at any height.
+    invoke("resize_panel", { height: PANEL_MIN_HEIGHT }).catch((e) => {
+      console.error("resize_panel (answered) failed:", e);
+    });
   }
 
   if (!active) return null;
 
   if (answered) {
     // Same surface (class + flow theme) so the color holds steady; only the
-    // content swaps to the confirmation. data-tauri-drag-region keeps the
-    // panel draggable during the linger.
+    // content swaps to the confirmation (one word from the rotating cycle,
+    // centered both ways by .prompt-panel--answered). data-tauri-drag-region
+    // keeps the panel draggable during the linger.
     return (
       <div
         className="prompt-panel prompt-panel--answered"
         data-flow={active.prompt.flow ?? "question"}
         data-tauri-drag-region
       >
-        <p className="answered-note">noted.</p>
+        <p className="answered-note">{confirmation}</p>
       </div>
     );
   }

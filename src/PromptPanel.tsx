@@ -195,8 +195,11 @@ export default function PromptPanel({
     >
       <div className="prompt-panel__drag-strip" data-tauri-drag-region aria-hidden="true" />
       {/* Measurement wrapper (flex:none → always its natural height); the
-          root itself is 100vh so its scrollHeight can't size DOWN. */}
-      <div ref={contentRef} className="prompt-panel__content" data-tauri-drag-region>
+          root itself is 100vh so its scrollHeight can't size DOWN.
+          Deliberately NOT a drag region: with acceptFirstMouse the very
+          first click lands here, and a draggable wrapper would turn a tap
+          on body text into a window drag. Root + top strip cover dragging. */}
+      <div ref={contentRef} className="prompt-panel__content">
         <SurfaceErrorBoundary
           key={prompt.id}
           fallback={fallback ? <A2uiSurface surface={fallback} /> : null}

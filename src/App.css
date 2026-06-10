@@ -61,15 +61,21 @@ body {
   z-index: 10;
 }
 
-/* Post-answer linger: same surface, quiet confirmation. */
+/* Post-answer linger: same surface, quiet confirmation — dead center on
+   both axes (the root is a 100vh flex column, so this centers within the
+   whole panel). text-align covers a multi-word confirmation that wraps. */
 .prompt-panel--answered {
   justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 
+/* Lowercase on purpose (no text-transform): the rotating confirmations
+   (src/notedWords.ts) are written lowercase-with-period, Reporter style;
+   the loose tracking keeps the caption quiet without shouting it. */
 .answered-note {
   margin: 0;
   font-size: var(--cenno-type-caption);
   color: var(--cenno-text-dim);
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
