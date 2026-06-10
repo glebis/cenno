@@ -171,21 +171,50 @@ npm run tokens        # rebuild CSS from tokens/tokens.json (W3C DTCG, validated
 
 ### Releasing an update
 
-In-app updates flow from GitHub releases. To ship one:
+In-app updates flow from GitHub releases. `scripts/release.sh` automates the
+whole sequence below; read this first so you know what it does and which
+environment it needs.
 
-1. Bump `version` in `src-tauri/tauri.conf.json` (and `package.json`).
-2. Build with the updater signing key (generated via `tauri signer generate`;
-   the matching pubkey is committed in `tauri.conf.json`):
+**One-time setup — credentials (all sourced from env, nothing typed inline):**
+
+- **Updater signing key** — `~/.tauri/cenno.key` (generated via
+  `tauri signer generate`, password-protected; matching pubkey committed in
+  `tauri.conf.json`). Tauri needs the key *contents*, not the path, plus its
+  password:
+  - `TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/cenno.key)"`
+  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD=…`
+- **Apple notarization** — set an App Store Connect API key so `tauri build`
+  notarizes **and staples the `.app` itself, before it is tarred for the
+  updater** (without these it only signs, and the OTA bundle relies on an
+  online Gatekeeper check):
+  - `APPLE_API_KEY=<key id>` · `APPLE_API_ISSUER=<issuer id>` ·
+    `APPLE_API_KEY_PATH=~/path/to/AuthKey_XXXX.p8`
+  - `APPLE_SIGNING_IDENTITY="Developer ID Application: …"`
+
+Store all of these in the KeePassXC vault (see the signing-key note) and
+export them at release time — none should be hard-coded in a script or shell
+history.
+
+**Steps (what `scripts/release.sh` runs):**
+
+1. Bump `version` in `src-tauri/tauri.conf.json`, `package.json`, and
+   `src-tauri/Cargo.toml`; add a dated `CHANGELOG.md` section. Commit.
+2. Build. Note `PATH=/usr/bin:$PATH` — a conda/Python-framework `xattr`
+   shadowing the system one breaks Tauri's bundling step:
 
    ```bash
-   TAURI_SIGNING_PRIVATE_KEY_PATH=~/.tauri/cenno.key \
-   APPLE_SIGNING_IDENTITY="Developer ID Application: …" npx tauri build
+   PATH=/usr/bin:$PATH \
+   TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/cenno.key)" \
+   TAURI_SIGNING_PRIVATE_KEY_PASSWORD=… \
+   APPLE_API_KEY=… APPLE_API_ISSUER=… APPLE_API_KEY_PATH=… \
+   APPLE_SIGNING_IDENTITY="Developer ID Application: …" \
+   npx tauri build
    ```
 
-   `createUpdaterArtifacts` makes this emit `cenno.app.tar.gz` + `cenno.app.tar.gz.sig`
-   next to the DMG.
-3. Create the GitHub release with the DMG, the `.tar.gz`, the `.sig`, and a
-   `latest.json` pointing at the `.tar.gz` ([format](https://v2.tauri.app/plugin/updater/#static-json-file)):
+   `createUpdaterArtifacts` (set in `tauri.conf.json`) makes this emit
+   `cenno.app.tar.gz` + `cenno.app.tar.gz.sig` next to the notarized DMG.
+3. Generate `latest.json` from the `.sig`
+   ([format](https://v2.tauri.app/plugin/updater/#static-json-file)):
 
    ```json
    {
@@ -199,9 +228,15 @@ In-app updates flow from GitHub releases. To ship one:
      }
    }
    ```
+4. `git push`, then `gh release create vX.Y.Z` with four assets: the DMG, the
+   `.tar.gz`, the `.sig`, and `latest.json`. The updater artifact must be
+   named exactly `cenno.app.tar.gz` to match the `url` above.
+5. Verify the live endpoint:
+   `curl -sL https://github.com/glebis/cenno/releases/latest/download/latest.json`.
 
-Installed apps find it at `releases/latest/download/latest.json`. Lose the
-private key and shipped apps can never update again — back it up.
+Installed apps find the manifest at `releases/latest/download/latest.json`.
+Lose the private key OR its password and shipped apps can never update
+again — back both up.
 
 Design system: [docs/design/TOKENS.md](docs/design/TOKENS.md) (palette, type, components) and [docs/design/BRAND.md](docs/design/BRAND.md) (the mark). The complete spec → plan → review trail this app was built from is in [docs/superpowers/](docs/superpowers/) — cenno was built end-to-end by AI agents, reviews included, in two days.
 
