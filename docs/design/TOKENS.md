@@ -1,7 +1,11 @@
-# cenno design tokens (source of truth for plan 2 → DTCG tokens.json)
+# cenno design tokens
 
 Extracted from the 2026-06 design pass (Reporter-style, see `frames/final/` and `index.html`).
 The PNGs are raster comps — type metrics come from THIS file, not from measuring the images.
+
+Machine source of truth: [`tokens/tokens.json`](../../tokens/tokens.json) (W3C DTCG format,
+validated by `npm run validate:tokens`, built to `src/styles/tokens.css` by `npm run tokens`).
+Brand — the mark and the typographic solution: [BRAND.md](BRAND.md).
 
 ## Palette (one hue per flow)
 
@@ -25,6 +29,22 @@ The PNGs are raster comps — type metrics come from THIS file, not from measuri
 | `type.question.m` | 22 | panel questions |
 | `type.body` | 17 | answers, choices |
 | `type.caption` | 13 | captions, metadata, dB indicator |
+
+## Typography (faces, weights, tracking, leading)
+
+Full rationale in [BRAND.md](BRAND.md).
+
+| Token | Value | Role |
+|---|---|---|
+| `font.family.default` | system stack (SF Pro on macOS) | the only face |
+| `font.weight.question` | 600 | questions, wordmark |
+| `font.weight.body` / `font.weight.caption` | 400 | everything else |
+| `font.tracking.default` | 0em | questions, body |
+| `font.tracking.caption` | 0.08em | uppercase captions, metadata |
+| `font.leading.question-l` / `.question-m` | 1.15 / 1.25 | display leading |
+| `font.leading.body` / `.caption` | 1.4 / 1.3 | text leading |
+
+Numbers use `font-variant-numeric: tabular-nums` (scale points, dB, timestamps).
 
 ## Spacing & radius
 
