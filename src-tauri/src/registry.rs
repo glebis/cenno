@@ -15,9 +15,11 @@ pub struct PromptRegistry {
 struct Pending {
     /// None after a resolve() consumed the sender (including a late resolve on a timed-out prompt).
     tx: Option<oneshot::Sender<(String, Via)>>,
-    // Will be read by the tray inbox in a later plan (Task 4 spec).
-    #[allow(dead_code)]
     pub request: AskRequest,
+    /// When this prompt's ask() stops waiting. Lets pending() distinguish
+    /// still-answerable prompts from timed-out leftovers (which stay in the
+    /// map for plan-4 inbox semantics but must NOT be replayed to the UI).
+    deadline: Instant,
 }
 
 impl Default for PromptRegistry {
@@ -42,7 +44,8 @@ impl PromptRegistry {
         let n = self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let id = format!("p_{n}");
         let (tx, rx) = oneshot::channel();
-        self.inner.lock().insert(id.clone(), Pending { tx: Some(tx), request: req.clone() });
+        let deadline = Instant::now() + Duration::from_secs(req.timeout_s);
+        self.inner.lock().insert(id.clone(), Pending { tx: Some(tx), request: req.clone(), deadline });
         notify(&id, &req);
         let started = Instant::now();
         match tokio::time::timeout(Duration::from_secs(req.timeout_s), rx).await {
@@ -65,6 +68,23 @@ impl PromptRegistry {
 
     pub fn pending_ids(&self) -> Vec<String> {
         self.inner.lock().keys().cloned().collect()
+    }
+
+    /// Prompts whose ask() is still awaiting an answer — i.e. replayable to a
+    /// webview that mounted after the `prompt` event was emitted (cold-start
+    /// race). Excludes resolved (tx consumed) and timed-out (deadline passed)
+    /// entries. Sorted oldest→newest by the monotonic id counter.
+    pub fn pending(&self) -> Vec<(String, AskRequest)> {
+        let now = Instant::now();
+        let mut v: Vec<(String, AskRequest)> = self
+            .inner
+            .lock()
+            .iter()
+            .filter(|(_, p)| p.tx.is_some() && now < p.deadline)
+            .map(|(id, p)| (id.clone(), p.request.clone()))
+            .collect();
+        v.sort_by_key(|(id, _)| id.strip_prefix("p_").and_then(|n| n.parse::<u64>().ok()));
+        v
     }
 }
 
@@ -101,5 +121,31 @@ mod tests {
     #[tokio::test]
     async fn resolve_unknown_id_is_false() {
         assert!(!PromptRegistry::new().resolve("nope", "x".into(), Via::Text));
+    }
+
+    #[tokio::test]
+    async fn pending_lists_awaiting_prompt_and_empties_after_resolve() {
+        let reg = PromptRegistry::new();
+        let reg2 = reg.clone();
+        let task = tokio::spawn(async move { reg2.ask(req(), |_id, _req| {}).await });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let pending = reg.pending();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].1.title, "t");
+        let id = pending[0].0.clone();
+        assert!(reg.resolve(&id, "hi".into(), Via::Text));
+        task.await.unwrap();
+        assert!(reg.pending().is_empty());
+    }
+
+    #[tokio::test]
+    async fn pending_excludes_timed_out_prompt() {
+        let reg = PromptRegistry::new();
+        let resp = reg.ask(req(), |_id, _req| {}).await; // timeout_s = 1, elapses
+        assert!(matches!(resp, AskResponse::TimedOut { .. }));
+        // Timed-out entry stays in the map (inbox semantics)...
+        assert_eq!(reg.pending_ids().len(), 1);
+        // ...but is no longer answerable, so it must not be replayed.
+        assert!(reg.pending().is_empty());
     }
 }
