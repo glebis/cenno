@@ -4,7 +4,15 @@
 
 # cenno
 
-*fare un cenno* — Italian: to beckon.
+*Fare un cenno* — Italian: to make a gesture, to give a sign.
+
+Literally *fare* (to make) + *un cenno* (a sign, gesture, hint, nod). Its meanings are the app's feature list:
+
+1. **To nod, to signal with a small gesture** — *Mi ha fatto un cenno.* "She gave me a nod." A prompt is a small sign, never a shout.
+2. **To mention briefly** — *Ha fatto un cenno al problema.* "He briefly mentioned the problem." One question per panel, a sentence at most.
+3. **To beckon, to indicate silently** — *Mi ha fatto cenno di entrare.* "She signaled me to come in." The panel never steals focus; it waits at the edge of attention.
+
+The gesture is what we make with this app: agents *fanno un cenno*, you answer with one.
 
 cenno is a macOS runtime that lets AI agents ask the user questions through minimal floating surfaces and receive the answers as tool results. A prompt arrives via MCP or CLI; a non-activating NSPanel slides up; the user types or picks; the caller gets `{answer, via, elapsed_s}` as JSON. Design direction: [Reporter-app-style](https://apps.apple.com/de/app/reporter-app/id779697486) minimalism — a lightweight interrupter, not a dense pro tool.
 
