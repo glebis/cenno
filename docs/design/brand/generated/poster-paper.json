@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-06-10T15:15:28.594050",
+  "prompt": "Swiss editorial poster. The exact logo mark from the reference image (thick circular arc over a filled dot), enormous, in deep blue #1E4FD8, slightly off-center on a warm off-white paper background #FAF8F5 with very subtle paper grain texture. In the bottom-left corner, a tiny uppercase letterspaced caption with the exact text 'CENNO' in the same blue. Flat graphic shapes, no gradients, no shadows, lots of empty space.",
+  "preset": null,
+  "platform": null,
+  "thinking": "off",
+  "quality": "high",
+  "provider": "openai",
+  "n": 1,
+  "seed": null,
+  "output": "docs/design/brand/generated/poster-paper.png",
+  "project": null,
+  "estimated_cost": 0.21
+}

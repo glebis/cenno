@@ -46,11 +46,17 @@ use tokio::net::UnixListener;
 use chrono::Utc;
 
 use crate::db::Db;
-use crate::protocol::AskRequest;
+use crate::protocol::{AskRequest, Progress, SeqMeta, SequenceRequest, SequenceResponse};
 use crate::registry::PromptRegistry;
 
 /// Type-erased "a prompt appeared" callback (Task 6 passes a Tauri emitter).
-pub type NotifyFn = Arc<dyn Fn(&str, &AskRequest) + Send + Sync>;
+///
+/// The third arg carries optional sequence metadata: `None` for a plain
+/// `ask_user` prompt, `Some(SeqMeta)` for each step of an `ask_sequence` run
+/// so the UI can swap content instead of hiding between questions. The
+/// single-ask path always passes `None`, keeping its `prompt` event wire shape
+/// byte-identical (PromptEvent drops the field via `skip_serializing_if`).
+pub type NotifyFn = Arc<dyn Fn(&str, &AskRequest, Option<SeqMeta>) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct CennoServer {
@@ -105,7 +111,7 @@ impl CennoServer {
             .registry
             .ask(params.clone(), |id, req| {
                 *captured_id2.lock() = id.to_string();
-                (self.notify)(id, req);
+                (self.notify)(id, req, None);
             })
             .await;
 
@@ -121,6 +127,87 @@ impl CennoServer {
         }
 
         Ok(serde_json::to_string(&resp).expect("AskResponse is always serializable"))
+    }
+
+    #[tool(
+        description = "Ask the human user several questions back-to-back in one panel. \
+                       Each answered question is immediately replaced by the next (no \
+                       hide/reshow gap); the panel hides only after the last. \
+                       Auto-fills progress dots (step/total) and applies the optional \
+                       sequence `flow` to any question lacking one. A per-question \
+                       timeout ends the run early. Returns JSON: \
+                       {answers: [...]} — one entry per question that ran, in order. \
+                       The final entry is {answered: false, prompt_id} if that question \
+                       timed out (and the run then stops)."
+    )]
+    async fn ask_sequence(
+        &self,
+        Parameters(params): Parameters<SequenceRequest>,
+    ) -> Result<String, String> {
+        let total = params.questions.len() as u32;
+
+        // Boundary guard: validate EVERY a2ui payload up front — before any
+        // prompt is registered — so a malformed step doesn't run the earlier
+        // questions and then hand the agent a half-finished sequence. Naming
+        // the offending index makes the error actionable. Mirrors ask_user's
+        // guard, just per-question.
+        for (i, q) in params.questions.iter().enumerate() {
+            if let Some(a2ui) = &q.a2ui {
+                crate::a2ui_guard::validate_a2ui(a2ui)
+                    .map_err(|msg| format!("invalid a2ui payload in question {i}: {msg}"))?;
+            }
+        }
+
+        let mut answers = Vec::with_capacity(params.questions.len());
+        for (i, question) in params.questions.into_iter().enumerate() {
+            let index = i as u32;
+            let last = index + 1 == total;
+
+            // Apply the sequence-level defaults to questions that lack them:
+            // inherit `flow`, and auto-fill progress dots (1-based step).
+            let mut question = question;
+            if question.flow.is_none() {
+                question.flow = params.flow.clone();
+            }
+            if question.progress.is_none() {
+                question.progress = Some(Progress { step: index + 1, total });
+            }
+
+            let created_at = Utc::now();
+            let captured_id: Arc<parking_lot::Mutex<String>> =
+                Arc::new(parking_lot::Mutex::new(String::new()));
+            let captured_id2 = captured_id.clone();
+
+            let seq = SeqMeta { index, total, last };
+            let resp = self
+                .registry
+                .ask(question.clone(), |id, req| {
+                    *captured_id2.lock() = id.to_string();
+                    (self.notify)(id, req, Some(seq.clone()));
+                })
+                .await;
+
+            // One history row per question (mirror ask_user).
+            if let Some(db) = &self.db {
+                let prompt_id = match &resp {
+                    crate::protocol::AskResponse::Answered { .. } => captured_id.lock().clone(),
+                    crate::protocol::AskResponse::TimedOut { prompt_id, .. } => prompt_id.clone(),
+                };
+                if let Err(e) = db.record_prompt(&question, &prompt_id, &resp, created_at) {
+                    eprintln!("cenno db: failed to record prompt {prompt_id}: {e}");
+                }
+            }
+
+            let timed_out = matches!(resp, crate::protocol::AskResponse::TimedOut { .. });
+            answers.push(resp);
+            // Timeout ends the run early: include the TimedOut entry, then stop.
+            if timed_out {
+                break;
+            }
+        }
+
+        Ok(serde_json::to_string(&SequenceResponse { answers })
+            .expect("SequenceResponse is always serializable"))
     }
 }
 
@@ -160,7 +247,7 @@ impl ServerHandler for CennoServer {
 pub async fn start_socket_server(
     sock_path: PathBuf,
     registry: PromptRegistry,
-    notify: impl Fn(&str, &AskRequest) + Send + Sync + 'static,
+    notify: impl Fn(&str, &AskRequest, Option<SeqMeta>) + Send + Sync + 'static,
     db: Option<Db>,
 ) -> anyhow::Result<()> {
     // TODO(plan4): two concurrent launches can unlink each other's live socket —
@@ -252,6 +339,36 @@ pub mod client {
             .find_map(|c| c.as_text())
             .map(|t| t.text.clone())
             .ok_or_else(|| anyhow::anyhow!("ask_user returned no text content: {result:?}"))?;
+
+        let value = serde_json::from_str(&text)?;
+        let _ = client.cancel().await;
+        Ok(value)
+    }
+
+    /// Connect to the cenno MCP socket, call `ask_sequence` with `params`, and
+    /// parse the tool's text content as JSON (`{answers: [...]}`).
+    pub async fn call_ask_sequence(
+        sock_path: &Path,
+        params: serde_json::Value,
+    ) -> anyhow::Result<serde_json::Value> {
+        let args = match params {
+            serde_json::Value::Object(map) => map,
+            other => anyhow::bail!("ask_sequence params must be a JSON object, got: {other}"),
+        };
+
+        let stream = tokio::net::UnixStream::connect(sock_path).await?;
+        let client = ().serve(stream).await?;
+
+        let result = client
+            .call_tool(CallToolRequestParams::new("ask_sequence").with_arguments(args))
+            .await?;
+
+        let text = result
+            .content
+            .iter()
+            .find_map(|c| c.as_text())
+            .map(|t| t.text.clone())
+            .ok_or_else(|| anyhow::anyhow!("ask_sequence returned no text content: {result:?}"))?;
 
         let value = serde_json::from_str(&text)?;
         let _ = client.cancel().await;

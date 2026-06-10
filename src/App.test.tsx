@@ -57,6 +57,24 @@ const secondEvent = (remaining_s: number) => ({
   request: { ...moodEvent(remaining_s).request, title: "Second question?" },
 });
 
+/**
+ * A sequence step event: same shape as a plain prompt plus the top-level
+ * `seq` marker the Rust ask_sequence run attaches (sibling to id/request/
+ * remaining_s, see PromptEvent in src-tauri/src/lib.rs).
+ */
+const seqEvent = (
+  index: number,
+  total: number,
+  last: boolean,
+  title: string,
+  remaining_s = 40,
+) => ({
+  id: `s_${index}`,
+  request: { ...moodEvent(remaining_s).request, title },
+  remaining_s,
+  seq: { index, total, last },
+});
+
 /** Deliver a `prompt` event to the App's captured listener(s). */
 function emitPrompt(event: unknown) {
   act(() => {
@@ -157,6 +175,63 @@ describe("App answered state machine", () => {
     });
     expect(mocks.hide).not.toHaveBeenCalled();
     expect(screen.getByText("Second question?")).toBeTruthy();
+  });
+});
+
+describe("App ask_sequence instant advance", () => {
+  it("a non-last seq step answered does NOT hide or linger; the next step swaps in", async () => {
+    await renderApp();
+    emitPrompt(seqEvent(0, 3, false, "First of three?"));
+    expect(screen.getByText("First of three?")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "good" }));
+    await act(async () => {}); // flush answer_prompt invoke
+
+    // No confirmation card, no linger: the panel stays on the (now-answered)
+    // question until the next step's event lands.
+    expect(confirmationEl()).toBeNull();
+
+    // Even after the linger budget passes, nothing hides — we're mid-sequence.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ANSWERED_LINGER_MS * 2);
+    });
+    expect(mocks.hide).not.toHaveBeenCalled();
+
+    // The next step arrives ~instantly from the Rust loop and replaces content.
+    emitPrompt(seqEvent(1, 3, false, "Second of three?"));
+    expect(screen.getByText("Second of three?")).toBeTruthy();
+    expect(mocks.hide).not.toHaveBeenCalled();
+  });
+
+  it("the last seq step answered hides after the linger", async () => {
+    await renderApp();
+    emitPrompt(seqEvent(2, 3, true, "Last of three?"));
+    expect(screen.getByText("Last of three?")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "good" }));
+    await act(async () => {});
+    expectConfirmationShown();
+    expect(mocks.hide).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ANSWERED_LINGER_MS);
+    });
+    expect(mocks.hide).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Last of three?")).toBeNull();
+  });
+
+  it("a mid-sequence step left unanswered still times out and hides", async () => {
+    await renderApp();
+    emitPrompt(seqEvent(0, 3, false, "First of three?", 2));
+    expect(screen.getByText("First of three?")).toBeTruthy();
+
+    // No answer arrives: the timeout auto-hide must still fire (no next event
+    // comes when ask_sequence times a question out).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(mocks.hide).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("First of three?")).toBeNull();
   });
 });
 

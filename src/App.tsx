@@ -24,9 +24,13 @@ interface PromptEvent {
   // Seconds until the Rust side times this prompt out. Full timeout_s on a
   // live event; partially elapsed on a prompt replayed via pending_prompts.
   remaining_s: number;
+  // Set only for prompts emitted by an `ask_sequence` run (sibling to id/
+  // request/remaining_s on the Rust PromptEvent). Tells the panel to swap
+  // content instead of hiding between steps; absent for plain ask_user.
+  seq?: { index: number; total: number; last: boolean };
 }
 
-function toPrompt({ id, request }: PromptEvent): Prompt {
+function toPrompt({ id, request, seq }: PromptEvent): Prompt {
   return {
     id,
     title: request.title,
@@ -36,6 +40,7 @@ function toPrompt({ id, request }: PromptEvent): Prompt {
     flow: request.flow,
     progress: request.progress,
     a2ui: request.a2ui,
+    seq,
   };
 }
 
@@ -165,6 +170,21 @@ function App() {
       // Prompt already timed out (or unknown id) — the agent never saw this
       // answer. Skeleton behavior: log it, still confirm-and-hide.
       console.warn(`prompt ${id} already expired; answer was not delivered`);
+    }
+    // Mid-sequence step (ask_sequence, not the last): do NOT hide and do NOT
+    // run the "noted." linger. The Rust loop fires the next registry.ask the
+    // instant this answer resolves, so the next `prompt` event is already on
+    // its way and will overwrite `active` (the listener calls setActive) —
+    // keeping the current panel mounted until then avoids a hide/reshow flash.
+    // Bump the hide generation so this step's armed timeout-hide timer bails
+    // instead of taking the panel down before the next step lands.
+    const seq = active?.prompt.seq;
+    if (seq && !seq.last) {
+      hideGenerationRef.current += 1;
+      // Clear any stale answered/confirmation state so the next step renders
+      // clean (defensive — it should already be false at this point).
+      setAnswered(false);
+      return;
     }
     setConfirmation(nextNotedWord());
     setAnswered(true);

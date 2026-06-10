@@ -6,7 +6,7 @@ async fn ask_user_over_socket_resolves() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("mcp.sock");
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req| {}, None)
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, None)
         .await
         .unwrap();
 
@@ -41,7 +41,7 @@ async fn ask_user_with_invalid_a2ui_errors_without_registering_prompt() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("mcp.sock");
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req| {}, None)
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, None)
         .await
         .unwrap();
 
@@ -93,7 +93,7 @@ async fn answered_ask_writes_history_row() {
     let db = Db::open(&db_path).unwrap();
 
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req| {}, Some(db.clone()))
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, Some(db.clone()))
         .await
         .unwrap();
 
@@ -135,6 +135,137 @@ async fn answered_ask_writes_history_row() {
     assert_eq!(via.as_deref(), Some("choice"));
 }
 
+/// `ask_sequence` runs N questions back-to-back in one call: an auto-answerer
+/// resolves each pending prompt in turn, and the tool returns the answers in
+/// order. Every question is also recorded as its own history row.
+#[tokio::test]
+async fn ask_sequence_runs_questions_in_order_and_records_each() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("mcp.sock");
+    let db_path = dir.path().join("cenno.db");
+    let db = Db::open(&db_path).unwrap();
+
+    let reg = PromptRegistry::new();
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, Some(db.clone()))
+        .await
+        .unwrap();
+
+    // Auto-answerer: resolve whatever prompt is currently pending with an
+    // answer derived from its title, so we can assert per-question routing.
+    let reg2 = reg.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            // `pending()` only lists the one still-awaiting prompt (the
+            // sequence fires the next ask only after this resolves).
+            for (id, request, _remaining) in reg2.pending() {
+                let answer = format!("ans-{}", request.title);
+                reg2.resolve(&id, answer, Via::Text);
+            }
+        }
+    });
+
+    let result = cenno_lib::mcp::test_support::call_ask_sequence(
+        &sock,
+        serde_json::json!({
+            "questions": [
+                {"title": "q1", "timeout_s": 5},
+                {"title": "q2", "timeout_s": 5},
+                {"title": "q3", "timeout_s": 5}
+            ]
+        }),
+    )
+    .await
+    .unwrap();
+
+    let answers = result["answers"].as_array().expect("answers is an array");
+    assert_eq!(answers.len(), 3, "all three questions answered: {result}");
+    assert_eq!(answers[0]["answer"], "ans-q1");
+    assert_eq!(answers[1]["answer"], "ans-q2");
+    assert_eq!(answers[2]["answer"], "ans-q3");
+
+    // One history row per question.
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let conn = db.raw_conn();
+    let conn = conn.lock();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM prompts WHERE title IN ('q1','q2','q3') AND status = 'answered'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 3, "one answered row per sequence question");
+}
+
+/// A per-question timeout ends the run early: the timed-out question's
+/// `TimedOut` entry is included, then the sequence STOPS (later questions are
+/// never asked). The history still records both rows that ran.
+#[tokio::test]
+async fn ask_sequence_timeout_ends_run_early() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("mcp.sock");
+    let db_path = dir.path().join("cenno.db");
+    let db = Db::open(&db_path).unwrap();
+
+    let reg = PromptRegistry::new();
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, Some(db.clone()))
+        .await
+        .unwrap();
+
+    // Answer ONLY the first question; the second has a short timeout and is
+    // left to elapse, which must end the run (the third is never reached).
+    let reg2 = reg.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            for (id, request, _remaining) in reg2.pending() {
+                if request.title == "first" {
+                    reg2.resolve(&id, "ok".into(), Via::Text);
+                }
+            }
+        }
+    });
+
+    let result = cenno_lib::mcp::test_support::call_ask_sequence(
+        &sock,
+        serde_json::json!({
+            "questions": [
+                {"title": "first", "timeout_s": 5},
+                {"title": "second", "timeout_s": 1},
+                {"title": "third", "timeout_s": 5}
+            ]
+        }),
+    )
+    .await
+    .unwrap();
+
+    let answers = result["answers"].as_array().expect("answers is an array");
+    assert_eq!(answers.len(), 2, "run stops after the timed-out question: {result}");
+    assert_eq!(answers[0]["answer"], "ok");
+    // Second entry is the TimedOut shape: {answered: false, prompt_id}.
+    assert_eq!(answers[1]["answered"], false, "second question timed out: {result}");
+    assert!(answers[1]["prompt_id"].is_string(), "timeout carries prompt_id: {result}");
+
+    // The third question was never asked.
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let conn = db.raw_conn();
+    let conn = conn.lock();
+    let third: i64 = conn
+        .query_row("SELECT COUNT(*) FROM prompts WHERE title = 'third'", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(third, 0, "the question after the timeout must never run");
+    // Both rows that ran are recorded (one answered, one timed_out).
+    let ran: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM prompts WHERE title IN ('first','second')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(ran, 2, "both run questions recorded a row");
+}
+
 /// Suppression gates the DISPLAY side-effect only: with a paused
 /// SuppressionState wired into the notify closure (mirroring lib.rs's
 /// gating), the display probe never fires, but the prompt still registers
@@ -158,7 +289,7 @@ async fn suppressed_notify_skips_display_but_prompt_still_registers() {
     start_socket_server(
         sock.clone(),
         reg.clone(),
-        move |_id, _req| {
+        move |_id, _req, _seq| {
             // Exact decision lib.rs's notify closure makes before emit+show.
             if cenno_lib::should_display(&gate, None, || false) {
                 displayed_probe.store(true, Ordering::SeqCst);

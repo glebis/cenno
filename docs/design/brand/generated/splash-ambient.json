@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-06-10T15:12:10.184227",
+  "prompt": "Minimal macOS app splash screen. The exact logo mark from the reference image (a thick circular arc beckoning over a filled dot) rendered in pure white, centered, on a near-black background #14171A. A very soft, barely perceptible white glow around the mark. Below it, the lowercase word 'cenno' in a clean neutral sans-serif, semibold, white, small. Nothing else. Extreme minimalism, generous empty space.",
+  "preset": null,
+  "platform": null,
+  "thinking": "off",
+  "quality": "high",
+  "provider": "openai",
+  "n": 1,
+  "seed": null,
+  "output": "docs/design/brand/generated/splash-ambient.png",
+  "project": null,
+  "estimated_cost": 0.21
+}
