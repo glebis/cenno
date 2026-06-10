@@ -38,11 +38,28 @@ const moodEvent = (remaining_s: number) => ({
   remaining_s,
 });
 
+const secondEvent = (remaining_s: number) => ({
+  ...moodEvent(remaining_s),
+  id: "p_1",
+  request: { ...moodEvent(remaining_s).request, title: "Second question?" },
+});
+
 /** Deliver a `prompt` event to the App's captured listener(s). */
 function emitPrompt(event: unknown) {
   act(() => {
     for (const cb of mocks.listeners) cb({ payload: event });
   });
+}
+
+/**
+ * Deliver a `prompt` event WITHOUT act(): the listener runs (and bumps the
+ * hide-generation ref synchronously) but React does not commit, so effect
+ * cleanups don't run — reproducing the live race where a hide timer fires
+ * in the gap between a new prompt's arrival and the commit that would have
+ * cleared the timer.
+ */
+function emitPromptWithoutCommit(event: unknown) {
+  for (const cb of mocks.listeners) cb({ payload: event });
 }
 
 /**
@@ -105,11 +122,7 @@ describe("App answered state machine", () => {
     await act(async () => {});
     expect(screen.getByText("noted.")).toBeTruthy();
 
-    emitPrompt({
-      ...moodEvent(40),
-      id: "p_1",
-      request: { ...moodEvent(40).request, title: "Second question?" },
-    });
+    emitPrompt(secondEvent(40));
     expect(screen.getByText("Second question?")).toBeTruthy();
 
     // The cancelled linger timer must not hide the new prompt.
@@ -118,6 +131,45 @@ describe("App answered state machine", () => {
     });
     expect(mocks.hide).not.toHaveBeenCalled();
     expect(screen.getByText("Second question?")).toBeTruthy();
+  });
+});
+
+describe("App hide-timer generation guard (new-prompt races)", () => {
+  // Rust orders the window front for a new prompt BEFORE the JS event
+  // lands; if an old hide timer fires in between, its hide() would land
+  // after the show and leave live content in an invisible window. The
+  // generation ref must make stale timers no-ops even when they fire
+  // before React commits the new prompt (i.e. before effect cleanup runs).
+
+  it("P1's linger timer firing before P2's commit does not hide", async () => {
+    await renderApp();
+    emitPrompt(moodEvent(40));
+    fireEvent.click(screen.getByRole("button", { name: "good" }));
+    await act(async () => {}); // linger armed for P1
+    expect(screen.getByText("noted.")).toBeTruthy();
+
+    // P2 arrives but React has not committed; P1's linger timer is still
+    // armed and fires first.
+    emitPromptWithoutCommit(secondEvent(40));
+    vi.advanceTimersByTime(ANSWERED_LINGER_MS);
+    expect(mocks.hide).not.toHaveBeenCalled();
+
+    await act(async () => {}); // commit P2
+    expect(screen.getByText("Second question?")).toBeTruthy();
+    expect(mocks.hide).not.toHaveBeenCalled();
+  });
+
+  it("P1's timeout timer firing before P2's commit does not hide", async () => {
+    await renderApp();
+    emitPrompt(moodEvent(2)); // P1's auto-hide armed for 2s
+
+    emitPromptWithoutCommit(secondEvent(40));
+    vi.advanceTimersByTime(2000); // P1's timer fires pre-commit
+    expect(mocks.hide).not.toHaveBeenCalled();
+
+    await act(async () => {});
+    expect(screen.getByText("Second question?")).toBeTruthy();
+    expect(mocks.hide).not.toHaveBeenCalled();
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -64,10 +64,19 @@ function App() {
   const [active, setActive] = useState<ActivePrompt | null>(null);
   // Post-answer linger: true between a delivered answer and the hide.
   const [answered, setAnswered] = useState(false);
+  // Bumped synchronously whenever a prompt is installed (live event or
+  // cold-start pull). Hide timers capture the value at arm time and bail if
+  // it moved: effect cleanup only clears a timer at the next React commit,
+  // so a timer can fire in the gap between a new prompt's arrival (Rust has
+  // already ordered the window front by then) and that commit — and its
+  // hideWindow() would land AFTER the show, leaving live content in an
+  // invisible window.
+  const hideGenerationRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     const unlisten = listen<PromptEvent>("prompt", (event) => {
+      hideGenerationRef.current += 1;
       setActive({ prompt: toPrompt(event.payload), remainingS: event.payload.remaining_s });
       // A new prompt cancels any in-flight answered linger.
       setAnswered(false);
@@ -83,10 +92,17 @@ function App() {
         const pending = await invoke<PromptEvent[]>("pending_prompts");
         if (cancelled || pending.length === 0) return;
         const newest = pending[pending.length - 1];
-        setActive(
-          (current) =>
-            current ?? { prompt: toPrompt(newest), remainingS: newest.remaining_s },
-        );
+        setActive((current) => {
+          if (current) return current;
+          // Bump only when actually installing: a live prompt already on
+          // screen has armed timers holding the current generation — an
+          // unconditional bump would orphan them (they'd bail and the
+          // window would never hide). Impure inside an updater, but
+          // idempotent in effect: with current == null no timer is armed,
+          // so an extra bump under double-invocation changes nothing.
+          hideGenerationRef.current += 1;
+          return { prompt: toPrompt(newest), remainingS: newest.remaining_s };
+        });
       } catch (e) {
         console.error("pending_prompts failed:", e);
       }
@@ -103,7 +119,11 @@ function App() {
   // forever (the old behavior). Suspended while the answered linger runs.
   useEffect(() => {
     if (!active || answered) return;
+    const generation = hideGenerationRef.current;
     const timer = setTimeout(() => {
+      // A newer prompt was installed after this timer was armed (and before
+      // cleanup could clear it) — hiding now would hide THAT prompt.
+      if (hideGenerationRef.current !== generation) return;
       setActive(null);
       void hideWindow();
     }, Math.min(active.remainingS * 1000, MAX_TIMEOUT_MS));
@@ -115,13 +135,16 @@ function App() {
   // white-flash / abrupt-vanish path.
   useEffect(() => {
     if (!answered) return;
+    const generation = hideGenerationRef.current;
     const timer = setTimeout(() => {
+      // Same new-prompt race as the timeout timer above.
+      if (hideGenerationRef.current !== generation) return;
       setActive(null);
       setAnswered(false);
       void hideWindow();
     }, ANSWERED_LINGER_MS);
     return () => clearTimeout(timer);
-  }, [answered, active]);
+  }, [answered]);
 
   async function handleAnswer(id: string, answer: string, via: Via) {
     let resolved: boolean;
