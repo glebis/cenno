@@ -6,6 +6,8 @@ export interface Prompt {
   title: string;
   body_md: string;
   input: { kind: string };
+  flow?: "mood" | "question" | "ema" | "reminder" | "ambient";
+  progress?: { step: number; total: number };
 }
 
 export default function PromptPanel({

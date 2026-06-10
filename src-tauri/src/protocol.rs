@@ -3,6 +3,16 @@ use serde::{Deserialize, Serialize};
 // JsonSchema derives on the request-side types exist for rmcp's `ask_user`
 // tool: rmcp tool parameter structs must implement schemars::JsonSchema.
 // Wire shape (serde attrs) is unchanged.
+
+/// Visual flow theme — selects the surface hue (see docs/design/TOKENS.md).
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Flow { Mood, Question, Ema, Reminder, Ambient }
+
+/// Multi-step progress (drives dot pagination in EMA-style flows).
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Progress { pub step: u32, pub total: u32 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Urgency {
@@ -52,6 +62,10 @@ pub struct AskRequest {
     pub timeout_s: u64,
     #[serde(default)]
     pub a2ui: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow: Option<Flow>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<Progress>,
 }
 fn default_urgency() -> Urgency {
     Urgency::Normal
@@ -109,5 +123,22 @@ mod tests {
     fn timeout_response_serializes() {
         let resp = AskResponse::TimedOut { answered: false, prompt_id: "p_1".into() };
         assert_eq!(serde_json::to_string(&resp).unwrap(), r#"{"answered":false,"prompt_id":"p_1"}"#);
+    }
+
+    #[test]
+    fn flow_and_progress_roundtrip() {
+        let json = r#"{"title":"t","flow":"mood","progress":{"step":2,"total":3}}"#;
+        let req: AskRequest = serde_json::from_str(json).unwrap();
+        assert!(matches!(req.flow, Some(Flow::Mood)));
+        assert_eq!(req.progress.as_ref().unwrap().step, 2);
+        assert_eq!(req.progress.as_ref().unwrap().total, 3);
+    }
+
+    #[test]
+    fn flow_and_progress_absent_from_wire_when_none() {
+        let req: AskRequest = serde_json::from_str(r#"{"title":"t"}"#).unwrap();
+        let back = serde_json::to_string(&req).unwrap();
+        assert!(!back.contains("flow"));
+        assert!(!back.contains("progress"));
     }
 }
