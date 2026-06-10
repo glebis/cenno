@@ -12,4 +12,6 @@ describe("theme.css", () => {
     expect(css).toContain("--cenno-text: var(--cenno-color-text-default)");
     expect(css).toContain("--cenno-text-dim: var(--cenno-color-text-dim)");
   });
+  it("defines the semantic line var", () =>
+    expect(css).toContain("--cenno-line: var(--cenno-color-line)"));
 });

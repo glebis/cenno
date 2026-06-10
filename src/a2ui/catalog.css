@@ -1,0 +1,219 @@
+/**
+ * cenno catalog styles — consume ONLY semantic theme vars and token vars.
+ *
+ * Backgrounds stay transparent: the panel root owns --cenno-surface.
+ * Tap targets are kept >= 44px via padding/min sizes, never font inflation.
+ */
+
+/* ---- containers (Row/Column adapters) ---- */
+
+.cenno-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--cenno-space-2);
+}
+
+.cenno-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cenno-space-2);
+}
+
+/* ---- text ---- */
+
+.cenno-text {
+  color: var(--cenno-text);
+}
+
+.cenno-text p {
+  margin: 0;
+}
+
+.cenno-text--question-l {
+  font-size: var(--cenno-type-question-l);
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.cenno-text--question-m {
+  font-size: var(--cenno-type-question-m);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.cenno-text--body {
+  font-size: var(--cenno-type-body);
+  line-height: 1.4;
+}
+
+.cenno-text--caption {
+  font-size: var(--cenno-type-caption);
+  line-height: 1.3;
+  color: var(--cenno-text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---- chips: outline pills ---- */
+
+.cenno-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cenno-space-2);
+}
+
+.cenno-chip {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--cenno-line);
+  border-radius: var(--cenno-radius-pill);
+  color: var(--cenno-text);
+  font-size: var(--cenno-type-body);
+  line-height: 1;
+  min-height: 44px;
+  padding: var(--cenno-space-1) var(--cenno-space-3);
+  cursor: pointer;
+}
+
+.cenno-chip:hover,
+.cenno-chip[aria-pressed="true"] {
+  border-color: var(--cenno-text);
+}
+
+/* ---- scale: large bare numerals, no boxes ---- */
+
+.cenno-scale {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cenno-space-1);
+}
+
+.cenno-scale__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cenno-space-1);
+}
+
+.cenno-scale__num {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--cenno-text);
+  opacity: 0.7;
+  font-size: var(--cenno-type-question-m);
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--cenno-space-1);
+  cursor: pointer;
+}
+
+.cenno-scale__num:hover {
+  opacity: 1;
+}
+
+.cenno-scale__num.is-selected {
+  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-thickness: 2px;
+}
+
+.cenno-scale__labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--cenno-type-caption);
+  color: var(--cenno-text-dim);
+}
+
+/* ---- text field: bottom-border underline only ---- */
+
+.cenno-field {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--cenno-space-2);
+}
+
+.cenno-field__input {
+  flex: 1;
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--cenno-line);
+  border-radius: 0;
+  color: var(--cenno-text);
+  font-size: var(--cenno-type-body);
+  min-height: 44px;
+  padding: var(--cenno-space-1) 0;
+}
+
+.cenno-field__input::placeholder {
+  color: var(--cenno-text-dim);
+}
+
+.cenno-field__input:focus {
+  outline: none;
+  border-bottom-color: var(--cenno-text);
+}
+
+/* mic stub: simple circle outline, disabled until plan 3 */
+.cenno-field__mic {
+  appearance: none;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--cenno-line);
+  border-radius: 50%;
+  background: transparent;
+}
+
+/* ---- buttons ---- */
+
+.cenno-button {
+  appearance: none;
+  border: none;
+  border-radius: var(--cenno-radius-control);
+  font-size: var(--cenno-type-body);
+  line-height: 1;
+  min-height: 44px;
+  padding: var(--cenno-space-1) var(--cenno-space-3);
+  cursor: pointer;
+}
+
+.cenno-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cenno-button--primary {
+  background: var(--cenno-text);
+  color: var(--cenno-surface);
+}
+
+.cenno-button--secondary {
+  background: transparent;
+  color: var(--cenno-text-dim);
+}
+
+/* ---- dots pagination ---- */
+
+.cenno-dots {
+  display: flex;
+  justify-content: center;
+  gap: var(--cenno-space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cenno-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cenno-text);
+  opacity: 0.4;
+}
+
+.cenno-dot.is-active {
+  opacity: 1;
+}
