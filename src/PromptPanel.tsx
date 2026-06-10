@@ -53,6 +53,13 @@ export interface Prompt {
    * still fails to build/render, the panel falls back to desugar(prompt).
    */
   a2ui?: unknown;
+  /**
+   * Set only for prompts emitted by an `ask_sequence` run. When present with
+   * `last === false`, answering this prompt keeps the panel up (no hide, no
+   * "noted." linger) so the next step's event can swap in without a flash;
+   * `last === true` (or absent) hides as usual. See handleAnswer in App.tsx.
+   */
+  seq?: { index: number; total: number; last: boolean };
 }
 
 export type Via = "text" | "choice";
