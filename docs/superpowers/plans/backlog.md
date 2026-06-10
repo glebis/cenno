@@ -26,3 +26,6 @@ Carried out of the plan-1 final review (2026-06-10). Each item names the plan th
 
 ## Cleanup
 - Drop the `test_support` alias in mcp.rs once live_socket_probe.rs imports `mcp::client`
+
+## Known edge (panel hide/show)
+- Cross-IPC ordering: a hide IPC landing strictly between Rust's order_front_regardless and JS event delivery could still bury a fresh prompt (JS generation guard can't see it). Fix candidate: Rust-side re-show on emit, or a frontend "shown" ack. Rare; revisit in plan 4.
