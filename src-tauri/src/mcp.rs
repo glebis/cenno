@@ -40,6 +40,9 @@ use rmcp::{
 };
 use tokio::net::UnixListener;
 
+use chrono::Utc;
+
+use crate::db::Db;
 use crate::protocol::AskRequest;
 use crate::registry::PromptRegistry;
 
@@ -50,14 +53,16 @@ pub type NotifyFn = Arc<dyn Fn(&str, &AskRequest) + Send + Sync>;
 pub struct CennoServer {
     registry: PromptRegistry,
     notify: NotifyFn,
+    db: Option<Db>,
     tool_router: ToolRouter<Self>,
 }
 
 impl CennoServer {
-    pub fn new(registry: PromptRegistry, notify: NotifyFn) -> Self {
+    pub fn new(registry: PromptRegistry, notify: NotifyFn, db: Option<Db>) -> Self {
         Self {
             registry,
             notify,
+            db,
             tool_router: Self::tool_router(),
         }
     }
@@ -85,10 +90,33 @@ impl CennoServer {
         }
         // TODO(plan4): observe context.ct (client cancellation) so a dead agent
         // unparks the prompt instead of burning the full timeout_s.
+        let created_at = Utc::now();
+
+        // Capture the prompt_id assigned by the registry via the notify callback.
+        // The notify fires synchronously inside registry.ask() before parking.
+        let captured_id: Arc<parking_lot::Mutex<String>> =
+            Arc::new(parking_lot::Mutex::new(String::new()));
+        let captured_id2 = captured_id.clone();
+
         let resp = self
             .registry
-            .ask(params, |id, req| (self.notify)(id, req))
+            .ask(params.clone(), |id, req| {
+                *captured_id2.lock() = id.to_string();
+                (self.notify)(id, req);
+            })
             .await;
+
+        // Record the outcome — failures are non-fatal: log and continue.
+        if let Some(db) = &self.db {
+            let prompt_id = match &resp {
+                crate::protocol::AskResponse::Answered { .. } => captured_id.lock().clone(),
+                crate::protocol::AskResponse::TimedOut { prompt_id, .. } => prompt_id.clone(),
+            };
+            if let Err(e) = db.record_prompt(&params, &prompt_id, &resp, created_at) {
+                eprintln!("cenno db: failed to record prompt {prompt_id}: {e}");
+            }
+        }
+
         Ok(serde_json::to_string(&resp).expect("AskResponse is always serializable"))
     }
 }
@@ -130,6 +158,7 @@ pub async fn start_socket_server(
     sock_path: PathBuf,
     registry: PromptRegistry,
     notify: impl Fn(&str, &AskRequest) + Send + Sync + 'static,
+    db: Option<Db>,
 ) -> anyhow::Result<()> {
     // TODO(plan4): two concurrent launches can unlink each other's live socket —
     // enforce single instance (tauri-plugin-single-instance) instead of smarter
@@ -167,7 +196,7 @@ pub async fn start_socket_server(
                     continue;
                 }
             };
-            let server = CennoServer::new(registry.clone(), notify.clone());
+            let server = CennoServer::new(registry.clone(), notify.clone(), db.clone());
             tokio::spawn(async move {
                 let (read, write) = tokio::io::split(stream);
                 match server.serve((read, write)).await {

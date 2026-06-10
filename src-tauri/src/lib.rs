@@ -1,6 +1,7 @@
 pub mod a2ui_guard;
 pub mod bridge;
 pub mod cli;
+pub mod db;
 pub mod mcp;
 pub mod protocol;
 pub mod registry;
@@ -160,6 +161,19 @@ pub fn run(tray: bool) {
             std::fs::create_dir_all(&data_dir)?;
             let sock_path = data_dir.join("mcp.sock");
 
+            // Open (or create) the history database. Failure is non-fatal:
+            // the app runs without history rather than refusing to launch.
+            let db = match crate::db::Db::open(&data_dir.join("cenno.db")) {
+                Ok(db) => {
+                    eprintln!("cenno: history DB opened at {}/cenno.db", data_dir.display());
+                    Some(db)
+                }
+                Err(e) => {
+                    eprintln!("cenno: failed to open history DB: {e}");
+                    None
+                }
+            };
+
             // Invariant: mcp::socket_path() must agree with what Tauri resolves.
             // Catch any divergence early in debug builds.
             #[cfg(debug_assertions)]
@@ -174,21 +188,26 @@ pub fn run(tray: bool) {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let handle = app_handle.clone();
-                let result = mcp::start_socket_server(sock_path, registry, move |id, req| {
-                    // Called from the socket server's tokio runtime; both
-                    // emit() and window calls are thread-safe in Tauri 2.
-                    let payload = PromptEvent {
-                        id: id.to_string(),
-                        request: req.clone(),
-                        // A notify fires at ask() registration: nothing has
-                        // elapsed yet, so the full budget remains.
-                        remaining_s: req.timeout_s,
-                    };
-                    if let Err(e) = handle.emit("prompt", payload) {
-                        eprintln!("cenno: failed to emit prompt event: {e}");
-                    }
-                    show_prompt_window(&handle);
-                })
+                let result = mcp::start_socket_server(
+                    sock_path,
+                    registry,
+                    move |id, req| {
+                        // Called from the socket server's tokio runtime; both
+                        // emit() and window calls are thread-safe in Tauri 2.
+                        let payload = PromptEvent {
+                            id: id.to_string(),
+                            request: req.clone(),
+                            // A notify fires at ask() registration: nothing has
+                            // elapsed yet, so the full budget remains.
+                            remaining_s: req.timeout_s,
+                        };
+                        if let Err(e) = handle.emit("prompt", payload) {
+                            eprintln!("cenno: failed to emit prompt event: {e}");
+                        }
+                        show_prompt_window(&handle);
+                    },
+                    db,
+                )
                 .await;
                 if let Err(e) = result {
                     // Without the socket server this app is an invisible zombie
