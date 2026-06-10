@@ -86,6 +86,41 @@ describe("PromptPanel", () => {
     expect(container.querySelectorAll(".cenno-dot")).toHaveLength(3);
   });
 
+  describe("dots pinned to the bottom edge", () => {
+    // jsdom can't compute layout, so we assert the structural hooks that pin
+    // the dots: the content wrapper and the A2UI columns are full-height flex
+    // columns, and the dots carry the .cenno-dots class whose CSS sets
+    // margin-top:auto (visual confirmed in Task 5).
+    it("a prompt with progress renders 3 dots in a pinned dots container", () => {
+      const prompt: Prompt = {
+        ...base,
+        id: "p_dots",
+        progress: { step: 2, total: 3 },
+      };
+      const { container } = render(
+        <PromptPanel prompt={prompt} onAnswer={() => {}} />,
+      );
+      const dots = container.querySelector(".cenno-dots");
+      expect(dots).toBeTruthy();
+      expect(dots!.querySelectorAll(".cenno-dot")).toHaveLength(3);
+      // The flex chain that lets margin-top:auto push the dots down: content
+      // wrapper → root Column → col Column are all present as flex columns.
+      expect(container.querySelector(".prompt-panel__content")).toBeTruthy();
+      expect(container.querySelectorAll(".cenno-column").length).toBeGreaterThanOrEqual(2);
+      // Dots are the LAST child of the inner column so margin-top:auto pins
+      // them to the bottom (content sits above).
+      const innerCol = container.querySelectorAll(".cenno-column")[1];
+      expect(innerCol.lastElementChild).toBe(dots);
+    });
+
+    it("a prompt without progress renders no dots container", () => {
+      const { container } = render(
+        <PromptPanel prompt={{ ...base, id: "p_no_dots" }} onAnswer={() => {}} />,
+      );
+      expect(container.querySelector(".cenno-dots")).toBeNull();
+    });
+  });
+
   it("sets data-flow on the panel root from prompt.flow", () => {
     const prompt: Prompt = { ...base, id: "p_6", flow: "mood" };
     const { container } = render(
