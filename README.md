@@ -66,6 +66,8 @@ Note for contributors: a plain `cargo build` binary loads the Vite dev server (p
 
 A panel appears; your answer prints as JSON. cenno auto-launches if it isn't running.
 
+Want your agent to ask *well* — right input kind, sensible flows, graceful timeouts? Drop in the ready-made [agent skills](skills/) (`cenno` for usage, `cenno-setup` for wiring it into a project).
+
 ## Why not just a terminal prompt or a dialog box?
 
 - **Focus-preserving**: the panel is a non-activating macOS panel — it floats above your work but never grabs your keyboard. You answer when you glance at it, not when it interrupts you.
@@ -109,7 +111,7 @@ cenno export --since 2026-06-01
 Every prompt outcome — answered or timed out — is recorded in
 `~/Library/Application Support/app.cenno/cenno.db`: question, input kind, flow, status, answer, how it was answered, response time, timestamps. `cenno export` dumps it; an empty history exports as `[]`.
 
-**Privacy:** all data is local; cenno makes no network connections. Answers are stored in plaintext inside your user-only (`0600`) database — FileVault covers it at rest.
+**Privacy:** all data is local; cenno makes no network connections on its own. The one exception is explicitly user-initiated: **Check for updates…** in the tray menu contacts GitHub releases (and downloads the update if you confirm). Answers are stored in plaintext inside your user-only (`0600`) database — FileVault covers it at rest.
 
 ## Tray menu
 
@@ -120,12 +122,14 @@ Resume now
 Don't show in fullscreen   ✓ (default on)
 Launch at login            ✓ (default on)
 ──────────────
+Check for updates…
 Quit cenno
 ```
 
 - **Until tomorrow** = the next 5:00 AM, so a late-night pause survives the midnight boundary.
 - **Fullscreen quiet mode** only considers the screen the panel lives on; a fullscreen app on another display doesn't silence prompts. Suppressed prompts reappear on resume, toggle, pause expiry, or the next prompt.
 - Pause and quiet mode never break the agent contract — unseen prompts simply time out as usual.
+- **Check for updates…** queries GitHub releases (signature-verified via [the Tauri updater](https://v2.tauri.app/plugin/updater/)), and installs + restarts only after you confirm. A restart drops any on-screen prompt — its agent sees a normal timeout.
 
 ## Roadmap
 
@@ -143,4 +147,45 @@ npm run tokens        # rebuild CSS from tokens/tokens.json (W3C DTCG, validated
 ./scripts/demo.sh all # fire one demo prompt of each kind
 ```
 
+### Releasing an update
+
+In-app updates flow from GitHub releases. To ship one:
+
+1. Bump `version` in `src-tauri/tauri.conf.json` (and `package.json`).
+2. Build with the updater signing key (generated via `tauri signer generate`;
+   the matching pubkey is committed in `tauri.conf.json`):
+
+   ```bash
+   TAURI_SIGNING_PRIVATE_KEY_PATH=~/.tauri/cenno.key \
+   APPLE_SIGNING_IDENTITY="Developer ID Application: …" npx tauri build
+   ```
+
+   `createUpdaterArtifacts` makes this emit `cenno.app.tar.gz` + `cenno.app.tar.gz.sig`
+   next to the DMG.
+3. Create the GitHub release with the DMG, the `.tar.gz`, the `.sig`, and a
+   `latest.json` pointing at the `.tar.gz` ([format](https://v2.tauri.app/plugin/updater/#static-json-file)):
+
+   ```json
+   {
+     "version": "0.2.0",
+     "pub_date": "2026-06-15T12:00:00Z",
+     "platforms": {
+       "darwin-aarch64": {
+         "signature": "<contents of cenno.app.tar.gz.sig>",
+         "url": "https://github.com/glebis/cenno/releases/download/v0.2.0/cenno.app.tar.gz"
+       }
+     }
+   }
+   ```
+
+Installed apps find it at `releases/latest/download/latest.json`. Lose the
+private key and shipped apps can never update again — back it up.
+
 Design system: [docs/design/TOKENS.md](docs/design/TOKENS.md) (palette, type, components) and [docs/design/BRAND.md](docs/design/BRAND.md) (the mark). The complete spec → plan → review trail this app was built from is in [docs/superpowers/](docs/superpowers/) — cenno was built end-to-end by AI agents, reviews included, in two days.
+
+## License
+
+[Apache-2.0](LICENSE) © Gleb Kalinin. See [NOTICE](NOTICE) and
+[AUTHORSHIP.md](AUTHORSHIP.md) for the authorship record, and
+[SECURITY.md](SECURITY.md) for the threat model and how to report
+vulnerabilities.
