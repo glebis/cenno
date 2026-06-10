@@ -8,7 +8,7 @@ cenno is a macOS runtime that lets AI agents ask the user questions through mini
 
 ## Status
 
-**Plan 2 done — one rendering path, token-styled catalog, CSP enabled.**
+**Plan 4 done — SQLite history, tray icon, pause + fullscreen quiet mode.**
 
 What works today:
 - `ask_user` via MCP (Unix socket) or `cenno ask` CLI
@@ -17,10 +17,12 @@ What works today:
 - Single rendering path: the simple `ask_user` form desugars to an A2UI envelope; native `a2ui` arrays bypass desugaring. Both paths run through the cenno catalog.
 - Token-styled component catalog (`cenno:catalog/v1`) — Reporter-style full-bleed color, dot pagination, outlined scale targets, pill chips
 - CSP enforced in built artifacts (see Security notes). Tauri does not inject CSP over `devUrl` — test compliance against `npx tauri build --no-bundle` output, not `tauri dev`.
+- **SQLite history** — every prompt outcome recorded automatically (see History section)
+- **Tray icon** — always-visible menu-bar home; pause, fullscreen-quiet mode, quit (see Tray section)
 
 What's next:
 - **Plan 3:** Voice input via whisper.cpp + BYOK
-- **Plan 4:** Fullscreen/tray surfaces, urgency policy, history
+- **Plan 5:** Tray popover inbox/history UI, single-instance enforcement
 
 ---
 
@@ -58,9 +60,9 @@ Add to your MCP config (Claude Desktop, claude-code, etc.):
 | Tool | Status | Params | Returns |
 |------|--------|--------|---------|
 | `ask_user` | implemented | `title`, `body_md`, `input.kind`, `choices`, `urgency`, `timeout_s`, `a2ui` | `{answer, via, elapsed_s}` or `{answered: false, prompt_id}` |
-| `show_surface` | spec'd (plan 4) | — | — |
-| `dismiss_surface` | spec'd (plan 4) | — | — |
-| `get_response` | spec'd (plan 4) | — | — |
+| `show_surface` | spec'd (plan 5) | — | — |
+| `dismiss_surface` | spec'd (plan 5) | — | — |
+| `get_response` | spec'd (plan 5) | — | — |
 
 **`a2ui` field** is LIVE with boundary validation. Accepted value: an array of v0.9 A2UI messages (`createSurface` + `updateComponents` + optional `updateDataModel`). Guards: array of objects, ≤200 components per `updateComponents`, serialised payload ≤256 KiB, catalog must be `cenno:catalog/v1`. Passing `a2ui` bypasses desugaring entirely — the native payload renders directly. See [catalog docs](docs/design/TOKENS.md).
 
@@ -79,13 +81,116 @@ cenno --tray
 
 # MCP bridge: pipe stdin/stdout to the socket, launching the app if needed
 cenno --mcp-stdio
+
+# Export prompt history to stdout
+cenno export
+cenno export --format csv
+cenno export --since 2025-06-01
+cenno export --since 2025-06-01T09:00:00Z | jq '.[0].answer'
 ```
+
+---
+
+## History
+
+### Where the database lives
+
+```
+~/Library/Application Support/com.glebkalinin.cenno/cenno.db
+```
+
+The file is created on first launch, permissions `0600` (owner read/write only).
+
+### What is recorded
+
+Every prompt outcome is recorded after `registry.ask()` returns — whether the user answered or the agent timed out:
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | integer | auto-increment row id |
+| `prompt_id` | text | internal id (e.g. `p_12`) |
+| `title` | text | prompt title shown to the user |
+| `body_md` | text | markdown body (empty string if none) |
+| `input_kind` | text | `text`, `voice_text`, `choice`, … |
+| `flow` | text | flow tag if set (`mood`, `ema`, …), else NULL |
+| `urgency` | text | `normal`, `high`, `critical` |
+| `status` | text | `answered` or `timed_out` |
+| `answer` | text | user's answer; NULL when `timed_out` |
+| `via` | text | `text`, `voice`, `choice`; NULL when `timed_out` |
+| `elapsed_s` | real | seconds from ask to answer; NULL when `timed_out` |
+| `created_at` | text | ISO 8601 UTC — when the ask arrived |
+| `resolved_at` | text | ISO 8601 UTC — when the outcome was recorded |
+
+### Exporting
+
+```bash
+cenno export                         # JSON array to stdout (default)
+cenno export --format csv            # CSV with header row
+cenno export --since 2025-06-01      # YYYY-MM-DD → inclusive, midnight UTC
+cenno export --since 2025-06-01T09:00:00Z  # RFC3339 inclusive boundary
+```
+
+Empty database → `[]` (JSON) or header-only (CSV), exit 0.
+Missing database (app never launched) → friendly error on stderr, exit 1.
+
+### Privacy
+
+All data is local. Nothing is sent to any server. The DB file sits in your macOS Application Support directory under your user account (`0600` permissions). Answers are stored as plaintext — if your answers contain sensitive text, protect the file accordingly (FileVault encrypts the whole volume; the DB is inside it).
 
 ---
 
 ## Tray
 
-Full tray docs land with the close-out; one behavior worth knowing now: pause ("Pause for …") and "Don't show in fullscreen" suppress the *display* only — prompts still register and agents keep their normal timeout contract. Suppressed prompts reappear when suppression lifts: on "Resume now", on unchecking the fullscreen toggle, when a pause expires, or when the next prompt arrives. Exiting fullscreen has **no event hook in v1** — cenno doesn't notice the instant a fullscreen app goes away, so a queued prompt waits for one of those triggers instead of popping up immediately.
+The tray icon is the app's always-visible home — it appears in the menu bar whether cenno was launched with `--tray` or as a normal app. The icon is a monochrome template image generated via Codex CLI; macOS recolors it automatically for light, dark, and tinted menu-bar appearances.
+
+### Menu map
+
+```
+Pause for ▶
+    15 min
+    30 min
+    1 hour
+    2 hours
+    5 hours
+    8 hours
+    Until tomorrow
+Resume now
+──────────────────
+Don't show in fullscreen  ✓ (default on)
+──────────────────
+Quit cenno
+```
+
+**Until tomorrow** means the next local 05:00. Rationale: a late-night worker pausing cenno at 23:45 means "leave me alone for the rest of this session" — a midnight boundary would un-pause 15 minutes later. 05:00 is past any plausible working night and before any plausible morning start.
+
+**Resume now** is always visible; it is a no-op when nothing is paused. No pause-remaining countdown is shown in the menu.
+
+### Pause semantics
+
+Pause and the fullscreen quiet mode suppress the **display** only — they gate which prompts appear on screen, not which prompts register. Specifically:
+
+- Prompts that arrive while suppressed are registered in the queue with their full timeout budget; agents keep their normal `TimedOut` contract.
+- When suppression lifts (via "Resume now", unchecking the fullscreen toggle, pause expiry, or a new prompt arriving after expiry), the newest still-answerable queued prompt is re-shown. Earlier queued prompts can be answered via the tray history UI (plan 5).
+- Pause expiry is backed by a Tokio timer armed at pause-set time, so prompts replay automatically at the deadline even if no new prompt arrives.
+
+### Fullscreen quiet mode
+
+When "Don't show in fullscreen" is checked (the default), cenno detects whether any app is fullscreen using a CGWindowList bounds heuristic. The check runs once per incoming prompt and once per replay attempt — it is never polled.
+
+**v1 limitation — no fullscreen-exit hook.** cenno does not subscribe to a fullscreen-end event (macOS does not provide one publicly). A suppressed prompt will reappear on the next trigger:
+
+- a new prompt arrives
+- a pause expires
+- "Resume now" is clicked
+- the fullscreen checkbox is toggled off and back on
+
+It does **not** pop up the instant you exit fullscreen.
+
+**Known false positive.** A maximized window with the Dock and menu bar both set to auto-hide has geometry identical to a fullscreen Space. cenno cannot distinguish these by bounds alone and will queue the prompt silently. The error is quiet — prompts queue and replay; they are never lost.
+
+### Ice (menu-bar manager) caveat
+
+If you use Ice or a similar app that collapses menu-bar icons, the cenno icon may start in the hidden section after first launch. Cmd-drag it into the visible section once; your layout is then remembered.
 
 ---
 
@@ -132,6 +237,7 @@ Demo all panel states against the release binary:
 ## Security notes
 
 - The Unix socket is user-only (`0600`) in the app-data directory.
+- The history database (`cenno.db`) is `0600` — owner read/write only.
 - CSP is set: `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'`. Tauri 2 automatically appends its own IPC directives (nonces/hashes for injected scripts) when a CSP string is present. If future features load remote content, extend the policy explicitly rather than relaxing the defaults.
 - **CSP is enforced only in BUILT artifacts on desktop.** Tauri does not inject CSP over `devUrl` — test compliance against `npx tauri build --no-bundle` output, not `npm run tauri dev`.
-- Never expose the HTTP server without authentication tokens (addressed in plan 4).
+- Never expose the HTTP server without authentication tokens (addressed in plan 5).

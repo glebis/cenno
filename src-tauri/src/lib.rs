@@ -206,7 +206,7 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run(tray: bool) {
+pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         // Restore the panel's last position on launch (POSITION only — size
@@ -239,13 +239,11 @@ pub fn run(tray: bool) {
             let registry = PromptRegistry::new();
             app.manage(registry.clone());
 
-            // The --tray flag no longer gates the tray icon — the menu-bar
-            // presence IS the app's home, so setup_tray runs in both modes.
-            // Panel conversion must also always happen: it shows nothing
-            // (hidden startup is already guaranteed by visible:false in
-            // tauri.conf.json), and prompt display depends on the window
-            // being a panel.
-            let _ = tray;
+            // The tray icon always runs — the menu-bar presence IS the app's
+            // home, regardless of how cenno was launched. Panel conversion
+            // must also always happen: it shows nothing (hidden startup is
+            // already guaranteed by visible:false in tauri.conf.json), and
+            // prompt display depends on the window being a panel.
             #[cfg(target_os = "macos")]
             convert_to_panel(app)?;
 
