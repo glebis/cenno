@@ -54,9 +54,13 @@ export function ScaleView({
 }) {
   const steps: number[] = [];
   for (let n = min; n <= max; n++) steps.push(n);
+  const groupLabel =
+    minLabel && maxLabel
+      ? `${min} (${minLabel}) to ${max} (${maxLabel})`
+      : `${min} to ${max}`;
   return (
     <div className="cenno-scale">
-      <div className="cenno-scale__row" role="group">
+      <div className="cenno-scale__row" role="group" aria-label={groupLabel}>
         {steps.map((n) => (
           <button
             key={n}
@@ -79,25 +83,29 @@ export function ScaleView({
   );
 }
 
-/** Choice chips: outline pills, single tap reports the chosen label. */
+/**
+ * Choice chips: outline pills. Identity is the choice VALUE (labels may
+ * collide); a tap reports the value. `selected` carries every selected value
+ * — single-select callers pass a 1-element array.
+ */
 export function ChipsView({
   choices,
-  selected,
+  selected = [],
   onSelect,
 }: {
-  choices: string[];
-  selected?: string;
-  onSelect: (label: string) => void;
+  choices: { label: string; value: string }[];
+  selected?: string[];
+  onSelect: (value: string) => void;
 }) {
   return (
     <div className="cenno-chips">
-      {choices.map((label) => (
+      {choices.map(({ label, value }) => (
         <button
-          key={label}
+          key={value}
           type="button"
           className="cenno-chip"
-          aria-pressed={label === selected}
-          onClick={() => onSelect(label)}
+          aria-pressed={selected.includes(value)}
+          onClick={() => onSelect(value)}
         >
           {label}
         </button>
@@ -113,12 +121,15 @@ export function ChipsView({
  */
 export function TextFieldView({
   value = "",
+  label,
   placeholder,
   voice = false,
   onChange,
   onSubmit,
 }: {
   value?: string;
+  /** Accessible name for the input (placeholder alone is a fragile accname). */
+  label?: string;
   placeholder?: string;
   voice?: boolean;
   onChange?: (text: string) => void;
@@ -134,7 +145,8 @@ export function TextFieldView({
         className="cenno-field__input"
         type="text"
         value={draft}
-        placeholder={placeholder}
+        aria-label={label}
+        placeholder={placeholder ?? label}
         onChange={(e) => {
           setDraft(e.target.value);
           onChange?.(e.target.value);

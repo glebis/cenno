@@ -163,7 +163,7 @@ export const CennoTextField = createComponentImplementation(
   ({ props }) => (
     <TextFieldView
       value={typeof props.value === "string" ? props.value : ""}
-      placeholder={typeof props.label === "string" ? props.label : undefined}
+      label={typeof props.label === "string" ? props.label : undefined}
       voice={props.voice === true}
       onChange={(text) => props.setValue(text)}
       onSubmit={(text) => {
@@ -197,22 +197,19 @@ export const CennoChoicePicker = createComponentImplementation(
       label: typeof o.label === "string" ? o.label : String(o.label ?? ""),
       value: o.value,
     }));
-    const selected = options.find((o) => values.includes(o.value))?.label;
     return (
       <ChipsView
-        choices={options.map((o) => o.label)}
-        selected={selected}
-        onSelect={(label) => {
-          const opt = options.find((o) => o.label === label);
-          if (!opt) return;
+        choices={options}
+        selected={values}
+        onSelect={(value) => {
           if (props.variant === "multipleSelection") {
             props.setValue(
-              values.includes(opt.value)
-                ? values.filter((v) => v !== opt.value)
-                : [...values, opt.value],
+              values.includes(value)
+                ? values.filter((v) => v !== value)
+                : [...values, value],
             );
           } else {
-            props.setValue([opt.value]);
+            props.setValue([value]);
           }
           props.selectAction?.();
         }}

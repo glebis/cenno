@@ -34,31 +34,71 @@ describe("ScaleView", () => {
     fireEvent.click(screen.getByRole("button", { name: "5" }));
     expect(onSelect).toHaveBeenCalledWith(5);
   });
+
+  it("names the group from range and end labels", () => {
+    render(
+      <ScaleView
+        min={1}
+        max={7}
+        minLabel="not at all"
+        maxLabel="completely"
+        onSelect={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("group", { name: "1 (not at all) to 7 (completely)" }),
+    ).toBeTruthy();
+  });
+
+  it("names the group from the range alone without end labels", () => {
+    render(<ScaleView min={1} max={5} onSelect={() => {}} />);
+    expect(screen.getByRole("group", { name: "1 to 5" })).toBeTruthy();
+  });
 });
 
 describe("ChipsView", () => {
-  it("renders choices as buttons and reports the chosen label", () => {
+  const choices = [
+    { label: "Deep work", value: "deep_work" },
+    { label: "Meetings", value: "meetings" },
+    { label: "Email", value: "email" },
+    { label: "Wandering", value: "wandering" },
+  ];
+
+  it("renders choices as buttons and reports the chosen value", () => {
     const onSelect = vi.fn();
-    render(
-      <ChipsView
-        choices={["Deep work", "Meetings", "Email", "Wandering"]}
-        onSelect={onSelect}
-      />,
-    );
+    render(<ChipsView choices={choices} onSelect={onSelect} />);
     expect(screen.getAllByRole("button")).toHaveLength(4);
     fireEvent.click(screen.getByRole("button", { name: "Deep work" }));
-    expect(onSelect).toHaveBeenCalledWith("Deep work");
+    expect(onSelect).toHaveBeenCalledWith("deep_work");
+  });
+
+  it("shows pressed state on every selected chip (multi-select)", () => {
+    render(
+      <ChipsView
+        choices={choices}
+        selected={["deep_work", "email"]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole("button", { pressed: true })).toHaveLength(2);
+    const pressed = (name: string) =>
+      screen.getByRole("button", { name }).getAttribute("aria-pressed");
+    expect(pressed("Deep work")).toBe("true");
+    expect(pressed("Email")).toBe("true");
+    expect(pressed("Meetings")).toBe("false");
+    expect(pressed("Wandering")).toBe("false");
   });
 });
 
 describe("TextFieldView", () => {
   it("submits on Enter, shows mic stub when voice", () => {
     const onSubmit = vi.fn();
-    render(<TextFieldView voice onSubmit={onSubmit} />);
+    render(<TextFieldView voice label="Your reply" onSubmit={onSubmit} />);
     const mic = screen.getByTitle("voice arrives in plan 3");
     expect(mic).toBeTruthy();
     expect((mic as HTMLButtonElement).disabled).toBe(true);
-    const input = screen.getByRole("textbox");
+    // the label is the input's accessible name (placeholder alone is fragile)
+    const input = screen.getByRole("textbox", { name: "Your reply" });
     fireEvent.change(input, { target: { value: "deep work" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSubmit).toHaveBeenCalledWith("deep work");
