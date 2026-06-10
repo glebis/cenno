@@ -16,8 +16,9 @@ fn main() {
             // launch the Tauri GUI (honoring --tray).
             if cli.mcp_stdio {
                 run_mcp_stdio();
+            } else {
+                cenno_lib::run(cli.tray);
             }
-            cenno_lib::run(cli.tray);
         }
     }
 }

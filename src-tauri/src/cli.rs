@@ -10,7 +10,7 @@ pub struct Cli {
     #[arg(long)]
     pub tray: bool,
 
-    /// Bridge stdin/stdout to the MCP socket, launching the app if needed (not yet implemented)
+    /// Bridge stdin/stdout to the MCP socket, launching the app if needed
     #[arg(long)]
     pub mcp_stdio: bool,
 }

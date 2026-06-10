@@ -8,12 +8,14 @@
 //! Invariant: stdout carries ONLY protocol bytes. All diagnostics go to stderr.
 
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use tokio::net::UnixStream;
 
 /// How long to wait for the freshly launched app to bind its socket.
 const LAUNCH_DEADLINE: Duration = Duration::from_secs(15);
+/// How often to retry connecting while waiting for the launched app's socket.
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Connect to the cenno MCP socket (launching the app if it isn't running),
@@ -55,7 +57,18 @@ async fn connect_or_launch(socket_path: &Path) -> anyhow::Result<UnixStream> {
     let exe = std::env::current_exe()?;
     // Plain spawn, never wait(): the app must outlive this bridge process.
     // (The Child handle is dropped; the OS reparents the app when we exit.)
-    std::process::Command::new(exe).arg("--tray").spawn()?;
+    //
+    // stdio: the child must NOT inherit our stdout — that's the MCP protocol
+    // channel, and any Tauri/WRY chatter or panic output from the app would
+    // corrupt the JSON-RPC stream. stdin is nulled too (the app never reads
+    // it, and inheriting would let it race the bridge for client bytes).
+    // stderr stays inherited: diagnostics-only, useful for launch failures.
+    std::process::Command::new(exe)
+        .arg("--tray")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .spawn()?;
 
     let deadline = Instant::now() + LAUNCH_DEADLINE;
     loop {
