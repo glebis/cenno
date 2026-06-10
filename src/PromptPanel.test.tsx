@@ -1,6 +1,14 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi, type MockInstance } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
 import PromptPanel, { Prompt } from "./PromptPanel";
+import { PANEL_MAX_HEIGHT } from "./panelResize";
+
+// PromptPanel's mount effect measures the content and invokes resize_panel
+// (panelResize.ts); outside Tauri the real invoke would throw.
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(() => Promise.resolve()),
+}));
 
 const base: Prompt = {
   id: "p_1",
@@ -10,6 +18,10 @@ const base: Prompt = {
 };
 
 describe("PromptPanel", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockClear();
+  });
+
   it("renders title and markdown body", () => {
     render(<PromptPanel prompt={base} onAnswer={() => {}} />);
     expect(screen.getByText("Check-in")).toBeTruthy();
@@ -166,5 +178,54 @@ describe("PromptPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     expect(onAnswer).toHaveBeenCalledWith("p_9", "ok", "text");
     errorSpy.mockRestore();
+  });
+
+  describe("content-driven panel height", () => {
+    // jsdom has no layout: stub the content wrapper's natural height and
+    // make rAF synchronous so the post-mount measure runs inside render().
+    let scrollHeightSpy: MockInstance<() => number>;
+
+    beforeEach(() => {
+      scrollHeightSpy = vi.spyOn(Element.prototype, "scrollHeight", "get");
+      vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+      vi.stubGlobal("cancelAnimationFrame", () => {});
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      scrollHeightSpy.mockRestore();
+    });
+
+    it("invokes resize_panel with a fitting height for a tall prompt", () => {
+      // A tall EMA-style prompt (long title/body + scale + dots) measures
+      // well past the max — the request must arrive already clamped.
+      scrollHeightSpy.mockReturnValue(700);
+      const prompt: Prompt = {
+        ...base,
+        id: "p_tall",
+        flow: "ema",
+        input: { kind: "scale" },
+        progress: { step: 2, total: 5 },
+      };
+      render(<PromptPanel prompt={prompt} onAnswer={() => {}} />);
+      expect(invoke).toHaveBeenCalledWith("resize_panel", {
+        height: PANEL_MAX_HEIGHT,
+      });
+    });
+
+    it("does not invoke resize_panel when content already fits the window", () => {
+      // Desired (300, already in-band) within 4px of the current window
+      // height (302) — no native resize round-trip.
+      vi.stubGlobal("innerHeight", 302);
+      scrollHeightSpy.mockReturnValue(300);
+      render(<PromptPanel prompt={{ ...base, id: "p_fit" }} onAnswer={() => {}} />);
+      expect(invoke).not.toHaveBeenCalledWith(
+        "resize_panel",
+        expect.anything(),
+      );
+    });
   });
 });

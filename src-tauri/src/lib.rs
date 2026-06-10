@@ -42,6 +42,40 @@ fn pending_prompts(state: tauri::State<PromptRegistry>) -> Vec<PromptEvent> {
         .collect()
 }
 
+/// Panel geometry: width is fixed by design; height adapts to the prompt's
+/// content (the webview measures itself and calls `resize_panel`). The band
+/// keeps a degenerate measurement from collapsing the panel or letting a
+/// runaway payload cover the screen.
+const PANEL_WIDTH: f64 = 420.0;
+const PANEL_MIN_HEIGHT: f64 = 240.0;
+const PANEL_MAX_HEIGHT: f64 = 560.0;
+
+/// Clamp a webview-reported content height to the allowed panel band.
+/// Non-finite input (NaN/∞ — nothing sane measures to that) falls back to
+/// the design minimum instead of poisoning the clamp.
+fn clamp_panel_height(height: f64) -> f64 {
+    if !height.is_finite() {
+        return PANEL_MIN_HEIGHT;
+    }
+    height.clamp(PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT)
+}
+
+/// Content-driven panel height: the webview measures the rendered prompt
+/// (see src/panelResize.ts) and asks for a window that fits it. Width stays
+/// fixed. Works on the swizzled NSPanel too — setClass doesn't change how
+/// tao applies frame sizes, and the nspanel conversion installed autoresizing
+/// masks so the webview follows the new frame.
+///
+/// The window-state plugin persists POSITION only (see the builder below),
+/// so this resize never fights a restored size.
+#[tauri::command]
+fn resize_panel(window: tauri::WebviewWindow, height: f64) {
+    let height = clamp_panel_height(height);
+    if let Err(e) = window.set_size(tauri::LogicalSize::new(PANEL_WIDTH, height)) {
+        eprintln!("cenno: resize_panel({height}) failed: {e}");
+    }
+}
+
 #[tauri::command]
 fn answer_prompt(state: tauri::State<PromptRegistry>, id: String, answer: String, via: String) -> bool {
     let via = match via.as_str() {
@@ -175,6 +209,15 @@ pub(crate) fn arm_pause_expiry_timer(
 /// This is the product's core trick: the panel can be ordered on-screen —
 /// and even take key window status when the user clicks into it — WITHOUT
 /// activating the app, so the user's frontmost app never loses focus.
+///
+/// First-click answers: while the panel is not key, AppKit would normally
+/// swallow the first mouse-down (it only makes the window key); the user's
+/// first click on a chip then does nothing — the answer needed a SECOND
+/// click. `acceptFirstMouse: true` in tauri.conf.json fixes that: wry's
+/// WryWebView subclass overrides `acceptsFirstMouse:` from an ivar captured
+/// at webview creation, so the same click that keys the panel also reaches
+/// the button. The override lives on the webview VIEW, not the window, so
+/// the `object_setClass` panel swap below cannot undo it.
 #[cfg(target_os = "macos")]
 #[allow(deprecated)] // tauri-nspanel v2 re-exports the deprecated `cocoa` crate; its own code does the same.
 fn convert_to_panel(app: &tauri::App) -> tauri::Result<()> {
@@ -183,8 +226,10 @@ fn convert_to_panel(app: &tauri::App) -> tauri::Result<()> {
 
     // NSWindowStyleMask.nonactivatingPanel (1 << 7). Replaces tao's
     // Borderless|Resizable|Miniaturizable mask; we intentionally drop
-    // resize/miniaturize — the panel is fixed-size. Key-window eligibility
-    // comes from RawNSPanel's canBecomeKeyWindow override, not the mask.
+    // resize/miniaturize — the USER can't resize the panel (resize_panel
+    // sets the frame programmatically, which needs no style-mask bit).
+    // Key-window eligibility comes from RawNSPanel's canBecomeKeyWindow
+    // override, not the mask.
     const STYLE_MASK_NONACTIVATING_PANEL: i32 = 1 << 7;
     // NSFloatingWindowLevel — above normal windows, below the menu bar.
     // (Replaces the alwaysOnTop window-level from tauri.conf.json.)
@@ -419,7 +464,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![answer_prompt, pending_prompts])
+        .invoke_handler(tauri::generate_handler![answer_prompt, pending_prompts, resize_panel])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -427,6 +472,24 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clamp_panel_height_clamps_to_band() {
+        assert_eq!(clamp_panel_height(100.0), PANEL_MIN_HEIGHT);
+        assert_eq!(clamp_panel_height(240.0), 240.0);
+        assert_eq!(clamp_panel_height(381.5), 381.5);
+        assert_eq!(clamp_panel_height(560.0), 560.0);
+        assert_eq!(clamp_panel_height(10_000.0), PANEL_MAX_HEIGHT);
+    }
+
+    #[test]
+    fn clamp_panel_height_rejects_non_finite() {
+        // NaN/∞ can only come from a buggy or hostile webview — fall back to
+        // the design minimum rather than letting NaN through f64::clamp.
+        assert_eq!(clamp_panel_height(f64::NAN), PANEL_MIN_HEIGHT);
+        assert_eq!(clamp_panel_height(f64::INFINITY), PANEL_MIN_HEIGHT);
+        assert_eq!(clamp_panel_height(f64::NEG_INFINITY), PANEL_MIN_HEIGHT);
+    }
 
     #[test]
     fn pick_replay_picks_newest_by_numeric_id() {
