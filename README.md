@@ -8,15 +8,17 @@ cenno is a macOS runtime that lets AI agents ask the user questions through mini
 
 ## Status
 
-**Walking skeleton — plan 1 of 4 done.**
+**Plan 2 done — one rendering path, token-styled catalog, CSP enabled.**
 
 What works today:
 - `ask_user` via MCP (Unix socket) or `cenno ask` CLI
 - Non-activating NSPanel prompt display (never steals focus)
 - `--mcp-stdio` bridge with tray autolaunch
+- Single rendering path: the simple `ask_user` form desugars to an A2UI envelope; native `a2ui` arrays bypass desugaring. Both paths run through the cenno catalog.
+- Token-styled component catalog (`cenno:catalog/v1`) — Reporter-style full-bleed color, dot pagination, outlined scale targets, pill chips
+- CSP enforced in built artifacts (see Security notes). Tauri does not inject CSP over `devUrl` — test compliance against `npx tauri build --no-bundle` output, not `tauri dev`.
 
 What's next:
-- **Plan 2:** A2UI rendering + design tokens
 - **Plan 3:** Voice input via whisper.cpp + BYOK
 - **Plan 4:** Fullscreen/tray surfaces, urgency policy, history
 
@@ -60,6 +62,8 @@ Add to your MCP config (Claude Desktop, claude-code, etc.):
 | `dismiss_surface` | spec'd (plan 4) | — | — |
 | `get_response` | spec'd (plan 4) | — | — |
 
+**`a2ui` field** is LIVE with boundary validation. Accepted value: an array of v0.9 A2UI messages (`createSurface` + `updateComponents` + optional `updateDataModel`). Guards: array of objects, ≤200 components per `updateComponents`, serialised payload ≤256 KiB, catalog must be `cenno:catalog/v1`. Passing `a2ui` bypasses desugaring entirely — the native payload renders directly. See [catalog docs](docs/design/TOKENS.md).
+
 ---
 
 ## CLI
@@ -101,8 +105,27 @@ Spike and research docs: `docs/superpowers/research/`
 
 ---
 
+## Design system
+
+[TOKENS.md](docs/design/TOKENS.md) is the source of truth for the token set (palette, type scale, spacing, radius). CSS custom properties are generated from `tokens/tokens.json` (DTCG format) via Style Dictionary:
+
+```bash
+npm run tokens     # regenerate src/styles/tokens.css from tokens/tokens.json
+```
+
+Flow theming uses the `data-flow` attribute on the panel root. The catalog (`cenno:catalog/v1`) maps component names to React implementations styled from the token layer.
+
+Demo all panel states against the release binary:
+
+```bash
+./scripts/demo.sh [mood|text|choice|scale|confirm|all]
+```
+
+---
+
 ## Security notes
 
 - The Unix socket is user-only (`0600`) in the app-data directory.
-- `src-tauri/tauri.conf.json` ships with `"csp": null` (scaffold default; JSON has no comments, hence this note). Tighten the Content-Security-Policy before any release build that exposes remote HTTP content.
+- CSP is set: `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'`. Tauri 2 automatically appends its own IPC directives (nonces/hashes for injected scripts) when a CSP string is present. If future features load remote content, extend the policy explicitly rather than relaxing the defaults.
+- **CSP is enforced only in BUILT artifacts on desktop.** Tauri does not inject CSP over `devUrl` — test compliance against `npx tauri build --no-bundle` output, not `npm run tauri dev`.
 - Never expose the HTTP server without authentication tokens (addressed in plan 4).

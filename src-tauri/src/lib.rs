@@ -1,3 +1,4 @@
+pub mod a2ui_guard;
 pub mod bridge;
 pub mod cli;
 pub mod mcp;

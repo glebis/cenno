@@ -1,73 +1,29 @@
+/**
+ * App chrome only. Content styling (text, chips, scale, field, buttons,
+ * dots) lives in src/a2ui/catalog.css; flow colors in src/styles/theme.css.
+ */
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: #1c1c1e;
-  color: #f2f2f4;
+  color: var(--cenno-text);
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 15px;
+  font-size: var(--cenno-type-body);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Panel root owns the surface color (catalog components are transparent);
+   data-flow on this element switches --cenno-surface via theme.css. */
 .prompt-panel {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 16px 20px;
-  overflow-wrap: anywhere;
-}
-
-.prompt-panel h1 {
-  margin: 0 0 6px;
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.prompt-body {
-  flex: 1;
+  padding: var(--cenno-space-2) var(--cenno-space-3);
   overflow-y: auto;
-  margin-bottom: 12px;
-}
-
-.prompt-body p {
-  margin: 0 0 8px;
-  color: #c8c8cc;
-}
-
-.prompt-row {
-  display: flex;
-  gap: 8px;
-}
-
-.prompt-row input {
-  flex: 1;
-  padding: 7px 10px;
-  border: 1px solid #3a3a3e;
-  border-radius: 7px;
-  background: #2a2a2d;
-  color: inherit;
-  font: inherit;
-  outline: none;
-}
-
-.prompt-row input:focus {
-  border-color: #5a8de8;
-}
-
-.prompt-row button {
-  padding: 7px 16px;
-  border: none;
-  border-radius: 7px;
-  background: #3473dd;
-  color: #fff;
-  font: inherit;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.prompt-row button:hover {
-  background: #4181ec;
+  overflow-wrap: anywhere;
+  background: var(--cenno-surface);
 }

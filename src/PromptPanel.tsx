@@ -1,11 +1,89 @@
-import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+/**
+ * PromptPanel — single rendering engine: every prompt flows through the A2UI
+ * renderer with the cenno catalog. Simple prompts are desugared to the v0.9
+ * envelope; prompts carrying a native `a2ui` payload (vetted by the Rust
+ * boundary guard) feed it to the processor as-is, skipping desugar.
+ * External contract unchanged: {prompt, onAnswer}.
+ *
+ * Rich-path safety net: the Rust guard validates envelope SHAPE only, so a
+ * guard-passing payload can still fail to build (unknown component type,
+ * no surface, no "root" component — the React renderer mounts component id
+ * "root") or throw mid-render. Either way the panel falls back to rendering
+ * desugar(prompt) — title/body always exist, the user can still answer, and
+ * the agent gets a real answer instead of a parked prompt burning timeout_s.
+ * Build failures are caught in the memo; render failures by an error
+ * boundary around <A2uiSurface>.
+ *
+ * Surface lifecycle: the processor (and its surface) is built per prompt.id
+ * and the renderer subtree is keyed on it, so a second prompt fully rebuilds
+ * the surface instead of patching stale components/data.
+ *
+ * Action contract (see src/a2ui/desugar.ts header): action names starting
+ * with "submit" complete the prompt; context carries {value, via}. The
+ * /choice binding resolves to a 1-element array (unwrapped here), /scale to a
+ * number (stringified here). Empty answers stay allowed (ack/skip).
+ */
+import { Component, useMemo, useRef, type ReactNode } from "react";
+import { MessageProcessor } from "@a2ui/web_core/v0_9";
+import { injectBasicCatalogStyles } from "@a2ui/web_core/v0_9/basic_catalog";
+import { A2uiSurface } from "@a2ui/react/v0_9";
+import { cennoCatalog } from "./a2ui/catalog";
+import { desugar, SURFACE_ID } from "./a2ui/desugar";
+
+// Once at module level. Guarded: jsdom (vitest) has no adoptedStyleSheets,
+// and the helper assumes it exists.
+if (typeof document !== "undefined" && document.adoptedStyleSheets) {
+  injectBasicCatalogStyles();
+}
 
 export interface Prompt {
   id: string;
   title: string;
   body_md: string;
   input: { kind: string };
+  choices?: string[];
+  flow?: "mood" | "question" | "ema" | "reminder" | "ambient";
+  progress?: { step: number; total: number };
+  /**
+   * Native A2UI v0.9 message array (the desugar envelope shape). When
+   * present it REPLACES desugaring: the payload is fed to the processor
+   * as-is. Shape is vetted by the Rust boundary guard
+   * (src-tauri/src/a2ui_guard.rs) before it ever reaches the webview; if it
+   * still fails to build/render, the panel falls back to desugar(prompt).
+   */
+  a2ui?: unknown;
+}
+
+export type Via = "text" | "choice";
+
+/** The component id the React renderer mounts (@a2ui/react A2uiSurface). */
+const ROOT_COMPONENT_ID = "root";
+
+/**
+ * Catches render-time throws from a native a2ui surface and renders the
+ * desugared fallback instead of a blank panel. Keyed on prompt.id by the
+ * caller so the error state resets for each new prompt.
+ */
+class SurfaceErrorBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error(
+      "cenno: a2ui surface threw while rendering; falling back to the desugared prompt:",
+      error,
+    );
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
 }
 
 export default function PromptPanel({
@@ -13,29 +91,86 @@ export default function PromptPanel({
   onAnswer,
 }: {
   prompt: Prompt;
-  onAnswer: (id: string, answer: string, via: "text") => void;
+  onAnswer: (id: string, answer: string, via: Via) => void;
 }) {
-  const [text, setText] = useState("");
+  // Refs keep the action handler (created once per prompt.id) pointed at the
+  // latest props without rebuilding the processor on every render.
+  const onAnswerRef = useRef(onAnswer);
+  onAnswerRef.current = onAnswer;
+  const promptIdRef = useRef(prompt.id);
+  promptIdRef.current = prompt.id;
+
+  const { surface, fallback } = useMemo(
+    () => {
+      const build = (messages: unknown) => {
+        const processor = new MessageProcessor([cennoCatalog], (action) => {
+          // Only "submit*" actions complete the prompt (desugar contract; rich
+          // a2ui payloads use the same action contract).
+          if (!action.name.startsWith("submit")) return;
+          // Harden against payload-authored contexts: via defaults to "text"
+          // unless it is literally "choice"; value is coerced via String()
+          // with null/undefined → "" (ack).
+          const ctx = action.context as
+            | { value?: unknown; via?: unknown }
+            | null
+            | undefined;
+          const via: Via = ctx?.via === "choice" ? "choice" : "text";
+          // /choice binding arrives as a 1-element array; unwrap it.
+          const raw = Array.isArray(ctx?.value) ? ctx.value[0] : ctx?.value;
+          // /scale arrives as a number; stringify. null/undefined → "" (ack).
+          const answer = raw == null ? "" : String(raw);
+          onAnswerRef.current(promptIdRef.current, answer, via);
+        });
+        processor.processMessages(
+          messages as Parameters<typeof processor.processMessages>[0],
+        );
+        // Desugar always targets SURFACE_ID; native payloads may pick their
+        // own surfaceId, so fall back to the first created surface.
+        const created =
+          processor.model.surfacesMap.get(SURFACE_ID) ??
+          processor.model.surfacesMap.values().next().value;
+        if (!created) throw new Error("payload created no surface");
+        // The renderer mounts component id "root"; without it the surface
+        // renders blank — treat that as a build failure so we fall back.
+        if (!created.componentsModel.get(ROOT_COMPONENT_ID)) {
+          throw new Error(
+            `payload has no "${ROOT_COMPONENT_ID}" component to mount`,
+          );
+        }
+        return created;
+      };
+
+      const desugared = () => build(desugar(prompt));
+      if (prompt.a2ui == null) {
+        return { surface: desugared(), fallback: null };
+      }
+      try {
+        // Eagerly build the desugared fallback too: the error boundary needs
+        // it ready if the rich surface throws mid-render.
+        return { surface: build(prompt.a2ui), fallback: desugared() };
+      } catch (e) {
+        console.error(
+          "cenno: a2ui payload failed to build; falling back to the desugared prompt:",
+          e,
+        );
+        return { surface: desugared(), fallback: null };
+      }
+    },
+    // Keyed by prompt.id: a replacing prompt rebuilds processor + surface.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [prompt.id],
+  );
+
+  // The panel root owns the surface color (catalog components stay
+  // transparent); data-flow switches the semantic theme.
   return (
-    <div className="prompt-panel">
-      <h1>{prompt.title}</h1>
-      <div className="prompt-body">
-        <ReactMarkdown>{prompt.body_md}</ReactMarkdown>
-      </div>
-      {/* Empty submit is allowed on purpose: an empty answer is a deliberate ack/skip. */}
-      <div className="prompt-row">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) =>
-            e.key === "Enter" &&
-            !e.nativeEvent.isComposing && // IME: Enter confirms composition, not the answer
-            onAnswer(prompt.id, text, "text")
-          }
-          autoFocus
-        />
-        <button onClick={() => onAnswer(prompt.id, text, "text")}>Send</button>
-      </div>
+    <div className="prompt-panel" data-flow={prompt.flow ?? "question"}>
+      <SurfaceErrorBoundary
+        key={prompt.id}
+        fallback={fallback ? <A2uiSurface surface={fallback} /> : null}
+      >
+        <A2uiSurface surface={surface} />
+      </SurfaceErrorBoundary>
     </div>
   );
 }
