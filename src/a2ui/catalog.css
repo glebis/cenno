@@ -140,6 +140,55 @@
   color: var(--cenno-text-dim);
 }
 
+/* ---- slider: continuous range, hairline track ---- */
+
+.cenno-slider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cenno-space-1);
+}
+
+.cenno-slider__input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 44px; /* tap target; the visible track is the 1px line below */
+  background: transparent;
+  margin: 0;
+  cursor: pointer;
+}
+
+.cenno-slider__input::-webkit-slider-runnable-track {
+  height: 1px;
+  background: var(--cenno-line);
+}
+
+.cenno-slider__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -10px; /* center on the 1px track */
+  border-radius: 50%;
+  background: var(--cenno-text);
+  border: none;
+}
+
+.cenno-slider__input:focus {
+  outline: none;
+}
+
+.cenno-slider__input:focus-visible::-webkit-slider-thumb {
+  outline: 1px solid var(--cenno-text);
+  outline-offset: 3px;
+}
+
+.cenno-slider__labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--cenno-type-caption);
+  color: var(--cenno-text-dim);
+}
+
 /* ---- text field: bottom-border underline only ---- */
 
 .cenno-field {
@@ -179,6 +228,48 @@
   border: 1px solid var(--cenno-line);
   border-radius: 50%;
   background: transparent;
+}
+
+/* ---- datetime: native picker, text-field underline ---- */
+
+.cenno-datetime__input {
+  /* dark scheme: WebKit draws the calendar/clock glyphs and segment text
+     light, readable on the saturated flow colors */
+  color-scheme: dark;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- image: display-only, never overflow the panel ---- */
+
+.cenno-image {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--cenno-radius-control);
+}
+
+.cenno-image--icon {
+  width: 24px;
+  height: 24px;
+}
+
+.cenno-image--avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.cenno-image--smallFeature {
+  max-height: 80px;
+}
+
+.cenno-image--mediumFeature {
+  max-height: 120px;
+}
+
+.cenno-image--largeFeature,
+.cenno-image--header {
+  max-height: 160px;
+  width: 100%;
 }
 
 /* ---- buttons ---- */

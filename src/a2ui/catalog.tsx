@@ -3,10 +3,12 @@
  * plain React views in views.tsx. Catalog id: `cenno:catalog/v1`.
  *
  * Standard @a2ui/web_core APIs are reused (with cenno rendering) wherever one
- * fits: Text, Row, Column, Button, TextField, ChoicePicker. TextField and
- * ChoicePicker carry small schema extensions (submitAction / selectAction /
- * voice) so the desugar layer can wire "answer on Enter / on tap" without a
- * separate submit button. Custom types exist only where no standard API fits:
+ * fits: Text, Row, Column, Button, TextField, ChoicePicker, Slider,
+ * DateTimeInput, Image. TextField, ChoicePicker, Slider, and DateTimeInput
+ * carry small schema extensions (submitAction / selectAction / voice /
+ * minLabel / maxLabel) so the desugar layer can wire "answer on Enter / on
+ * tap / on release" without a separate submit button.
+ * Custom types exist only where no standard API fits:
  *
  * - `Scale`  — EMA 1..N numeral row with end labels (SliderApi has no
  *   minLabel/maxLabel and renders a continuous range, not discrete targets)
@@ -32,6 +34,9 @@ import {
   ButtonApi,
   TextFieldApi,
   ChoicePickerApi,
+  SliderApi,
+  DateTimeInputApi,
+  ImageApi,
 } from "@a2ui/web_core/v0_9/basic_catalog";
 import { createComponentImplementation } from "@a2ui/react/v0_9";
 import {
@@ -41,6 +46,9 @@ import {
   TextFieldView,
   ButtonView,
   DotsView,
+  SliderView,
+  DateTimeView,
+  ImageView,
   type TextRole,
 } from "./views";
 
@@ -219,6 +227,106 @@ export const CennoChoicePicker = createComponentImplementation(
 );
 
 /* ------------------------------------------------------------------ */
+/* Slider — standard SliderApi + {minLabel, maxLabel, selectAction};   */
+/* continuous range, answer-on-release when selectAction is present    */
+/* ------------------------------------------------------------------ */
+
+export const CennoSliderApi = {
+  name: "Slider",
+  schema: SliderApi.schema.extend({
+    minLabel: DynamicStringSchema.optional().describe(
+      "Caption under the low end (e.g. 'not at all').",
+    ),
+    maxLabel: DynamicStringSchema.optional().describe(
+      "Caption under the high end (e.g. 'completely').",
+    ),
+    selectAction: ActionSchema.optional().describe(
+      "Action fired when the user commits a value: releasing the thumb " +
+        "(pointer) or pressing Enter (keyboard). Include it for " +
+        "answer-on-commit flows; omit it and pair the slider with a " +
+        "Button to require an explicit confirm.",
+    ),
+  }),
+};
+
+export const CennoSlider = createComponentImplementation(
+  CennoSliderApi,
+  ({ props }) => (
+    <SliderView
+      min={typeof props.min === "number" ? props.min : 0}
+      max={typeof props.max === "number" ? props.max : 10}
+      step={typeof props.step === "number" ? props.step : undefined}
+      value={typeof props.value === "number" ? props.value : undefined}
+      label={typeof props.label === "string" ? props.label : undefined}
+      minLabel={typeof props.minLabel === "string" ? props.minLabel : undefined}
+      maxLabel={typeof props.maxLabel === "string" ? props.maxLabel : undefined}
+      onChange={(n) => props.setValue(n)}
+      onCommit={(n) => {
+        // keep the bound value current, then notify the host
+        props.setValue(n);
+        props.selectAction?.();
+      }}
+    />
+  ),
+);
+
+/* ------------------------------------------------------------------ */
+/* DateTimeInput — standard API + {submitAction}; native system picker */
+/* ------------------------------------------------------------------ */
+
+export const CennoDateTimeInputApi = {
+  name: "DateTimeInput",
+  schema: DateTimeInputApi.schema.extend({
+    submitAction: ActionSchema.optional().describe(
+      "Action fired when the user submits the field with Enter. Include " +
+        "it for answer-on-Enter flows; omit it and pair with a Button to " +
+        "require an explicit confirm.",
+    ),
+  }),
+};
+
+export const CennoDateTimeInput = createComponentImplementation(
+  CennoDateTimeInputApi,
+  ({ props }) => {
+    const date = props.enableDate === true;
+    const time = props.enableTime === true;
+    return (
+      <DateTimeView
+        kind={date && time ? "datetime" : time ? "time" : "date"}
+        value={typeof props.value === "string" ? props.value : ""}
+        label={typeof props.label === "string" ? props.label : undefined}
+        min={typeof props.min === "string" ? props.min : undefined}
+        max={typeof props.max === "string" ? props.max : undefined}
+        onChange={(v) => props.setValue(v)}
+        onSubmit={(v) => {
+          // keep the bound value current, then notify the host
+          props.setValue(v);
+          props.submitAction?.();
+        }}
+      />
+    );
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* Image — standard ImageApi, display-only                             */
+/* ------------------------------------------------------------------ */
+
+export const CennoImage = createComponentImplementation(
+  ImageApi,
+  ({ props }) => (
+    <ImageView
+      url={typeof props.url === "string" ? props.url : ""}
+      description={
+        typeof props.description === "string" ? props.description : undefined
+      }
+      fit={props.fit}
+      variant={props.variant}
+    />
+  ),
+);
+
+/* ------------------------------------------------------------------ */
 /* Scale — custom: discrete numeral row with end labels                */
 /* ------------------------------------------------------------------ */
 
@@ -299,6 +407,9 @@ export const cennoCatalog = new Catalog(
     CennoButton,
     CennoTextField,
     CennoChoicePicker,
+    CennoSlider,
+    CennoDateTimeInput,
+    CennoImage,
     CennoScale,
     CennoDots,
   ],

@@ -8,6 +8,9 @@ import {
   TextFieldView,
   ButtonView,
   DotsView,
+  SliderView,
+  DateTimeView,
+  ImageView,
 } from "./views";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -165,12 +168,200 @@ describe("cennoCatalog", () => {
       "Button",
       "ChoicePicker",
       "Column",
+      "DateTimeInput",
       "Dots",
+      "Image",
       "Row",
       "Scale",
+      "Slider",
       "Text",
       "TextField",
     ]);
+  });
+});
+
+describe("SliderView", () => {
+  it("renders a range input with bounds, step, and end labels", () => {
+    render(
+      <SliderView
+        min={0}
+        max={10}
+        step={1}
+        value={5}
+        minLabel="little"
+        maxLabel="a lot"
+        onChange={() => {}}
+        onCommit={() => {}}
+      />,
+    );
+    const slider = screen.getByRole("slider");
+    expect(slider.getAttribute("min")).toBe("0");
+    expect(slider.getAttribute("max")).toBe("10");
+    expect(slider.getAttribute("step")).toBe("1");
+    expect((slider as HTMLInputElement).value).toBe("5");
+    expect(screen.getByText("little")).toBeTruthy();
+    expect(screen.getByText("a lot")).toBeTruthy();
+  });
+
+  it("names the slider from range and end labels when no label is given", () => {
+    render(
+      <SliderView
+        min={0}
+        max={10}
+        minLabel="little"
+        maxLabel="a lot"
+        onChange={() => {}}
+        onCommit={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("slider", { name: "0 (little) to 10 (a lot)" }),
+    ).toBeTruthy();
+  });
+
+  it("reports value changes while dragging without committing", () => {
+    const onChange = vi.fn();
+    const onCommit = vi.fn();
+    render(
+      <SliderView
+        min={0}
+        max={10}
+        value={5}
+        onChange={onChange}
+        onCommit={onCommit}
+      />,
+    );
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "7" } });
+    expect(onChange).toHaveBeenCalledWith(7);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("commits the current value on Enter (keyboard path)", () => {
+    const onCommit = vi.fn();
+    render(
+      <SliderView
+        min={0}
+        max={10}
+        value={5}
+        onChange={() => {}}
+        onCommit={onCommit}
+      />,
+    );
+    const slider = screen.getByRole("slider");
+    fireEvent.change(slider, { target: { value: "7" } });
+    fireEvent.keyDown(slider, { key: "Enter" });
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith(7);
+  });
+
+  it("does not commit on arrow keys (value still being chosen)", () => {
+    const onCommit = vi.fn();
+    render(
+      <SliderView
+        min={0}
+        max={10}
+        value={5}
+        onChange={() => {}}
+        onCommit={onCommit}
+      />,
+    );
+    const slider = screen.getByRole("slider");
+    // jsdom doesn't implement native range keyboard stepping; simulate the
+    // value change the arrow press would cause, then the key events.
+    fireEvent.change(slider, { target: { value: "6" } });
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    fireEvent.keyUp(slider, { key: "ArrowRight" });
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("commits the settled value on pointer release", () => {
+    const onCommit = vi.fn();
+    render(
+      <SliderView
+        min={0}
+        max={10}
+        value={5}
+        onChange={() => {}}
+        onCommit={onCommit}
+      />,
+    );
+    const slider = screen.getByRole("slider");
+    fireEvent.change(slider, { target: { value: "7" } });
+    fireEvent.pointerUp(slider);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).toHaveBeenCalledWith(7);
+  });
+});
+
+describe("DateTimeView", () => {
+  it("renders a date input with bounds and reports changes", () => {
+    const onChange = vi.fn();
+    render(
+      <DateTimeView
+        kind="date"
+        label="Remind me on"
+        min="2026-06-10"
+        max="2026-12-31"
+        onChange={onChange}
+        onSubmit={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText("Remind me on") as HTMLInputElement;
+    expect(input.type).toBe("date");
+    expect(input.getAttribute("min")).toBe("2026-06-10");
+    expect(input.getAttribute("max")).toBe("2026-12-31");
+    fireEvent.change(input, { target: { value: "2026-06-15" } });
+    expect(onChange).toHaveBeenCalledWith("2026-06-15");
+  });
+
+  it("renders time and datetime-local kinds", () => {
+    const { rerender } = render(
+      <DateTimeView kind="time" label="t" onChange={() => {}} />,
+    );
+    expect((screen.getByLabelText("t") as HTMLInputElement).type).toBe("time");
+    rerender(<DateTimeView kind="datetime" label="t" onChange={() => {}} />);
+    expect((screen.getByLabelText("t") as HTMLInputElement).type).toBe(
+      "datetime-local",
+    );
+  });
+
+  it("submits the current value on Enter", () => {
+    const onSubmit = vi.fn();
+    render(
+      <DateTimeView
+        kind="date"
+        label="Remind me on"
+        value="2026-06-15"
+        onChange={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+    fireEvent.keyDown(screen.getByLabelText("Remind me on"), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith("2026-06-15");
+  });
+});
+
+describe("ImageView", () => {
+  it("renders the image with src, alt, fit, and variant", () => {
+    render(
+      <ImageView
+        url="https://example.com/pic.png"
+        description="two design options"
+        fit="contain"
+        variant="largeFeature"
+      />,
+    );
+    const img = screen.getByRole("img", {
+      name: "two design options",
+    }) as HTMLImageElement;
+    expect(img.src).toBe("https://example.com/pic.png");
+    expect(img.className).toContain("cenno-image--largeFeature");
+    expect(img.style.objectFit).toBe("contain");
+  });
+
+  it("is hidden from assistive tech without a description", () => {
+    render(<ImageView url="https://example.com/pic.png" />);
+    expect(screen.queryByRole("img")).toBeNull(); // alt="" → presentation
   });
 });
 
