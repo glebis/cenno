@@ -31,7 +31,7 @@
       "endpoints": [
         "https://github.com/glebis/cenno/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZGM0Q5REI1QThFM0Q2ClJXVFc0NmkxblQxdkFKK3ZwSWFRNEdxa2xyQXBFbkhCNGZxVURudmdGTWljQlhyQWJ2Q24yeGNhCg=="
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZCQzAzRDFDMTY1ODUzRjIKUldUeVUxZ1dIRDNBKzZhWmxEWWo4ZUJ3RWVUSnVxNFNDNTMvc2drRGFBcTVKRlNqZ1JWQWwvcVoK"
     }
   },
   "bundle": {
