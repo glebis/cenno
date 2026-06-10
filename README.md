@@ -42,8 +42,10 @@ What's next:
 
 ```bash
 npm install
-npx tauri build --no-bundle
-# binary → src-tauri/target/release/cenno
+npx tauri build --no-bundle          # dev binary → src-tauri/target/release/cenno
+
+# Signed, installable .app + .dmg (set your own Developer ID):
+APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" npx tauri build
 ```
 
 > **Important:** Plain `cargo build` produces a binary that loads the dev server URL (port 1430) and will show a blank or wrong page unless `npm run dev` is running in parallel. Use the tauri-built binary (`npx tauri build --no-bundle`) for real use.
