@@ -1,0 +1,43 @@
+[package]
+name = "cenno"
+version = "0.1.0"
+description = "cenno"
+authors = ["glebkalinin"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "cenno_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+parking_lot = "0.12"
+tokio = { version = "1", features = ["full"] }
+# "server" + "macros" power CennoServer; "client" is needed by mcp::test_support
+# (always compiled — see the note on that module) and later by the stdio bridge.
+rmcp = { version = "1.7", features = ["server", "client", "macros"] }
+schemars = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+dirs = "5"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Swizzles the main window into a non-activating NSPanel. Rev is the tip of
+# branch `v2` (Tauri 2.x); pinned by rev so the pin survives lockfile churn.
+# (Cargo forbids specifying both `branch` and `rev`.)
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1a" }
+
+[dev-dependencies]
+tempfile = "3"
+
