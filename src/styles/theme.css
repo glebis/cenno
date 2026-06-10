@@ -1,0 +1,34 @@
+/**
+ * cenno semantic theme — flow theming via data-flow attribute
+ *
+ * Components consume ONLY semantic vars: --cenno-surface, --cenno-text,
+ * --cenno-text-dim, --cenno-line. Never reference flow colors directly.
+ * Flows are switched by setting data-flow on any ancestor element.
+ */
+
+:root {
+  --cenno-surface: var(--cenno-color-flow-question);
+  --cenno-text: var(--cenno-color-text-default);
+  --cenno-text-dim: var(--cenno-color-text-dim);
+  --cenno-line: var(--cenno-color-line);
+}
+
+[data-flow="mood"] {
+  --cenno-surface: var(--cenno-color-flow-mood);
+}
+
+[data-flow="question"] {
+  --cenno-surface: var(--cenno-color-flow-question);
+}
+
+[data-flow="ema"] {
+  --cenno-surface: var(--cenno-color-flow-ema);
+}
+
+[data-flow="reminder"] {
+  --cenno-surface: var(--cenno-color-flow-reminder);
+}
+
+[data-flow="ambient"] {
+  --cenno-surface: var(--cenno-color-flow-ambient);
+}
