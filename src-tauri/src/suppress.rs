@@ -3,8 +3,9 @@
 //! `should_suppress()` gates the *display* path only (lib.rs notify closure
 //! and replay) — prompts still register in the registry and the agent's
 //! TimedOut contract is untouched. Fullscreen detection is a CGWindowList
-//! bounds heuristic, called once per prompt arrival / replay attempt, never
-//! polled.
+//! bounds heuristic scoped to the display the cenno panel lives on (a
+//! fullscreen app on another monitor doesn't suppress), called once per
+//! prompt arrival / replay attempt, never polled.
 
 use std::sync::Arc;
 
@@ -51,8 +52,10 @@ impl SuppressionState {
     ///
     /// True when paused (pause_until in the future) OR when the
     /// hide-in-fullscreen setting is on AND `fullscreen_check()` reports a
-    /// fullscreen app. The check is injectable so tests never touch real
-    /// window servers; production passes [`fullscreen_app_present`].
+    /// fullscreen app on the panel's display. The check is injectable so
+    /// tests never touch real window servers; production passes a closure
+    /// over [`fullscreen_on_display`] with the panel's display resolved at
+    /// call time (lib.rs `fullscreen_on_panel_display`).
     ///
     /// An expired pause is lazily cleared here (see [`Self::check`] for the
     /// variant that reports the clear so the caller can persist it).
@@ -166,8 +169,8 @@ pub struct Rect {
 /// anything that looks like a normal window.
 pub const FULLSCREEN_TOP_SLACK: f64 = 40.0;
 
-/// The heuristic's core: a window counts as fullscreen iff, for some display,
-/// it spans the display's full width, its bottom edge is flush with the
+/// The heuristic's core: a window counts as fullscreen on `display` iff it
+/// spans the display's full width, its bottom edge is flush with the
 /// display's bottom, and its top edge is within [`FULLSCREEN_TOP_SLACK`] of
 /// the display's top. Plain `bounds == display` is wrong on notched MacBooks
 /// (see [`FULLSCREEN_TOP_SLACK`]); non-notched fullscreen (external displays)
@@ -181,31 +184,74 @@ pub const FULLSCREEN_TOP_SLACK: f64 = 40.0;
 /// feature: suppressed prompts queue and replay, they're never lost.
 /// Exact f64 compares are deliberate: all values are integral points from
 /// the same CG coordinate space.
-pub fn covers_any_display(window: Rect, displays: &[Rect]) -> bool {
-    displays.iter().any(|d| {
-        let top_offset = window.y - d.y;
-        window.x == d.x
-            && window.w == d.w
-            && window.y + window.h == d.y + d.h
-            && (0.0..=FULLSCREEN_TOP_SLACK).contains(&top_offset)
-    })
+pub fn covers_display(window: Rect, display: Rect) -> bool {
+    let top_offset = window.y - display.y;
+    window.x == display.x
+        && window.w == display.w
+        && window.y + window.h == display.y + display.h
+        && (0.0..=FULLSCREEN_TOP_SLACK).contains(&top_offset)
 }
 
-/// Is any app fullscreen right now? (macOS)
+/// Which display should the fullscreen check be scoped to?
 ///
-/// CGWindowList heuristic: walk on-screen windows (z-ordered, all apps), and
-/// report true if any window at layer 0 (normal app windows; our own panel
-/// floats at level 3 and can't false-positive) exactly covers a display.
-/// Multi-display: a fullscreen app on ANY display suppresses — v1 keeps this
-/// deliberately simple, and "don't interrupt while something is fullscreen
-/// anywhere" is arguably the right focus semantics anyway.
+/// A fullscreen app only matters on the screen where the cenno panel would
+/// appear — fullscreen video on a second monitor must not silence prompts on
+/// the screen the user is working on. Resolution order:
+///
+/// 1. `target` (the panel's display bounds — or, when the monitor lookup
+///    failed upstream, the panel's own frame): the display containing its
+///    CENTER. Center, not origin, so a frame straddling two displays (or a
+///    monitor rect off by a point from the CG bounds) lands on the display
+///    showing most of it.
+/// 2. `cursor`: the display containing the mouse pointer — the panel pops
+///    where the user is.
+/// 3. None — the caller falls back to the main display.
+///
+/// Pure so it's testable everywhere; the macOS glue gathers the inputs.
+pub fn resolve_target_display(
+    displays: &[Rect],
+    target: Option<Rect>,
+    cursor: Option<(f64, f64)>,
+) -> Option<Rect> {
+    let contains = |d: &Rect, x: f64, y: f64| {
+        // Half-open on the far edges: adjacent displays share a border and a
+        // point must resolve to exactly one of them.
+        x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h
+    };
+    if let Some(t) = target {
+        let (cx, cy) = (t.x + t.w / 2.0, t.y + t.h / 2.0);
+        if let Some(d) = displays.iter().find(|d| contains(d, cx, cy)) {
+            return Some(*d);
+        }
+    }
+    if let Some((x, y)) = cursor {
+        if let Some(d) = displays.iter().find(|d| contains(d, x, y)) {
+            return Some(*d);
+        }
+    }
+    None
+}
+
+/// Is an app fullscreen on the panel's display right now? (macOS)
+///
+/// `target` is the bounds of the display the cenno panel lives on (or the
+/// panel's frame as a proxy), in CG points; lib.rs resolves it at check
+/// time so a dragged panel is honored. CGWindowList heuristic: walk
+/// on-screen windows (z-ordered, all apps) and report true if any window at
+/// layer 0 (normal app windows; our own panel floats at level 3 and can't
+/// false-positive) covers THAT display. Fullscreen apps on other displays
+/// are ignored — the prompt appears where the user's panel is, and that
+/// screen is not fullscreen.
+///
+/// Display resolution: [`resolve_target_display`] (target center → cursor
+/// position → main display).
 ///
 /// Cost: one CGWindowListCopyWindowInfo + one bounds pass. Called once per
 /// prompt arrival and once per replay attempt — never polled. Window bounds
 /// and layers don't require the screen-recording permission (window *names*
 /// would; we never read them).
 #[cfg(target_os = "macos")]
-pub fn fullscreen_app_present() -> bool {
+pub fn fullscreen_on_display(target: Option<Rect>) -> bool {
     use core_foundation::base::{CFType, TCFType};
     use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
     use core_foundation::number::CFNumber;
@@ -224,6 +270,15 @@ pub fn fullscreen_app_present() -> bool {
             .collect(),
         Err(_) => return false, // can't tell → don't suppress
     };
+
+    let display = resolve_target_display(&displays, target, cursor_location())
+        .unwrap_or_else(|| {
+            // Neither the panel nor the cursor mapped to a display (both
+            // lookups failed, or stale coordinates after a display change):
+            // scope to the main display rather than suppressing for all.
+            let b = CGDisplay::main().bounds();
+            Rect { x: b.origin.x, y: b.origin.y, w: b.size.width, h: b.size.height }
+        });
 
     let Some(windows) =
         cgw::copy_window_info(cgw::kCGWindowListOptionOnScreenOnly, cgw::kCGNullWindowID)
@@ -258,16 +313,30 @@ pub fn fullscreen_app_present() -> bool {
             w: bounds.size.width,
             h: bounds.size.height,
         };
-        if covers_any_display(rect, &displays) {
+        if covers_display(rect, display) {
             return true;
         }
     }
     false
 }
 
+/// Current mouse location in CG global coordinates (points, top-left origin
+/// of the main display) — the same space as `CGDisplay::bounds()`. None if
+/// the event tap can't be created (sandboxed edge cases); callers fall back.
+#[cfg(target_os = "macos")]
+fn cursor_location() -> Option<(f64, f64)> {
+    use core_graphics::event::CGEvent;
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState).ok()?;
+    let event = CGEvent::new(source).ok()?;
+    let p = event.location();
+    Some((p.x, p.y))
+}
+
 /// Non-macOS: no fullscreen detection — never suppress on that account.
 #[cfg(not(target_os = "macos"))]
-pub fn fullscreen_app_present() -> bool {
+pub fn fullscreen_on_display(_target: Option<Rect>) -> bool {
     false
 }
 
@@ -471,8 +540,8 @@ mod tests {
     #[test]
     fn window_exactly_matching_display_is_fullscreen() {
         // Non-notched displays (externals): fullscreen = exact bounds match.
-        let displays = [r(0.0, 0.0, 1728.0, 1117.0)];
-        assert!(covers_any_display(r(0.0, 0.0, 1728.0, 1117.0), &displays));
+        let display = r(0.0, 0.0, 1728.0, 1117.0);
+        assert!(covers_display(r(0.0, 0.0, 1728.0, 1117.0), display));
     }
 
     #[test]
@@ -480,31 +549,90 @@ mod tests {
         // Live-observed geometry on a notched MacBook: display 1512x982,
         // fullscreen TextEdit window at (0, 33, 1512, 949) — below the
         // camera-housing strip, bottom flush with the display.
-        let displays = [r(0.0, 0.0, 1512.0, 982.0)];
-        assert!(covers_any_display(r(0.0, 33.0, 1512.0, 949.0), &displays));
+        let display = r(0.0, 0.0, 1512.0, 982.0);
+        assert!(covers_display(r(0.0, 33.0, 1512.0, 949.0), display));
         // The fullscreen toolbar accessory window (same top, short) is not.
-        assert!(!covers_any_display(r(0.0, 33.0, 1512.0, 68.0), &displays));
+        assert!(!covers_display(r(0.0, 33.0, 1512.0, 68.0), display));
     }
 
     #[test]
     fn off_by_one_window_is_not_fullscreen() {
-        let displays = [r(0.0, 0.0, 1728.0, 1117.0)];
+        let display = r(0.0, 0.0, 1728.0, 1117.0);
         // Maximized below the menu bar with the Dock visible: bottom not flush.
-        assert!(!covers_any_display(r(0.0, 25.0, 1728.0, 1024.0), &displays));
+        assert!(!covers_display(r(0.0, 25.0, 1728.0, 1024.0), display));
         // One point short in width / height.
-        assert!(!covers_any_display(r(0.0, 0.0, 1727.0, 1117.0), &displays));
-        assert!(!covers_any_display(r(0.0, 0.0, 1728.0, 1116.0), &displays));
+        assert!(!covers_display(r(0.0, 0.0, 1727.0, 1117.0), display));
+        assert!(!covers_display(r(0.0, 0.0, 1728.0, 1116.0), display));
         // Top offset beyond the notch/menu-bar slack.
-        assert!(!covers_any_display(r(0.0, 41.0, 1728.0, 1076.0), &displays));
+        assert!(!covers_display(r(0.0, 41.0, 1728.0, 1076.0), display));
         // Sticking out above the display (negative offset).
-        assert!(!covers_any_display(r(0.0, -10.0, 1728.0, 1127.0), &displays));
+        assert!(!covers_display(r(0.0, -10.0, 1728.0, 1127.0), display));
     }
 
     #[test]
-    fn window_matching_second_display_is_fullscreen() {
-        let displays = [r(0.0, 0.0, 1728.0, 1117.0), r(1728.0, 0.0, 2560.0, 1440.0)];
-        assert!(covers_any_display(r(1728.0, 0.0, 2560.0, 1440.0), &displays));
-        // …but a window matching neither is not.
-        assert!(!covers_any_display(r(0.0, 0.0, 2560.0, 1440.0), &displays));
+    fn fullscreen_on_other_display_does_not_cover_target() {
+        // THE multi-display fix: a window fullscreen on display A must not
+        // count when the check is scoped to display B (where the panel is).
+        let display_a = r(0.0, 0.0, 1728.0, 1117.0);
+        let display_b = r(1728.0, 0.0, 2560.0, 1440.0);
+        let fullscreen_on_a = r(0.0, 0.0, 1728.0, 1117.0);
+        assert!(covers_display(fullscreen_on_a, display_a));
+        assert!(!covers_display(fullscreen_on_a, display_b));
+        // And symmetrically for a window fullscreen on B.
+        let fullscreen_on_b = r(1728.0, 0.0, 2560.0, 1440.0);
+        assert!(covers_display(fullscreen_on_b, display_b));
+        assert!(!covers_display(fullscreen_on_b, display_a));
+        // A window spanning neither display's exact bounds covers nothing.
+        assert!(!covers_display(r(0.0, 0.0, 2560.0, 1440.0), display_a));
+        assert!(!covers_display(r(0.0, 0.0, 2560.0, 1440.0), display_b));
+    }
+
+    // --- target display resolution ---
+
+    #[test]
+    fn target_center_picks_its_display() {
+        let a = r(0.0, 0.0, 1728.0, 1117.0);
+        let b = r(1728.0, 0.0, 2560.0, 1440.0);
+        let displays = [a, b];
+        // Panel's monitor bounds == display B → B (cursor elsewhere is ignored).
+        assert_eq!(resolve_target_display(&displays, Some(b), Some((10.0, 10.0))), Some(b));
+        // A panel FRAME on display A (monitor lookup failed upstream) → A.
+        let frame = r(100.0, 200.0, 420.0, 180.0);
+        assert_eq!(resolve_target_display(&displays, Some(frame), None), Some(a));
+        // Frame straddling the seam: the display holding its center wins.
+        let straddle = r(1600.0, 200.0, 420.0, 180.0); // center x = 1810 → B
+        assert_eq!(resolve_target_display(&displays, Some(straddle), None), Some(b));
+    }
+
+    #[test]
+    fn cursor_resolves_when_target_is_missing_or_offscreen() {
+        let a = r(0.0, 0.0, 1728.0, 1117.0);
+        let b = r(1728.0, 0.0, 2560.0, 1440.0);
+        let displays = [a, b];
+        // No target at all → cursor's display.
+        assert_eq!(resolve_target_display(&displays, None, Some((2000.0, 700.0))), Some(b));
+        // Target off every display (stale frame after a monitor unplug) →
+        // cursor's display.
+        let stale = r(9000.0, 9000.0, 420.0, 180.0);
+        assert_eq!(resolve_target_display(&displays, Some(stale), Some((50.0, 50.0))), Some(a));
+    }
+
+    #[test]
+    fn no_resolution_yields_none_for_main_display_fallback() {
+        let displays = [r(0.0, 0.0, 1728.0, 1117.0)];
+        assert_eq!(resolve_target_display(&displays, None, None), None);
+        // Cursor coordinates outside every display resolve to nothing too.
+        assert_eq!(resolve_target_display(&displays, None, Some((-5000.0, 0.0))), None);
+        // Empty display list (CG returned nothing): never panics, never picks.
+        assert_eq!(resolve_target_display(&[], Some(displays[0]), Some((1.0, 1.0))), None);
+    }
+
+    #[test]
+    fn shared_display_edge_resolves_to_exactly_one_display() {
+        // Far edges are half-open: a cursor on the seam belongs to the
+        // right-hand display (whose near edge is closed).
+        let a = r(0.0, 0.0, 1728.0, 1117.0);
+        let b = r(1728.0, 0.0, 2560.0, 1440.0);
+        assert_eq!(resolve_target_display(&[a, b], None, Some((1728.0, 100.0))), Some(b));
     }
 }

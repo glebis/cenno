@@ -175,7 +175,7 @@ Pause and the fullscreen quiet mode suppress the **display** only — they gate 
 
 ### Fullscreen quiet mode
 
-When "Don't show in fullscreen" is checked (the default), cenno detects whether any app is fullscreen using a CGWindowList bounds heuristic. The check runs once per incoming prompt and once per replay attempt — it is never polled.
+When "Don't show in fullscreen" is checked (the default), cenno detects whether an app is fullscreen **on the screen where the cenno panel lives** — a fullscreen app on another display does not suppress prompts. Detection is a CGWindowList bounds heuristic scoped to the panel's display (resolved at check time, so a dragged panel is honored; if the panel's display can't be determined, the display under the cursor — then the main display — is used). The check runs once per incoming prompt and once per replay attempt — it is never polled.
 
 **v1 limitation — no fullscreen-exit hook.** cenno does not subscribe to a fullscreen-end event (macOS does not provide one publicly). A suppressed prompt will reappear on the next trigger:
 
