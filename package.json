@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "validate:tokens": "node scripts/validate-tokens.mjs",
+    "pretokens": "npm run validate:tokens",
     "tokens": "style-dictionary build --config style-dictionary.config.mjs",
     "predev": "npm run tokens",
     "dev": "vite",
