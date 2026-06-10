@@ -70,14 +70,26 @@ impl CennoServer {
                        Returns JSON: {answer, via, elapsed_s} when answered, or \
                        {answered: false, prompt_id} on timeout."
     )]
-    async fn ask_user(&self, Parameters(params): Parameters<AskRequest>) -> String {
+    async fn ask_user(
+        &self,
+        Parameters(params): Parameters<AskRequest>,
+    ) -> Result<String, String> {
+        // Boundary guard: the web renderer silently drops malformed/mis-versioned
+        // a2ui messages, so reject HERE — before a prompt is registered — and
+        // hand the agent an actionable error instead of a surface that never
+        // renders. Err(String) becomes a CallToolResult with is_error: true
+        // (rmcp's IntoCallToolResult impl for Result<T, E>).
+        if let Some(a2ui) = &params.a2ui {
+            crate::a2ui_guard::validate_a2ui(a2ui)
+                .map_err(|msg| format!("invalid a2ui payload: {msg}"))?;
+        }
         // TODO(plan4): observe context.ct (client cancellation) so a dead agent
         // unparks the prompt instead of burning the full timeout_s.
         let resp = self
             .registry
             .ask(params, |id, req| (self.notify)(id, req))
             .await;
-        serde_json::to_string(&resp).expect("AskResponse is always serializable")
+        Ok(serde_json::to_string(&resp).expect("AskResponse is always serializable"))
     }
 }
 

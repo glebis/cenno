@@ -16,6 +16,8 @@ interface PromptEvent {
     choices?: string[];
     flow?: Prompt["flow"];
     progress?: { step: number; total: number };
+    // Native A2UI payload (already vetted by src-tauri/src/a2ui_guard.rs).
+    a2ui?: unknown;
   };
 }
 
@@ -33,6 +35,7 @@ function App() {
         choices: request.choices,
         flow: request.flow,
         progress: request.progress,
+        a2ui: request.a2ui,
       });
     });
     return () => {

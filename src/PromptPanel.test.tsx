@@ -80,6 +80,33 @@ describe("PromptPanel", () => {
     expect(container.querySelector('[data-flow="mood"]')).toBeTruthy();
   });
 
+  it("renders a native a2ui payload instead of the desugared prompt", () => {
+    const prompt: Prompt = {
+      ...base,
+      id: "p_7",
+      a2ui: [
+        {
+          version: "v0.9",
+          createSurface: { surfaceId: "main", catalogId: "cenno:catalog/v1" },
+        },
+        {
+          version: "v0.9",
+          updateComponents: {
+            surfaceId: "main",
+            components: [
+              { id: "root", component: "Column", children: ["custom"] },
+              { id: "custom", component: "Text", text: "custom surface" },
+            ],
+          },
+        },
+      ],
+    };
+    render(<PromptPanel prompt={prompt} onAnswer={() => {}} />);
+    expect(screen.getByText("custom surface")).toBeTruthy();
+    // The desugared title must NOT render — the native payload replaces it.
+    expect(screen.queryByText("Check-in")).toBeNull();
+  });
+
   it("defaults data-flow to question when flow is absent", () => {
     const { container } = render(
       <PromptPanel prompt={base} onAnswer={() => {}} />,

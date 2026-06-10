@@ -1,7 +1,9 @@
 /**
- * PromptPanel — single rendering path: every prompt (simple or rich) is
- * desugared to the A2UI v0.9 envelope and rendered through the A2UI renderer
- * with the cenno catalog. External contract unchanged: {prompt, onAnswer}.
+ * PromptPanel — single rendering engine: every prompt flows through the A2UI
+ * renderer with the cenno catalog. Simple prompts are desugared to the v0.9
+ * envelope; prompts carrying a native `a2ui` payload (vetted by the Rust
+ * boundary guard) feed it to the processor as-is, skipping desugar.
+ * External contract unchanged: {prompt, onAnswer}.
  *
  * Surface lifecycle: the processor (and its surface) is built per prompt.id
  * and the renderer subtree is keyed on it, so a second prompt fully rebuilds
@@ -33,6 +35,14 @@ export interface Prompt {
   choices?: string[];
   flow?: "mood" | "question" | "ema" | "reminder" | "ambient";
   progress?: { step: number; total: number };
+  /**
+   * Native A2UI v0.9 message array (the desugar envelope shape). When
+   * present it REPLACES desugaring: the payload is fed to the processor
+   * as-is. Shape is vetted by the Rust boundary guard
+   * (src-tauri/src/a2ui_guard.rs) before it ever reaches the webview, so
+   * this side only feeds it through.
+   */
+  a2ui?: unknown;
 }
 
 export type Via = "text" | "choice";
@@ -54,20 +64,34 @@ export default function PromptPanel({
   const surface = useMemo(
     () => {
       const processor = new MessageProcessor([cennoCatalog], (action) => {
-        // Only "submit*" actions complete the prompt (desugar contract).
+        // Only "submit*" actions complete the prompt (desugar contract; rich
+        // a2ui payloads use the same action contract).
         if (!action.name.startsWith("submit")) return;
-        const { value, via } = action.context as { value: unknown; via: Via };
+        // Harden against payload-authored contexts: via defaults to "text"
+        // unless it is literally "choice"; value is coerced via String()
+        // with null/undefined → "" (ack).
+        const ctx = action.context as
+          | { value?: unknown; via?: unknown }
+          | null
+          | undefined;
+        const via: Via = ctx?.via === "choice" ? "choice" : "text";
         // /choice binding arrives as a 1-element array; unwrap it.
-        const raw = Array.isArray(value) ? value[0] : value;
+        const raw = Array.isArray(ctx?.value) ? ctx.value[0] : ctx?.value;
         // /scale arrives as a number; stringify. null/undefined → "" (ack).
         const answer = raw == null ? "" : String(raw);
         onAnswerRef.current(promptIdRef.current, answer, via);
       });
+      // Native a2ui payload (vetted by the Rust guard) replaces desugaring.
+      const messages = prompt.a2ui ?? desugar(prompt);
       processor.processMessages(
-        desugar(prompt) as Parameters<typeof processor.processMessages>[0],
+        messages as Parameters<typeof processor.processMessages>[0],
       );
-      const created = processor.model.surfacesMap.get(SURFACE_ID);
-      if (!created) throw new Error("desugar produced no surface");
+      // Desugar always targets SURFACE_ID; native payloads may pick their
+      // own surfaceId, so fall back to the first created surface.
+      const created =
+        processor.model.surfacesMap.get(SURFACE_ID) ??
+        processor.model.surfacesMap.values().next().value;
+      if (!created) throw new Error("prompt produced no surface");
       return created;
     },
     // Keyed by prompt.id: a replacing prompt rebuilds processor + surface.
