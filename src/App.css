@@ -7,6 +7,14 @@
   box-sizing: border-box;
 }
 
+/* Ink, never white: the webview shows html/body whenever .prompt-panel is
+   absent (during load, and the frame between state clearing and the window
+   hide completing). Matches backgroundColor in tauri.conf.json. */
+html,
+body {
+  background: var(--cenno-color-flow-ambient, #14171a);
+}
+
 body {
   margin: 0;
   color: var(--cenno-text);
@@ -19,6 +27,7 @@ body {
 /* Panel root owns the surface color (catalog components are transparent);
    data-flow on this element switches --cenno-surface via theme.css. */
 .prompt-panel {
+  position: relative; /* anchors the drag strip */
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -26,4 +35,29 @@ body {
   overflow-y: auto;
   overflow-wrap: anywhere;
   background: var(--cenno-surface);
+}
+
+/* Invisible always-grabbable drag handle over the panel's top edge (the
+   data-tauri-drag-region attribute is on the element in PromptPanel.tsx).
+   Sits above the title text — fine, the title is not interactive. */
+.prompt-panel__drag-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  z-index: 10;
+}
+
+/* Post-answer linger: same surface, quiet confirmation. */
+.prompt-panel--answered {
+  justify-content: center;
+}
+
+.answered-note {
+  margin: 0;
+  font-size: var(--cenno-type-caption);
+  color: var(--cenno-text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }

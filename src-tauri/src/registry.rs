@@ -74,16 +74,24 @@ impl PromptRegistry {
     /// webview that mounted after the `prompt` event was emitted (cold-start
     /// race). Excludes resolved (tx consumed) and timed-out (deadline passed)
     /// entries. Sorted oldest→newest by the monotonic id counter.
-    pub fn pending(&self) -> Vec<(String, AskRequest)> {
+    ///
+    /// The third tuple element is the seconds REMAINING until this prompt's
+    /// deadline (ceiled, so a prompt with 0.3s left reports 1, never 0): a
+    /// replayed prompt has partially burned its timeout_s, and the webview's
+    /// auto-hide timer must run on what's left, not the original budget.
+    pub fn pending(&self) -> Vec<(String, AskRequest, u64)> {
         let now = Instant::now();
-        let mut v: Vec<(String, AskRequest)> = self
+        let mut v: Vec<(String, AskRequest, u64)> = self
             .inner
             .lock()
             .iter()
             .filter(|(_, p)| p.tx.is_some() && now < p.deadline)
-            .map(|(id, p)| (id.clone(), p.request.clone()))
+            .map(|(id, p)| {
+                let remaining_s = (p.deadline - now).as_secs_f64().ceil() as u64;
+                (id.clone(), p.request.clone(), remaining_s)
+            })
             .collect();
-        v.sort_by_key(|(id, _)| id.strip_prefix("p_").and_then(|n| n.parse::<u64>().ok()));
+        v.sort_by_key(|(id, _, _)| id.strip_prefix("p_").and_then(|n| n.parse::<u64>().ok()));
         v
     }
 }
@@ -136,6 +144,25 @@ mod tests {
         assert!(reg.resolve(&id, "hi".into(), Via::Text));
         task.await.unwrap();
         assert!(reg.pending().is_empty());
+    }
+
+    #[tokio::test]
+    async fn pending_reports_remaining_not_original_timeout() {
+        let reg = PromptRegistry::new();
+        let reg2 = reg.clone();
+        let long: AskRequest = serde_json::from_str(r#"{"title":"t","timeout_s":10}"#).unwrap();
+        let task = tokio::spawn(async move { reg2.ask(long, |_id, _req| {}).await });
+        // Burn ~1.1s of the 10s budget; remaining must reflect that
+        // (ceil(8.9) = 9), never echo the original timeout_s.
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+        let pending = reg.pending();
+        assert_eq!(pending.len(), 1);
+        let remaining = pending[0].2;
+        assert!(remaining < 10, "remaining_s should have decreased, got {remaining}");
+        assert!(remaining >= 8, "remaining_s implausibly low, got {remaining}");
+        let id = pending[0].0.clone();
+        assert!(reg.resolve(&id, "done".into(), Via::Text));
+        task.await.unwrap();
     }
 
     #[tokio::test]

@@ -163,8 +163,21 @@ export default function PromptPanel({
 
   // The panel root owns the surface color (catalog components stay
   // transparent); data-flow switches the semantic theme.
+  //
+  // Dragging: data-tauri-drag-region only works on the EXACT element under
+  // the cursor (Tauri 2 checks the mousedown target, no bubbling), so the
+  // attribute on the root covers padding/empty areas while chips, inputs and
+  // links stay clickable. Title/body text are attribute-less children, so an
+  // invisible top strip (over padding + the title's first line — nothing
+  // interactive lives up there) guarantees an always-grabbable handle.
+  // Requires core:window:allow-start-dragging (capabilities/default.json).
   return (
-    <div className="prompt-panel" data-flow={prompt.flow ?? "question"}>
+    <div
+      className="prompt-panel"
+      data-flow={prompt.flow ?? "question"}
+      data-tauri-drag-region
+    >
+      <div className="prompt-panel__drag-strip" data-tauri-drag-region aria-hidden="true" />
       <SurfaceErrorBoundary
         key={prompt.id}
         fallback={fallback ? <A2uiSurface surface={fallback} /> : null}
