@@ -101,12 +101,13 @@ pub fn run(tray: bool) {
             let registry = PromptRegistry::new();
             app.manage(registry.clone());
 
-            // tray mode: skip panel conversion — window stays hidden until the
-            // first prompt arrives. Full tray icon UI is a later plan (Task 9).
+            // tray flag reserved for future tray-icon setup — panel conversion
+            // must always happen: it shows nothing (hidden startup is already
+            // guaranteed by visible:false in tauri.conf.json), and prompt
+            // display depends on the window being a panel.
+            let _ = tray;
             #[cfg(target_os = "macos")]
-            if !tray {
-                convert_to_panel(app)?;
-            }
+            convert_to_panel(app)?;
 
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
