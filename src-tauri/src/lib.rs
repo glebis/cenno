@@ -163,8 +163,21 @@ pub fn run(tray: bool) {
 
             // Open (or create) the history database. Failure is non-fatal:
             // the app runs without history rather than refusing to launch.
-            let db = match crate::db::Db::open(&data_dir.join("cenno.db")) {
+            let db_path = data_dir.join("cenno.db");
+            let db = match crate::db::Db::open(&db_path) {
                 Ok(db) => {
+                    // Defense in depth: answers are stored as plaintext; restrict
+                    // file access to the current user only.
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt as _;
+                        if let Err(e) = std::fs::set_permissions(
+                            &db_path,
+                            std::fs::Permissions::from_mode(0o600),
+                        ) {
+                            eprintln!("cenno: could not set DB permissions: {e}");
+                        }
+                    }
                     eprintln!("cenno: history DB opened at {}/cenno.db", data_dir.display());
                     Some(db)
                 }

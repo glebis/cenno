@@ -16,20 +16,23 @@ use std::sync::Arc;
 /// (asserted by the `identifier_matches_tauri_conf` unit test below).
 pub const APP_IDENTIFIER: &str = "com.glebkalinin.cenno";
 
-/// Canonical path to the MCP Unix socket.
+/// Canonical per-user data directory for cenno.
 ///
-/// This MUST return the same directory that Tauri's `app.path().app_data_dir()`
-/// resolves to on macOS (`~/Library/Application Support/com.glebkalinin.cenno/`).
-/// In debug builds, `lib.rs`'s setup function asserts the two paths match so
-/// any divergence is caught at startup rather than silently.
+/// macOS: `~/Library/Application Support/com.glebkalinin.cenno/`
+/// Linux: `~/.local/share/com.glebkalinin.cenno/`
+/// Windows: `%APPDATA%\com.glebkalinin.cenno\`
 ///
-/// Using `dirs::data_dir()` here avoids a Tauri dependency in the CLI path.
-pub fn socket_path() -> PathBuf {
-    // macOS: ~/Library/Application Support
-    // Linux: ~/.local/share
-    // Windows: %APPDATA%
+/// This MUST agree with what Tauri's `app.path().app_data_dir()` resolves to.
+/// In debug builds `lib.rs` asserts the socket paths match so any divergence
+/// is caught at startup rather than silently.
+pub fn data_dir() -> PathBuf {
     let base = dirs::data_dir().expect("could not determine user data directory");
-    base.join(APP_IDENTIFIER).join("mcp.sock")
+    base.join(APP_IDENTIFIER)
+}
+
+/// Canonical path to the MCP Unix socket.
+pub fn socket_path() -> PathBuf {
+    data_dir().join("mcp.sock")
 }
 
 use rmcp::{

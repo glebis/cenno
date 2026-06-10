@@ -115,6 +115,41 @@ impl Db {
             )
             .map(|_| ())
     }
+
+    /// Export prompt rows as JSON objects, optionally filtered to rows whose
+    /// `created_at` is >= `since` (inclusive boundary).  Returns rows ordered
+    /// oldest-first.  Field names are stable and match the schema column names.
+    pub fn export_rows(
+        &self,
+        since: Option<DateTime<Utc>>,
+    ) -> rusqlite::Result<Vec<serde_json::Value>> {
+        let conn = self.0.lock();
+        let sql = "SELECT id, prompt_id, title, body_md, input_kind, flow, urgency, \
+                          status, answer, via, elapsed_s, created_at, resolved_at \
+                   FROM prompts \
+                   WHERE (?1 IS NULL OR created_at >= ?1) \
+                   ORDER BY created_at ASC, id ASC";
+        let since_str: Option<String> = since.map(|dt| dt.to_rfc3339());
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt.query_map(params![since_str], |row| {
+            Ok(serde_json::json!({
+                "id":          row.get::<_, i64>(0)?,
+                "prompt_id":   row.get::<_, String>(1)?,
+                "title":       row.get::<_, String>(2)?,
+                "body_md":     row.get::<_, String>(3)?,
+                "input_kind":  row.get::<_, Option<String>>(4)?,
+                "flow":        row.get::<_, Option<String>>(5)?,
+                "urgency":     row.get::<_, Option<String>>(6)?,
+                "status":      row.get::<_, String>(7)?,
+                "answer":      row.get::<_, Option<String>>(8)?,
+                "via":         row.get::<_, Option<String>>(9)?,
+                "elapsed_s":   row.get::<_, Option<f64>>(10)?,
+                "created_at":  row.get::<_, String>(11)?,
+                "resolved_at": row.get::<_, String>(12)?,
+            }))
+        })?;
+        rows.collect()
+    }
 }
 
 /// Run schema migrations.
@@ -135,6 +170,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             created_at TEXT NOT NULL,
             resolved_at TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_prompts_created_at ON prompts(created_at);
         CREATE TABLE IF NOT EXISTS settings (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -253,5 +289,59 @@ mod tests {
         assert_eq!(flow.as_deref(), Some("mood"));
         assert_eq!(urgency, "high");
         assert_eq!(via.as_deref(), Some("choice"));
+    }
+
+    #[test]
+    fn export_rows_empty_db_returns_empty_vec() {
+        let (db, _dir) = open_temp_db();
+        let rows = db.export_rows(None).unwrap();
+        assert!(rows.is_empty(), "expected empty vec, got {rows:?}");
+    }
+
+    #[test]
+    fn export_rows_roundtrip() {
+        let (db, _dir) = open_temp_db();
+        let req = basic_req();
+        let created_at = Utc::now();
+        let outcome = AskResponse::Answered {
+            answer: "exported".to_string(),
+            via: Via::Text,
+            elapsed_s: 2.0,
+        };
+        db.record_prompt(&req, "p_exp", &outcome, created_at).unwrap();
+
+        let rows = db.export_rows(None).unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row["prompt_id"], "p_exp");
+        assert_eq!(row["title"], "Deploy?");
+        assert_eq!(row["status"], "answered");
+        assert_eq!(row["answer"], "exported");
+        assert_eq!(row["via"], "text");
+    }
+
+    #[test]
+    fn export_rows_since_filter_inclusive() {
+        let (db, _dir) = open_temp_db();
+        let req = basic_req();
+        let t0 = Utc::now();
+
+        // Insert row BEFORE the since boundary.
+        let before = t0 - chrono::Duration::seconds(10);
+        db.record_prompt(&req, "before", &AskResponse::TimedOut { answered: false, prompt_id: "before".into() }, before).unwrap();
+
+        // Insert row AT the boundary (should be included — inclusive).
+        db.record_prompt(&req, "at", &AskResponse::Answered { answer: "y".into(), via: Via::Text, elapsed_s: 1.0 }, t0).unwrap();
+
+        // Insert row AFTER the boundary.
+        let after = t0 + chrono::Duration::seconds(1);
+        db.record_prompt(&req, "after", &AskResponse::Answered { answer: "z".into(), via: Via::Text, elapsed_s: 1.0 }, after).unwrap();
+
+        // since = t0: "before" excluded, "at" and "after" included.
+        let rows = db.export_rows(Some(t0)).unwrap();
+        let ids: Vec<&str> = rows.iter().map(|r| r["prompt_id"].as_str().unwrap()).collect();
+        assert!(!ids.contains(&"before"), "before should be excluded: {ids:?}");
+        assert!(ids.contains(&"at"), "at-boundary row must be included: {ids:?}");
+        assert!(ids.contains(&"after"), "after row must be included: {ids:?}");
     }
 }

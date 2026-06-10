@@ -11,6 +11,9 @@ fn main() {
         Some(Command::Ask { title, body, timeout }) => {
             run_ask(title, body, timeout);
         }
+        Some(Command::Export { format, since }) => {
+            run_export(format, since);
+        }
         None => {
             // No subcommand → either bridge stdio to the MCP socket, or
             // launch the Tauri GUI (honoring --tray).
@@ -21,6 +24,78 @@ fn main() {
             }
         }
     }
+}
+
+/// `cenno export`: dump history to stdout as JSON or CSV.  Headless — opens
+/// the DB directly without requiring the app to be running.
+fn run_export(format: cenno_lib::cli::ExportFormat, since_str: Option<String>) -> ! {
+    // Resolve --since if provided.
+    let since = match since_str {
+        Some(ref s) => match cenno_lib::cli::parse_since(s) {
+            Ok(dt) => Some(dt),
+            Err(msg) => {
+                eprintln!("cenno export: {msg}");
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
+
+    // Locate the DB.
+    let db_path = cenno_lib::mcp::data_dir().join("cenno.db");
+    if !db_path.exists() {
+        eprintln!("cenno export: no history yet — the cenno app hasn't recorded any prompts");
+        std::process::exit(1);
+    }
+
+    // Open the DB (read-only is fine; open() creates tables idempotently).
+    let db = match cenno_lib::db::Db::open(&db_path) {
+        Ok(db) => db,
+        Err(e) => {
+            eprintln!("cenno export: failed to open history DB: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let rows = match db.export_rows(since) {
+        Ok(rows) => rows,
+        Err(e) => {
+            eprintln!("cenno export: query failed: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match format {
+        cenno_lib::cli::ExportFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&rows).expect("Vec<Value> is always serializable")
+            );
+        }
+        cenno_lib::cli::ExportFormat::Csv => {
+            // Fixed column order matching the schema.
+            const COLUMNS: &[&str] = &[
+                "id", "prompt_id", "title", "body_md", "input_kind", "flow", "urgency",
+                "status", "answer", "via", "elapsed_s", "created_at", "resolved_at",
+            ];
+            let mut wtr = csv::Writer::from_writer(std::io::stdout());
+            wtr.write_record(COLUMNS).expect("csv header write failed");
+            for row in &rows {
+                let record: Vec<String> = COLUMNS
+                    .iter()
+                    .map(|col| match &row[col] {
+                        serde_json::Value::Null => String::new(),
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    })
+                    .collect();
+                wtr.write_record(&record).expect("csv row write failed");
+            }
+            wtr.flush().expect("csv flush failed");
+        }
+    }
+
+    std::process::exit(0);
 }
 
 /// `--mcp-stdio`: pump stdin/stdout to the app's MCP socket, autolaunching

@@ -35,6 +35,7 @@ clap = { version = "4", features = ["derive"] }
 dirs = "5"
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
+csv = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Swizzles the main window into a non-activating NSPanel. Rev is the tip of
