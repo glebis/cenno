@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "tokens": "style-dictionary build --config style-dictionary.config.mjs",
+    "predev": "npm run tokens",
     "dev": "vite",
+    "prebuild": "npm run tokens",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -17,6 +20,7 @@
     "react-markdown": "^10.1.0"
   },
   "devDependencies": {
+    "style-dictionary": "^4",
     "@tauri-apps/cli": "^2",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.1.8",
