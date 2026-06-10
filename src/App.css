@@ -37,6 +37,18 @@ body {
   background: var(--cenno-surface);
 }
 
+/* Measurement wrapper for content-driven window height (panelResize.ts):
+   the root is 100vh, so its own scrollHeight can never report a height
+   SMALLER than the window. This wrapper stays at its natural height
+   (flex: none — a shrinkable flex child would compress to the viewport
+   instead of overflowing), so wrapper.scrollHeight + root padding = the
+   window height the prompt actually needs. */
+.prompt-panel__content {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+
 /* Invisible always-grabbable drag handle over the panel's top edge (the
    data-tauri-drag-region attribute is on the element in PromptPanel.tsx).
    Sits above the title text — fine, the title is not interactive. */

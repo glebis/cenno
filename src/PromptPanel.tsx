@@ -23,12 +23,13 @@
  * /choice binding resolves to a 1-element array (unwrapped here), /scale to a
  * number (stringified here). Empty answers stay allowed (ack/skip).
  */
-import { Component, useMemo, useRef, type ReactNode } from "react";
+import { Component, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { MessageProcessor } from "@a2ui/web_core/v0_9";
 import { injectBasicCatalogStyles } from "@a2ui/web_core/v0_9/basic_catalog";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { cennoCatalog } from "./a2ui/catalog";
 import { desugar, SURFACE_ID } from "./a2ui/desugar";
+import { observePanelContent } from "./panelResize";
 
 // Once at module level. Guarded: jsdom (vitest) has no adoptedStyleSheets,
 // and the helper assumes it exists.
@@ -161,6 +162,20 @@ export default function PromptPanel({
     [prompt.id],
   );
 
+  // Content-driven window height: after this prompt's surface mounts (and
+  // whenever its content box changes — e.g. the error boundary swapping in
+  // the fallback), measure the natural content height and ask Rust to fit
+  // the window to it (resize_panel, clamped to [240, 560]). Keyed on
+  // prompt.id like the surface memo: each prompt gets a fresh fit.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const content = contentRef.current;
+    if (!root || !content) return;
+    return observePanelContent(content, root);
+  }, [prompt.id]);
+
   // The panel root owns the surface color (catalog components stay
   // transparent); data-flow switches the semantic theme.
   //
@@ -173,17 +188,22 @@ export default function PromptPanel({
   // Requires core:window:allow-start-dragging (capabilities/default.json).
   return (
     <div
+      ref={rootRef}
       className="prompt-panel"
       data-flow={prompt.flow ?? "question"}
       data-tauri-drag-region
     >
       <div className="prompt-panel__drag-strip" data-tauri-drag-region aria-hidden="true" />
-      <SurfaceErrorBoundary
-        key={prompt.id}
-        fallback={fallback ? <A2uiSurface surface={fallback} /> : null}
-      >
-        <A2uiSurface surface={surface} />
-      </SurfaceErrorBoundary>
+      {/* Measurement wrapper (flex:none → always its natural height); the
+          root itself is 100vh so its scrollHeight can't size DOWN. */}
+      <div ref={contentRef} className="prompt-panel__content" data-tauri-drag-region>
+        <SurfaceErrorBoundary
+          key={prompt.id}
+          fallback={fallback ? <A2uiSurface surface={fallback} /> : null}
+        >
+          <A2uiSurface surface={surface} />
+        </SurfaceErrorBoundary>
+      </div>
     </div>
   );
 }
