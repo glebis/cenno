@@ -70,7 +70,21 @@ Note for contributors: a plain `cargo build` binary loads the Vite dev server (p
 
 A panel appears; your answer prints as JSON. cenno auto-launches if it isn't running.
 
-Want your agent to ask *well* — right input kind, sensible flows, graceful timeouts? Drop in the ready-made [agent skill](skills/) (it also has a setup mode that wires cenno into a project).
+## Agent skill
+
+Want your agent to ask *well* — pick the right input kind, sensible flows, graceful timeouts — and to wire cenno into a project itself? Install the ready-made [`cenno` skill](skills/cenno). It bundles `ask_user` usage, custom 1–N scales, etiquette, and a setup mode.
+
+**Install via [`npx skills`](https://github.com/vercel-labs/skills):**
+
+```bash
+npx skills add https://github.com/glebis/cenno/tree/main/skills/cenno
+```
+
+**Or just ask your agent (install via prompt):**
+
+> Install the cenno agent skill from https://github.com/glebis/cenno/tree/main/skills/cenno — copy it into my Claude skills directory.
+
+Once installed it activates on its own whenever a task calls for asking the user, running a check-in, or setting cenno up.
 
 ## Why not just a terminal prompt or a dialog box?
 
