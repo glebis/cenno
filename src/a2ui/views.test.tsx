@@ -108,6 +108,48 @@ describe("ChipsView", () => {
     expect(pressed("Meetings")).toBe("false");
     expect(pressed("Wandering")).toBe("false");
   });
+
+  const moods = [
+    { label: "Awful", value: "awful" },
+    { label: "Bad", value: "bad" },
+    { label: "Okay", value: "okay" },
+    { label: "Good", value: "good" },
+    { label: "Great", value: "great" },
+  ];
+
+  it("words variant: renders bare-word buttons WITHOUT the pill chip class", () => {
+    render(<ChipsView choices={moods} variant="words" onSelect={() => {}} />);
+    const buttons = screen.getAllByRole("button");
+    expect(buttons).toHaveLength(5);
+    for (const b of buttons) {
+      expect(b.className).toContain("cenno-word");
+      expect(b.className).not.toContain("cenno-chip");
+    }
+  });
+
+  it("words variant: clicking a word still reports the option value", () => {
+    const onSelect = vi.fn();
+    render(<ChipsView choices={moods} variant="words" onSelect={onSelect} />);
+    fireEvent.click(screen.getByRole("button", { name: "Great" }));
+    expect(onSelect).toHaveBeenCalledWith("great");
+  });
+
+  it("words variant: multi-select aria-pressed still works", () => {
+    render(
+      <ChipsView
+        choices={moods}
+        variant="words"
+        selected={["okay"]}
+        onSelect={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Okay" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("button", { name: "Bad" }).getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
 });
 
 describe("TextFieldView", () => {

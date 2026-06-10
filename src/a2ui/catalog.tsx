@@ -194,6 +194,16 @@ export const CennoChoicePickerApi = {
     selectAction: ActionSchema.optional().describe(
       "Action fired after a choice is made (tap-to-answer flows).",
     ),
+    // Widen the stock selection-behavior variant with a cenno display
+    // variant: "words" renders options as bare oversized text (mood flow,
+    // panel-mood-checkin.png) instead of outline pill chips.
+    variant: z
+      .enum(["multipleSelection", "mutuallyExclusive", "words"])
+      .optional()
+      .describe(
+        "Selection behavior (multipleSelection / mutuallyExclusive) or the " +
+          "cenno 'words' display variant for bare-word mood choices.",
+      ),
   }),
 };
 
@@ -209,6 +219,7 @@ export const CennoChoicePicker = createComponentImplementation(
       <ChipsView
         choices={options}
         selected={values}
+        variant={props.variant === "words" ? "words" : undefined}
         onSelect={(value) => {
           if (props.variant === "multipleSelection") {
             props.setValue(

@@ -93,6 +93,42 @@
   border-color: var(--cenno-text);
 }
 
+/* ---- words: bare oversized choices in one centered row ---- */
+/* Mood flow (panel-mood-checkin.png): no pill outline, no background — just
+   the option labels as large white text, generous horizontal gap, wrapping
+   if the row is too narrow. */
+
+.cenno-chips--words {
+  justify-content: center;
+  align-items: center;
+  gap: var(--cenno-space-3);
+}
+
+.cenno-word {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--cenno-text);
+  font-size: var(--cenno-type-question-m);
+  font-weight: 600;
+  line-height: 1;
+  /* >= 44px tap target via vertical padding, never font inflation */
+  padding: var(--cenno-space-2) 0;
+  cursor: pointer;
+}
+
+.cenno-word:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Selected/pressed word: underlined emphasis (heavier than the bare rest). */
+.cenno-word[aria-pressed="true"] {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
 /* ---- scale: outlined circle targets (fullscreen-ema-1-scale.png) ---- */
 
 .cenno-scale {

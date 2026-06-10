@@ -90,12 +90,17 @@ function desugarInput(req: Prompt): {
   switch (req.input?.kind) {
     case "choice": {
       const options = (req.choices ?? []).map((c) => ({ label: c, value: c }));
+      // Mood flow renders choices as bare oversized words in one row
+      // (panel-mood-checkin.png), not outline pills. Other flows omit the
+      // variant and keep the default chip rendering.
+      const wordsVariant = req.flow === "mood" ? { variant: "words" } : {};
       return {
         childIds: ["choices"],
         components: [
           {
             id: "choices",
             component: "ChoicePicker",
+            ...wordsVariant,
             options,
             value: { path: "/choice" },
             selectAction: submitAction(

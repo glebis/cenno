@@ -156,6 +156,31 @@ describe("desugar mapping table", () => {
     expect(dataModel.choice).toEqual([]);
   });
 
+  it("mood flow + choice: ChoicePicker carries variant 'words'", () => {
+    const { byId } = parts(
+      prompt({
+        flow: "mood",
+        input: { kind: "choice" },
+        choices: ["Awful", "Bad", "Okay", "Good", "Great"],
+      }),
+    );
+    expect(byId.get("choices")).toMatchObject({
+      component: "ChoicePicker",
+      variant: "words",
+    });
+  });
+
+  it("non-mood flow + choice: ChoicePicker has no 'words' variant (default pills)", () => {
+    const { byId } = parts(
+      prompt({
+        flow: "question",
+        input: { kind: "choice" },
+        choices: ["Calm", "Tense"],
+      }),
+    );
+    expect(byId.get("choices")?.variant).toBeUndefined();
+  });
+
   it("scale: Scale 1..7 with end labels and submit-scale tap-to-answer; no send button", () => {
     const { byId, col } = parts(prompt({ input: { kind: "scale" } }));
     expect(col.children).toEqual(["title", "body", "scale"]);
