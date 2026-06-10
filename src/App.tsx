@@ -42,6 +42,8 @@ function App() {
       console.warn(`prompt ${id} already expired; answer was not delivered`);
     }
     setPrompt(null);
+    // hide() = orderOut: — the correct counterpart to the Rust side's
+    // order_front_regardless() (panel never became key/active app-wide).
     await getCurrentWindow().hide();
   }
 

@@ -35,9 +35,10 @@ fn convert_to_panel(app: &tauri::App) -> tauri::Result<()> {
     use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
     use tauri_nspanel::WebviewWindowExt as _;
 
-    // NSWindowStyleMask.nonactivatingPanel (1 << 7). The window is created
-    // with decorations:false (= borderless, mask 0), so this is the only
-    // style bit we need.
+    // NSWindowStyleMask.nonactivatingPanel (1 << 7). Replaces tao's
+    // Borderless|Resizable|Miniaturizable mask; we intentionally drop
+    // resize/miniaturize — the panel is fixed-size. Key-window eligibility
+    // comes from RawNSPanel's canBecomeKeyWindow override, not the mask.
     const STYLE_MASK_NONACTIVATING_PANEL: i32 = 1 << 7;
     // NSFloatingWindowLevel — above normal windows, below the menu bar.
     // (Replaces the alwaysOnTop window-level from tauri.conf.json.)
@@ -70,9 +71,13 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
         let h = handle.clone();
         // AppKit ordering calls must run on the main thread; the notify
         // callback fires on the socket server's tokio runtime.
+        // Counterpart: after answering, the webview hides itself via
+        // window.hide() (= orderOut:) — pairs correctly with
+        // order_front_regardless(), no key/activation state to undo.
         let queued = handle.run_on_main_thread(move || match h.get_webview_panel("main") {
             Ok(panel) => panel.order_front_regardless(),
-            Err(_) => eprintln!("cenno: main window was not converted to a panel"),
+            // {e:?}: tauri_nspanel::Error has no Display impl.
+            Err(e) => eprintln!("cenno: main window was not converted to a panel: {e:?}"),
         });
         if let Err(e) = queued {
             eprintln!("cenno: failed to dispatch panel show: {e}");

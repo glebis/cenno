@@ -21,14 +21,17 @@ export default defineConfig(async () => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
-    port: 1420,
+    // 1430/1431, not Tauri's default 1420/1421: cull's dev server owns 1420
+    // on this machine, and a devUrl collision renders the WRONG APP inside
+    // the panel (cargo-built binaries always load devUrl).
+    port: 1430,
     strictPort: true,
     host: host || false,
     hmr: host
       ? {
           protocol: "ws",
           host,
-          port: 1421,
+          port: 1431,
         }
       : undefined,
     watch: {

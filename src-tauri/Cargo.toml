@@ -31,9 +31,10 @@ schemars = "1"
 anyhow = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# Swizzles the main window into a non-activating NSPanel (branch v2 targets
-# Tauri 2.x; exact rev pinned via Cargo.lock).
-tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
+# Swizzles the main window into a non-activating NSPanel. Rev is the tip of
+# branch `v2` (Tauri 2.x); pinned by rev so the pin survives lockfile churn.
+# (Cargo forbids specifying both `branch` and `rev`.)
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1a" }
 
 [dev-dependencies]
 tempfile = "3"
