@@ -47,9 +47,10 @@ body {
   display: flex;
   flex-direction: column;
   flex: none;
-  /* Reserve room under the chrome row (wordmark + ✕) so the title never
-     collides with it; the chrome sits in the panel's top padding band. */
-  padding-top: var(--cenno-space-3);
+  /* Reserve room under the chrome row (wordmark + ✕, ~45px tall) so the
+     title never collides with it; the chrome sits in the panel's top
+     padding band. space-4 (40px) clears the chrome with margin to spare. */
+  padding-top: var(--cenno-space-4);
 }
 
 /* Chrome row — fixed across the top of every panel (PromptPanel renders it

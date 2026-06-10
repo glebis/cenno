@@ -53,7 +53,7 @@ impl PromptRegistry {
                 self.inner.lock().remove(&id);
                 AskResponse::Answered { answer, via, elapsed_s: started.elapsed().as_secs_f64() }
             }
-            // Err(Elapsed) = real timeout; Ok(Err(_)) = sender dropped, structurally impossible here
+            // Err(Elapsed) = real timeout; Ok(Err(RecvError)) = sender dropped by dismiss(); both Err paths return TimedOut
             _ => AskResponse::TimedOut { answered: false, prompt_id: id },
         }
     }
