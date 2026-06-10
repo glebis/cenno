@@ -10,7 +10,7 @@ use tauri::{
     image::Image,
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::TrayIconBuilder,
-    AppHandle, Runtime,
+    AppHandle,
 };
 
 use crate::db::Db;
@@ -34,8 +34,12 @@ const PAUSE_ITEMS: &[(&str, &str, i64)] = &[
 ///
 /// Called from setup in BOTH windowed and `--tray` modes — the menu-bar
 /// presence IS the app's home; the panel is just its transient prompt UI.
-pub fn setup_tray<R: Runtime>(
-    app: &AppHandle<R>,
+///
+/// Concrete (Wry) `AppHandle`, not generic over `Runtime`: the handlers call
+/// `crate::replay_pending`, which goes through the NSPanel show path — that
+/// machinery is Wry-only, and lib.rs is the sole caller anyway.
+pub fn setup_tray(
+    app: &AppHandle,
     suppress: SuppressionState,
     db: Option<Db>,
 ) -> tauri::Result<()> {
@@ -44,16 +48,16 @@ pub fn setup_tray<R: Runtime>(
     // it as a mask (alpha only) and recolor for the current appearance.
     let icon = Image::from_bytes(include_bytes!("../icons/tray/trayTemplate@2x.png"))?;
 
-    let pause_items: Vec<MenuItem<R>> = PAUSE_ITEMS
+    let pause_items: Vec<MenuItem<tauri::Wry>> = PAUSE_ITEMS
         .iter()
         .map(|(id, label, _)| MenuItem::with_id(app, *id, *label, true, None::<&str>))
         .collect::<Result<_, _>>()?;
     let pause_tomorrow =
         MenuItem::with_id(app, "pause_tomorrow", "Until tomorrow", true, None::<&str>)?;
-    let pause_refs: Vec<&dyn tauri::menu::IsMenuItem<R>> = pause_items
+    let pause_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = pause_items
         .iter()
-        .map(|i| i as &dyn tauri::menu::IsMenuItem<R>)
-        .chain(std::iter::once(&pause_tomorrow as &dyn tauri::menu::IsMenuItem<R>))
+        .map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+        .chain(std::iter::once(&pause_tomorrow as &dyn tauri::menu::IsMenuItem<tauri::Wry>))
         .collect();
     let pause_menu = Submenu::with_id_and_items(app, "pause_for", "Pause for", true, &pause_refs)?;
 
@@ -110,6 +114,9 @@ pub fn setup_tray<R: Runtime>(
             if let Some((_, _, minutes)) = PAUSE_ITEMS.iter().find(|(pid, _, _)| *pid == id) {
                 let until = suppress.pause_for(*minutes);
                 persist(SETTING_PAUSE_UNTIL, &until.to_rfc3339());
+                // Expiry timer: replays any still-pending prompt when the
+                // pause runs out (no-op if re-paused/resumed meanwhile).
+                crate::arm_pause_expiry_timer(app, db.clone(), until);
                 eprintln!("cenno: paused until {until}");
                 return;
             }
@@ -118,6 +125,7 @@ pub fn setup_tray<R: Runtime>(
                 "pause_tomorrow" => {
                     let until = suppress.pause_until_tomorrow();
                     persist(SETTING_PAUSE_UNTIL, &until.to_rfc3339());
+                    crate::arm_pause_expiry_timer(app, db.clone(), until);
                     eprintln!("cenno: paused until tomorrow ({until})");
                 }
                 "resume" => {
@@ -125,12 +133,19 @@ pub fn setup_tray<R: Runtime>(
                     // Empty value = no pause (loader treats unparseable as none).
                     persist(SETTING_PAUSE_UNTIL, "");
                     eprintln!("cenno: resumed");
+                    // Re-show anything that arrived while paused. (Internally
+                    // re-checks suppression — a fullscreen app keeps it quiet.)
+                    crate::replay_pending(app);
                 }
                 "hide_fullscreen" => {
                     let checked = hide_fullscreen_handle.is_checked().unwrap_or(true);
                     suppress.set_hide_in_fullscreen(checked);
                     persist(SETTING_HIDE_IN_FULLSCREEN, if checked { "true" } else { "false" });
                     eprintln!("cenno: hide_in_fullscreen = {checked}");
+                    if !checked {
+                        // Quiet mode just turned off — surface whatever queued.
+                        crate::replay_pending(app);
+                    }
                 }
                 "quit" => {
                     app.exit(0);

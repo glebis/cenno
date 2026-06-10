@@ -74,12 +74,18 @@ cenno ask "Question" --body "Optional markdown body" --timeout 30
 
 # Exit codes: 0 = answered, 2 = timed out, 1 = not running / error
 
-# Run headless — no main window shown until a prompt arrives (tray icon: plan 4)
+# Run headless — no main window shown until a prompt arrives
 cenno --tray
 
 # MCP bridge: pipe stdin/stdout to the socket, launching the app if needed
 cenno --mcp-stdio
 ```
+
+---
+
+## Tray
+
+Full tray docs land with the close-out; one behavior worth knowing now: pause ("Pause for …") and "Don't show in fullscreen" suppress the *display* only — prompts still register and agents keep their normal timeout contract. Suppressed prompts reappear when suppression lifts: on "Resume now", on unchecking the fullscreen toggle, when a pause expires, or when the next prompt arrives. Exiting fullscreen has **no event hook in v1** — cenno doesn't notice the instant a fullscreen app goes away, so a queued prompt waits for one of those triggers instead of popping up immediately.
 
 ---
 

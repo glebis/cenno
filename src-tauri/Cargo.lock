@@ -501,6 +501,8 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "core-foundation",
+ "core-graphics 0.25.0",
  "csv",
  "dirs 5.0.1",
  "parking_lot",

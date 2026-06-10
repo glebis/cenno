@@ -43,6 +43,10 @@ csv = "1"
 # branch `v2` (Tauri 2.x); pinned by rev so the pin survives lockfile churn.
 # (Cargo forbids specifying both `branch` and `rev`.)
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1a" }
+# Fullscreen detection: CGWindowList + CGDisplay bounds heuristic
+# (suppress.rs). Both crates are already in tauri's macOS dep tree.
+core-graphics = "0.25"
+core-foundation = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
