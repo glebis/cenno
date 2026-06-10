@@ -12,12 +12,31 @@ fn main() {
             run_ask(title, body, timeout);
         }
         None => {
-            // No subcommand → launch the Tauri GUI, honoring --tray.
+            // No subcommand → either bridge stdio to the MCP socket, or
+            // launch the Tauri GUI (honoring --tray).
             if cli.mcp_stdio {
-                eprintln!("not yet implemented (Task 9)");
-                std::process::exit(1);
+                run_mcp_stdio();
             }
             cenno_lib::run(cli.tray);
+        }
+    }
+}
+
+/// `--mcp-stdio`: pump stdin/stdout to the app's MCP socket, autolaunching
+/// the app if it isn't running. Exits 0 on clean EOF, 1 on error.
+fn run_mcp_stdio() -> ! {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("failed to build tokio runtime");
+
+    match rt.block_on(cenno_lib::bridge::run_stdio_bridge(
+        cenno_lib::mcp::socket_path(),
+    )) {
+        Ok(()) => std::process::exit(0),
+        Err(e) => {
+            eprintln!("cenno --mcp-stdio: {e}");
+            std::process::exit(1);
         }
     }
 }
