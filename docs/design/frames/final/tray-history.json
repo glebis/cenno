@@ -8,7 +8,7 @@
   "provider": "openai",
   "n": 1,
   "seed": 111,
-  "output": "/Users/glebkalinin/ai_projects/cenno/docs/design/frames/final/tray-history.png",
+  "output": "docs/design/frames/final/tray-history.png",
   "project": null,
   "estimated_cost": 0.21
 }

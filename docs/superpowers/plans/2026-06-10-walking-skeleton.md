@@ -33,7 +33,7 @@ In `src-tauri/tauri.conf.json` set:
 ```json
 {
   "productName": "cenno",
-  "identifier": "com.glebkalinin.cenno",
+  "identifier": "app.cenno",
   "app": { "windows": [{ "title": "cenno", "width": 720, "height": 520, "visible": true }] }
 }
 ```
@@ -445,7 +445,7 @@ In `setup`: create the registry, manage it as state, start the socket server at 
 ```bash
 cargo test --test mcp_socket -- --nocapture
 ```
-against the live socket path (`~/Library/Application Support/com.glebkalinin.cenno/mcp.sock`) by temporarily pointing the test at it. Expect: panel shows the prompt, typing an answer returns it to the caller.
+against the live socket path (`~/Library/Application Support/app.cenno/mcp.sock`) by temporarily pointing the test at it. Expect: panel shows the prompt, typing an answer returns it to the caller.
 
 - [ ] **Step 7: Commit** — `git add -A && git commit -m "feat: panel UI renders prompts and resolves them via answer_prompt"`
 
@@ -572,7 +572,7 @@ pub async fn run_stdio_bridge(socket_path: std::path::PathBuf) -> anyhow::Result
 
 Add to a test project's `.mcp.json`:
 ```json
-{ "mcpServers": { "cenno": { "command": "/Users/glebkalinin/ai_projects/cenno/src-tauri/target/debug/cenno", "args": ["--mcp-stdio"] } } }
+{ "mcpServers": { "cenno": { "command": "~/ai_projects/cenno/src-tauri/target/debug/cenno", "args": ["--mcp-stdio"] } } }
 ```
 From Claude Code in that project: call the `ask_user` tool. Expect: cenno launches in tray mode if not running, panel appears, the answer comes back as the tool result.
 

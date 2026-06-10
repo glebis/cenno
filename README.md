@@ -100,7 +100,7 @@ cenno export --since 2025-06-01T09:00:00Z | jq '.[0].answer'
 ### Where the database lives
 
 ```
-~/Library/Application Support/com.glebkalinin.cenno/cenno.db
+~/Library/Application Support/app.cenno/cenno.db
 ```
 
 The file is created on first launch, permissions `0600` (owner read/write only).

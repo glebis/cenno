@@ -8,7 +8,7 @@
   "provider": "openai",
   "n": 1,
   "seed": 106,
-  "output": "/Users/glebkalinin/ai_projects/cenno/docs/design/frames/drafts/fullscreen-ema-1-scale.png",
+  "output": "docs/design/frames/drafts/fullscreen-ema-1-scale.png",
   "project": null,
   "estimated_cost": 0.006
 }

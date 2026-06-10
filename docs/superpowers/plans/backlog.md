@@ -8,7 +8,7 @@ Carried out of the plan-1 final review (2026-06-10). Each item names the plan th
 ## Plan 4 — surfaces, policy, history
 
 ### Done ✓
-- ~~SQLite history table + `cenno export` CLI~~ ✓ — DB at `~/Library/Application Support/com.glebkalinin.cenno/cenno.db`, every prompt outcome recorded, export in JSON/CSV
+- ~~SQLite history table + `cenno export` CLI~~ ✓ — DB at `~/Library/Application Support/app.cenno/cenno.db`, every prompt outcome recorded, export in JSON/CSV
 - ~~Tray icon (Codex-generated template icon, pause/fullscreen menu, pause semantics + replay)~~ ✓ — live; popover inbox/history UI still pending (plan 5)
 - ~~Pause timers and fullscreen quiet mode with pending replay~~ ✓
 

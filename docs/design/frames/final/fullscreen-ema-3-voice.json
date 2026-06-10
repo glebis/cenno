@@ -8,7 +8,7 @@
   "provider": "openai",
   "n": 1,
   "seed": 108,
-  "output": "/Users/glebkalinin/ai_projects/cenno/docs/design/frames/final/fullscreen-ema-3-voice.png",
+  "output": "docs/design/frames/final/fullscreen-ema-3-voice.png",
   "project": null,
   "estimated_cost": 0.21
 }

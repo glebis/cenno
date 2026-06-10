@@ -22,7 +22,7 @@ cd "$(dirname "$0")/.."
 
 BIN="${CENNO_BIN:-src-tauri/target/release/cenno}"
 OUT="${CENNO_QA_DIR:-docs/design/qa}"
-SOCK="$HOME/Library/Application Support/com.glebkalinin.cenno/mcp.sock"
+SOCK="$HOME/Library/Application Support/app.cenno/mcp.sock"
 RENDER_WAIT="${CENNO_QA_RENDER_WAIT:-3}"
 TIMEOUT_S=12
 

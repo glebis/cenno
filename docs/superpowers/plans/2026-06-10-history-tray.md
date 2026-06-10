@@ -23,7 +23,7 @@
 
 **Files:** modify `src-tauri/src/cli.rs`, `src-tauri/src/main.rs`; reuse `db.rs`.
 
-- [ ] `cenno export [--format json|csv] [--since RFC3339-or-YYYY-MM-DD]` — headless: opens `{data_dir}/com.glebkalinin.cenno/cenno.db` directly (reuse the `mcp::socket_path()` dir convention; factor `data_dir()` helper). JSON = array of row objects (stable field names = column names); CSV = header + rows. Empty DB → `[]` / header-only, exit 0. Missing DB → friendly stderr, exit 1.
+- [ ] `cenno export [--format json|csv] [--since RFC3339-or-YYYY-MM-DD]` — headless: opens `{data_dir}/app.cenno/cenno.db` directly (reuse the `mcp::socket_path()` dir convention; factor `data_dir()` helper). JSON = array of row objects (stable field names = column names); CSV = header + rows. Empty DB → `[]` / header-only, exit 0. Missing DB → friendly stderr, exit 1.
 - [ ] TDD: CLI parse tests; db-level export query tests (since-filter inclusive).
 - [ ] Live check: after an answered demo prompt, `cenno export | jq '.[0].answer'` returns it.
 - [ ] Gates + commit: `feat(history): cenno export — JSON/CSV history dump`

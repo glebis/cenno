@@ -8,7 +8,7 @@
   "provider": "openai",
   "n": 1,
   "seed": 105,
-  "output": "/Users/glebkalinin/ai_projects/cenno/docs/design/frames/final/panel-expired.png",
+  "output": "docs/design/frames/final/panel-expired.png",
   "project": null,
   "estimated_cost": 0.21
 }

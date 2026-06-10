@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Batch-generate cenno design frames via gpt-image-2 skill CLI."""
 import subprocess, sys, os
+from pathlib import Path
 
-CLI = "/Users/glebkalinin/.claude/skills/gpt-image-2/scripts/gpt_image_2.py"
-OUT = "/Users/glebkalinin/ai_projects/cenno/docs/design/frames"
+CLI = os.environ.get("GPT_IMAGE_CLI", "gpt_image_2.py")
+OUT = Path(__file__).parent
 
 STYLE = (
     "Flat minimal macOS UI design mockup in the visual style of the Reporter app by Nicholas Felton: "

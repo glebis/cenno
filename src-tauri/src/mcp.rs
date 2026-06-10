@@ -14,13 +14,13 @@ use std::sync::Arc;
 
 /// Bundle identifier — must match `identifier` in `tauri.conf.json`
 /// (asserted by the `identifier_matches_tauri_conf` unit test below).
-pub const APP_IDENTIFIER: &str = "com.glebkalinin.cenno";
+pub const APP_IDENTIFIER: &str = "app.cenno";
 
 /// Canonical per-user data directory for cenno.
 ///
-/// macOS: `~/Library/Application Support/com.glebkalinin.cenno/`
-/// Linux: `~/.local/share/com.glebkalinin.cenno/`
-/// Windows: `%APPDATA%\com.glebkalinin.cenno\`
+/// macOS: `~/Library/Application Support/app.cenno/`
+/// Linux: `~/.local/share/app.cenno/`
+/// Windows: `%APPDATA%\app.cenno\`
 ///
 /// This MUST agree with what Tauri's `app.path().app_data_dir()` resolves to.
 /// In debug builds `lib.rs` asserts the socket paths match so any divergence

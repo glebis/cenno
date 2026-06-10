@@ -8,7 +8,7 @@
   "provider": "openai",
   "n": 1,
   "seed": 101,
-  "output": "/Users/glebkalinin/ai_projects/cenno/docs/design/frames/drafts/panel-mood-checkin.png",
+  "output": "docs/design/frames/drafts/panel-mood-checkin.png",
   "project": null,
   "estimated_cost": 0.006
 }
