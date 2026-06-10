@@ -190,6 +190,13 @@
   color: var(--cenno-surface);
 }
 
+/* Button labels arrive as nested Text components; they must take the
+   button's color (e.g. surface-on-white for primary), not --cenno-text —
+   otherwise primary labels are white-on-white. */
+.cenno-button .cenno-text {
+  color: inherit;
+}
+
 .cenno-button--secondary {
   background: transparent;
   color: var(--cenno-text-dim);

@@ -2,15 +2,20 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import PromptPanel, { Prompt } from "./PromptPanel";
+import PromptPanel, { Prompt, Via } from "./PromptPanel";
 import "./App.css";
 
+// The Rust side emits the whole AskRequest as `request` (see PromptEvent in
+// src-tauri/src/lib.rs); we pick out the fields the panel renders.
 interface PromptEvent {
   id: string;
   request: {
     title: string;
     body_md: string;
     input: { kind: string };
+    choices?: string[];
+    flow?: Prompt["flow"];
+    progress?: { step: number; total: number };
   };
 }
 
@@ -20,14 +25,22 @@ function App() {
   useEffect(() => {
     const unlisten = listen<PromptEvent>("prompt", (event) => {
       const { id, request } = event.payload;
-      setPrompt({ id, title: request.title, body_md: request.body_md, input: request.input });
+      setPrompt({
+        id,
+        title: request.title,
+        body_md: request.body_md,
+        input: request.input,
+        choices: request.choices,
+        flow: request.flow,
+        progress: request.progress,
+      });
     });
     return () => {
       unlisten.then((fn) => fn());
     };
   }, []);
 
-  async function handleAnswer(id: string, answer: string, via: "text") {
+  async function handleAnswer(id: string, answer: string, via: Via) {
     let resolved: boolean;
     try {
       resolved = await invoke<boolean>("answer_prompt", { id, answer, via });
