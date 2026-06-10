@@ -72,13 +72,68 @@ Proceed only on `"answer": "yes"`. On timeout (`answered: false`), do NOT procee
   "choices": ["Postgres", "SQLite", "in-memory"], "flow": "question" }
 ```
 
-**Multi-step questionnaire** — one question per call, carry `progress`:
+**Multi-step questionnaire** — prefer the [`ask_sequence`](#the-ask_sequence-tool--several-questions-in-one-panel) tool, which keeps the panel up and advances instantly between questions. Only hand-roll a loop of single `ask_user` calls (carrying `progress` yourself) when the next question genuinely depends on the previous answer:
 
 ```json
 { "title": "Energy level?", "input": { "kind": "scale" },
   "flow": "ema", "progress": { "step": 1, "total": 3 } }
 ```
 Fire them sequentially, each blocking on the previous answer. If any step times out, stop and don't record a partial result.
+
+## The `ask_sequence` tool — several questions in one panel
+
+When you have a short questionnaire — a few related questions where the panel should stay up and advance instantly between them — call `ask_sequence` instead of firing `ask_user` N times. The questions run back-to-back in a single panel: answering one swaps the content to the next with no hide/reshow gap, and the panel hides only after the last.
+
+```jsonc
+{
+  "questions": [ /* an array of ask_user args, in order */ ],
+  "flow": "ema"   // optional default flow applied to any question that lacks its own
+}
+```
+
+- **Progress dots auto-fill.** You don't need to set `progress` on each question — `ask_sequence` fills `{step: i+1, total: N}` for any question that omits it, so the dots advance 1/3 → 2/3 → 3/3 on their own.
+- **Per-question timeout ends the run early.** If a question times out, the run stops there. The returned `answers` array is exactly as long as the user got: the last entry is then the `{answered: false, prompt_id}` timeout shape, and no later questions are shown.
+- **Answers come back as an ordered array** aligned to `questions`. Returns `{"answers": [ {answer, via, elapsed_s}, ... ]}`. Each question is also recorded as its own history row, same as `ask_user`.
+
+A concrete 3-question check-in — a mood scale (custom 1–5 via `a2ui`), a choice, then a short text:
+
+```json
+{
+  "flow": "ema",
+  "questions": [
+    {
+      "title": "How's your mood right now?",
+      "timeout_s": 60,
+      "a2ui": [
+        { "version": "v0.9", "createSurface": { "surfaceId": "main", "catalogId": "cenno:catalog/v1" } },
+        { "version": "v0.9", "updateComponents": { "surfaceId": "main", "components": [
+          { "id": "root",  "component": "Column", "children": ["col"] },
+          { "id": "col",   "component": "Column", "children": ["title", "scale"] },
+          { "id": "title", "component": "Text", "text": "How's your mood right now?", "variant": "h2" },
+          { "id": "scale", "component": "Scale", "min": 1, "max": 5,
+            "minLabel": "low", "maxLabel": "great", "value": { "path": "/scale" },
+            "selectAction": { "event": { "name": "submit-scale",
+              "context": { "value": { "path": "/scale" }, "via": "choice" } } } }
+        ] } },
+        { "version": "v0.9", "updateDataModel": { "surfaceId": "main", "path": "/", "value": {} } }
+      ]
+    },
+    {
+      "title": "What's pulling at your attention?",
+      "input": { "kind": "choice" },
+      "choices": ["Work", "People", "Body", "Nothing in particular"],
+      "timeout_s": 60
+    },
+    {
+      "title": "Anything you want to note?",
+      "input": { "kind": "text" },
+      "timeout_s": 60
+    }
+  ]
+}
+```
+
+You'll get back `{"answers": ["4"-shaped, "Work"-shaped, "…text…"-shaped]}` — three ordered entries (fewer if a step timed out). Prefer `ask_sequence` over a hand-rolled loop of `ask_user` calls whenever the questions belong together: it keeps the panel up and the advance is instant.
 
 ## Custom scales (1–5, custom endpoints) via `a2ui`
 

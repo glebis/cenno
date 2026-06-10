@@ -110,6 +110,10 @@ Once installed it activates on its own whenever a task calls for asking the user
 
 Returns `{answer, via, elapsed_s}`, or `{answered: false, prompt_id}` on timeout.
 
+### `ask_sequence`
+
+Run several questions in one panel, advancing instantly between them — `ask_sequence({questions: [<ask_user args>…], flow?})` returns an ordered `answers` array. Progress dots auto-fill; a per-question timeout ends the run early (the `answers` array is as long as the user got). See the [`cenno` skill](skills/cenno) for a worked 3-question example.
+
 ## CLI
 
 ```bash
