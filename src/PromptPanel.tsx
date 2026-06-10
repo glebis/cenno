@@ -90,9 +90,17 @@ class SurfaceErrorBoundary extends Component<
 export default function PromptPanel({
   prompt,
   onAnswer,
+  onDismiss,
 }: {
   prompt: Prompt;
   onAnswer: (id: string, answer: string, via: Via) => void;
+  /**
+   * The ✕ chrome dismisses the prompt: App invokes dismiss_prompt(id), which
+   * ends the parked ask() as a no-answer (TimedOut) — the same wire contract
+   * the agent already handles on timeout. Optional so existing callers/tests
+   * that only answer keep working.
+   */
+  onDismiss?: (id: string) => void;
 }) {
   // Refs keep the action handler (created once per prompt.id) pointed at the
   // latest props without rebuilding the processor on every render.
@@ -194,6 +202,22 @@ export default function PromptPanel({
       data-tauri-drag-region
     >
       <div className="prompt-panel__drag-strip" data-tauri-drag-region aria-hidden="true" />
+      {/* Chrome layer — OUTSIDE the A2UI surface so simple and rich payloads
+          both get the wordmark + dismiss ✕. Absolutely positioned across the
+          top (App.css); not a drag region (the ✕ is interactive — with
+          acceptFirstMouse the single click both keys the panel and dismisses).
+          z-index above the drag strip so the ✕ stays clickable. */}
+      <div className="prompt-panel__chrome">
+        <span className="prompt-panel__wordmark">cenno</span>
+        <button
+          type="button"
+          className="prompt-panel__dismiss"
+          aria-label="Dismiss"
+          onClick={() => onDismiss?.(prompt.id)}
+        >
+          ✕
+        </button>
+      </div>
       {/* Measurement wrapper (flex:none → always its natural height); the
           root itself is 100vh so its scrollHeight can't size DOWN.
           Deliberately NOT a drag region: with acceptFirstMouse the very

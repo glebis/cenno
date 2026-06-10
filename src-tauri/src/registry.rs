@@ -66,6 +66,22 @@ impl PromptRegistry {
         }
     }
 
+    /// User-initiated dismiss (the panel's ✕): take the pending sender and
+    /// DROP it (don't send), so the parked `ask()`'s `rx.await` resolves to
+    /// `Err` and returns `TimedOut` — the no-answer wire shape the agent
+    /// already handles on timeout, so dismiss needs no protocol change.
+    /// Mirrors resolve()'s sender-take semantics: a dismissed prompt is no
+    /// longer answerable (pending() won't replay it). Returns false for an
+    /// unknown id (or one whose sender was already consumed).
+    pub fn dismiss(&self, id: &str) -> bool {
+        let mut map = self.inner.lock();
+        match map.get_mut(id).and_then(|p| p.tx.take()) {
+            // Dropping the taken sender here ends ask()'s rx.await with Err.
+            Some(_tx) => true,
+            None => false,
+        }
+    }
+
     pub fn pending_ids(&self) -> Vec<String> {
         self.inner.lock().keys().cloned().collect()
     }
@@ -163,6 +179,34 @@ mod tests {
         let id = pending[0].0.clone();
         assert!(reg.resolve(&id, "done".into(), Via::Text));
         task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn dismiss_completes_ask_as_timed_out() {
+        let reg = PromptRegistry::new();
+        let reg2 = reg.clone();
+        // Long timeout so the only way ask() returns is via dismiss, not a
+        // real elapse.
+        let long: AskRequest = serde_json::from_str(r#"{"title":"t","timeout_s":30}"#).unwrap();
+        let task = tokio::spawn(async move { reg2.ask(long, |_id, _req| {}).await });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let id = reg.pending_ids()[0].clone();
+        assert!(reg.dismiss(&id));
+        match task.await.unwrap() {
+            AskResponse::TimedOut { prompt_id, answered } => {
+                assert_eq!(prompt_id, id);
+                assert!(!answered);
+            }
+            _ => panic!("expected TimedOut from a dismissed prompt"),
+        }
+        // A dismissed prompt is no longer answerable: pending() must not
+        // replay it (mirrors resolve()'s sender-take semantics).
+        assert!(reg.pending().is_empty());
+    }
+
+    #[tokio::test]
+    async fn dismiss_unknown_id_is_false() {
+        assert!(!PromptRegistry::new().dismiss("nope"));
     }
 
     #[tokio::test]

@@ -176,6 +176,26 @@ function App() {
     });
   }
 
+  // User clicked the panel's ✕: end the parked ask() as a no-answer
+  // (dismiss_prompt → registry.dismiss → ask() returns TimedOut, the same
+  // wire shape the agent already handles on timeout) and take the panel down
+  // SILENTLY — dismiss isn't an answer, so no "noted." linger. Bump the hide
+  // generation like the answer path so the timeout/linger timers bail instead
+  // of fighting this teardown.
+  async function handleDismiss(id: string) {
+    hideGenerationRef.current += 1;
+    try {
+      await invoke<boolean>("dismiss_prompt", { id });
+    } catch (e) {
+      // Even if the dismiss round-trip fails, take the panel down: the user
+      // asked for it gone. The prompt will time out on its own server-side.
+      console.error("dismiss_prompt failed:", e);
+    }
+    setAnswered(false);
+    setActive(null);
+    void hideWindow();
+  }
+
   if (!active) return null;
 
   if (answered) {
@@ -197,7 +217,12 @@ function App() {
   // key={prompt.id}: a new prompt replacing the current one must remount the
   // panel so it doesn't inherit the half-typed text of the old prompt.
   return (
-    <PromptPanel key={active.prompt.id} prompt={active.prompt} onAnswer={handleAnswer} />
+    <PromptPanel
+      key={active.prompt.id}
+      prompt={active.prompt}
+      onAnswer={handleAnswer}
+      onDismiss={handleDismiss}
+    />
   );
 }
 

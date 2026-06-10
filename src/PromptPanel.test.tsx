@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, it, expect, vi, type MockInstance } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import PromptPanel, { Prompt } from "./PromptPanel";
@@ -45,7 +45,9 @@ describe("PromptPanel", () => {
       choices: ["Deep work", "Email"],
     };
     render(<PromptPanel prompt={prompt} onAnswer={onAnswer} />);
-    const chips = screen.getAllByRole("button");
+    // Scope to the surface so the always-present chrome ✕ doesn't count.
+    const surface = document.querySelector(".prompt-panel__content")!;
+    const chips = within(surface as HTMLElement).getAllByRole("button");
     expect(chips).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Deep work" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Email" }));
@@ -178,6 +180,46 @@ describe("PromptPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     expect(onAnswer).toHaveBeenCalledWith("p_9", "ok", "text");
     errorSpy.mockRestore();
+  });
+
+  describe("panel chrome", () => {
+    it("renders the cenno wordmark and a Dismiss button", () => {
+      render(<PromptPanel prompt={base} onAnswer={() => {}} />);
+      expect(screen.getByText("cenno")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
+    });
+
+    it("calls onDismiss with the prompt id when ✕ is clicked", () => {
+      const onDismiss = vi.fn();
+      render(
+        <PromptPanel prompt={base} onAnswer={() => {}} onDismiss={onDismiss} />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(onDismiss).toHaveBeenCalledWith("p_1");
+    });
+
+    it("renders chrome around a native a2ui payload too", () => {
+      const prompt: Prompt = {
+        ...base,
+        id: "p_chrome_a2ui",
+        a2ui: [
+          { createSurface: { surfaceId: "main", catalogId: "cenno:catalog/v1" } },
+          {
+            updateComponents: {
+              surfaceId: "main",
+              components: [
+                { id: "root", component: "Column", children: ["t"] },
+                { id: "t", component: "Text", text: "rich surface" },
+              ],
+            },
+          },
+        ],
+      };
+      render(<PromptPanel prompt={prompt} onAnswer={() => {}} />);
+      expect(screen.getByText("rich surface")).toBeTruthy();
+      expect(screen.getByText("cenno")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
+    });
   });
 
   describe("content-driven panel height", () => {
