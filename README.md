@@ -14,7 +14,7 @@ Built for time-sensitive, low-friction interactions: mood check-ins, EMA questio
   <img src="docs/design/qa/qa-mood.png" alt="mood check-in panel" width="380">
   <img src="docs/design/qa/qa-scale.png" alt="EMA scale panel with dot pagination" width="380">
 </p>
-<p align="center"><em>Actual panels: a mood check-in and a multi-step EMA scale. One question per screen, full-bleed color per flow, no chrome.</em></p>
+<p align="center"><em>Actual panels: a mood check-in and a multi-step EMA scale. One question per screen, full-bleed color per flow, quiet <code>cenno</code> wordmark and dismiss ✕ — nothing else.</em></p>
 
 > *Fare un cenno* — Italian: to give a small sign. To nod (*mi ha fatto un cenno*), to mention briefly (*ha fatto un cenno al problema*), to beckon silently (*mi ha fatto cenno di entrare*). That's the whole interaction model: agents make a small sign, you answer with one.
 
