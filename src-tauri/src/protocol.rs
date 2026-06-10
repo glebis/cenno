@@ -74,7 +74,7 @@ fn default_timeout() -> u64 {
     120
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Via {
     Voice,
@@ -86,7 +86,7 @@ pub enum Via {
 ///
 /// Serialized `#[serde(untagged)]`: the two variants are discriminated by
 /// their disjoint keys — `answer` (Answered) vs `answered` (TimedOut).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 pub enum AskResponse {
     Answered { answer: String, via: Via, elapsed_s: f64 },
@@ -96,9 +96,74 @@ pub enum AskResponse {
     TimedOut { answered: bool, prompt_id: String },
 }
 
+/// One `ask_sequence` call: N questions run back-to-back in a single panel.
+/// `flow` is an optional default applied to any question that lacks its own.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SequenceRequest {
+    pub questions: Vec<AskRequest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow: Option<Flow>,
+}
+
+/// Ordered answers for an `ask_sequence` call — one entry per question that
+/// ran. A timeout ends the run early, so `answers` may be shorter than the
+/// question list (the last entry is then the `TimedOut` shape).
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SequenceResponse {
+    pub answers: Vec<AskResponse>,
+}
+
+/// Per-prompt sequence marker attached to a `prompt` event so the frontend
+/// knows a question belongs to an `ask_sequence` run and must NOT hide between
+/// steps (it swaps content instead, hiding only after `last`). Absent for a
+/// plain `ask_user` prompt.
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+pub struct SeqMeta {
+    pub index: u32,
+    pub total: u32,
+    pub last: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sequence_request_roundtrips() {
+        let json = r#"{"questions":[{"title":"a"},{"title":"b"}],"flow":"question"}"#;
+        let req: SequenceRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.questions.len(), 2);
+        assert_eq!(req.questions[0].title, "a");
+        assert!(matches!(req.flow, Some(Flow::Question)));
+        let back = serde_json::to_string(&req).unwrap();
+        let round: SequenceRequest = serde_json::from_str(&back).unwrap();
+        assert_eq!(round.questions.len(), 2);
+    }
+
+    #[test]
+    fn sequence_request_empty_questions_is_valid() {
+        let req: SequenceRequest = serde_json::from_str(r#"{"questions":[]}"#).unwrap();
+        assert!(req.questions.is_empty());
+        assert!(req.flow.is_none());
+        // flow omitted from the wire when None.
+        let back = serde_json::to_string(&req).unwrap();
+        assert!(!back.contains("flow"));
+    }
+
+    #[test]
+    fn sequence_response_serializes_ordered_answers() {
+        let resp = SequenceResponse {
+            answers: vec![
+                AskResponse::Answered { answer: "y".into(), via: Via::Text, elapsed_s: 1.0 },
+                AskResponse::TimedOut { answered: false, prompt_id: "p_1".into() },
+            ],
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert_eq!(
+            json,
+            r#"{"answers":[{"answer":"y","via":"text","elapsed_s":1.0},{"answered":false,"prompt_id":"p_1"}]}"#
+        );
+    }
 
     #[test]
     fn ask_request_roundtrip_with_defaults() {

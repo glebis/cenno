@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-06-10T15:18:30.853998",
+  "prompt": "A single macOS app icon: rounded-square (squircle) filled with flat solid deep blue #1E4FD8. Centered on it, the exact logo mark from the reference image (thick circular arc beckoning over a filled dot) in pure white. Crisp flat vector look, soft drop shadow under the icon, presented on a neutral light gray background.",
+  "preset": null,
+  "platform": null,
+  "thinking": "off",
+  "quality": "high",
+  "provider": "openai",
+  "n": 1,
+  "seed": null,
+  "output": "docs/design/brand/generated/app-icon.png",
+  "project": null,
+  "estimated_cost": 0.21
+}

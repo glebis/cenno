@@ -11,7 +11,7 @@ pub mod updater;
 
 use tauri::{Emitter, Manager};
 
-use crate::protocol::{AskRequest, Via};
+use crate::protocol::{AskRequest, SeqMeta, Via};
 use crate::registry::PromptRegistry;
 use crate::suppress::SuppressionState;
 
@@ -28,6 +28,12 @@ struct PromptEvent {
     /// arms its auto-hide timer from this so a stale prompt never lingers
     /// past the moment the agent already received TimedOut.
     remaining_s: u64,
+    /// Set only for prompts emitted by an `ask_sequence` run; tells the
+    /// frontend to swap content (not hide) between steps and to hide only
+    /// after `last`. Absent for plain `ask_user` (and replayed) prompts —
+    /// `skip_serializing_if` keeps the single-ask wire shape byte-identical.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    seq: Option<SeqMeta>,
 }
 
 /// Cold-start race recovery: the agent's first ask can arrive (and emit the
@@ -39,7 +45,7 @@ fn pending_prompts(state: tauri::State<PromptRegistry>) -> Vec<PromptEvent> {
     state
         .pending()
         .into_iter()
-        .map(|(id, request, remaining_s)| PromptEvent { id, request, remaining_s })
+        .map(|(id, request, remaining_s)| PromptEvent { id, request, remaining_s, seq: None })
         .collect()
 }
 
@@ -220,7 +226,7 @@ pub(crate) fn replay_pending(handle: &tauri::AppHandle) {
     let registry = handle.state::<PromptRegistry>();
     if let Some((id, request, remaining_s)) = pick_replay(registry.pending()) {
         eprintln!("cenno: replaying pending prompt {id} ({remaining_s}s left)");
-        let payload = PromptEvent { id, request, remaining_s };
+        let payload = PromptEvent { id, request, remaining_s, seq: None };
         if let Err(e) = handle.emit("prompt", payload) {
             eprintln!("cenno: failed to emit replayed prompt: {e}");
         }
@@ -507,7 +513,7 @@ pub fn run() {
                 let result = mcp::start_socket_server(
                     sock_path,
                     registry,
-                    move |id, req| {
+                    move |id, req, seq| {
                         // Display gate: paused or fullscreen ON THE PANEL'S
                         // display → no emit, no show. The prompt stays
                         // pending (registry already registered it; agent
@@ -525,6 +531,8 @@ pub fn run() {
                             // A notify fires at ask() registration: nothing has
                             // elapsed yet, so the full budget remains.
                             remaining_s: req.timeout_s,
+                            // None for plain ask_user; Some for ask_sequence steps.
+                            seq,
                         };
                         if let Err(e) = handle.emit("prompt", payload) {
                             eprintln!("cenno: failed to emit prompt event: {e}");
