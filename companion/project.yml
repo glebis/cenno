@@ -61,6 +61,8 @@ targets:
       path: Sources/Watch/Info.plist
       properties:
         WKApplication: true
+        UIBackgroundModes:
+          - remote-notification
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: app.cenno.watch
     entitlements:
