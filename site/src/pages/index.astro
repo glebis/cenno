@@ -30,12 +30,49 @@ const TITLE = "cenno — agents ask. you answer.";
 const DESCRIPTION =
   "cenno is a macOS menu-bar app that lets AI agents ask you questions through minimal floating panels — without stealing your focus. Your answer goes back as structured data; every exchange stays in a local database that is yours.";
 
+const SKILL_URL = `${GITHUB}/tree/main/skills/cenno`;
+
+const PROMPT_UX = `Install cenno if it isn't already:
+  brew install --cask glebis/tap/cenno
+  npx skills add glebis/claude-skills@cenno -g -y
+Add cenno to this project's .mcp.json, then run a UX discovery interview — 6 questions:
+  1. What's the most important problem you're working on right now? (text)
+  2. Who are you building for? (choice: myself / a small team / customers / still figuring out)
+  3. What does success look like in 3 months? (text)
+  4. Where does your workflow break down most often? (text)
+  5. How confident do you feel about the current direction? (scale 1–7)
+  6. If you had to ship something tomorrow, what would you cut? (text)
+Use the question flow theme. Return a structured summary with key signals.`;
+
+const PROMPT_WELLBEING = `Install cenno if it isn't already:
+  brew install --cask glebis/tap/cenno
+  npx skills add glebis/claude-skills@cenno -g -y
+Add cenno to this project's .mcp.json, then run a wellbeing check-in — 5 questions:
+  1. How are you feeling right now? (choice: good / tired / stressed / anxious / calm)
+  2. How did you sleep last night? (scale 1–7, 1 = terrible, 7 = great)
+  3. Any physical tension or discomfort? (text)
+  4. Is anything weighing on your mind? (text)
+  5. What would help you most right now? (choice: a break / movement / food / talk to someone / just keep going)
+Use the mood flow theme. Finish with a gentle summary — notice patterns, don't diagnose.`;
+
+const PROMPT_GOALS = `Install cenno if it isn't already:
+  brew install --cask glebis/tap/cenno
+  npx skills add glebis/claude-skills@cenno -g -y
+Add cenno to this project's .mcp.json, then run a goals alignment check-in — 5 questions:
+  1. What's your single most important priority this week? (text)
+  2. Are you working on it today? (confirm)
+  3. How aligned does today feel with your longer-term goals? (scale 1–7)
+  4. What keeps pulling you off track? (text)
+  5. One thing worth protecting time for tomorrow? (text)
+Use the reminder flow theme. Save answers to goals-checkin.md and return a short reflection.`;
+
 const panels = [
   { id: "hero", flow: "mood", label: "Introduction" },
   { id: "panels", flow: "paper", label: "What it looks like" },
   { id: "how", flow: "reminder", label: "How it works" },
   { id: "wire", flow: "question", label: "Quickstart" },
-  { id: "data", flow: "ema", label: "Privacy and policy" },
+  { id: "agents", flow: "ema", label: "Getting started for agents" },
+  { id: "data", flow: "reminder", label: "Privacy and policy" },
   { id: "dev", flow: "paper", label: "For developers" },
   { id: "ship", flow: "ambient", label: "Download and links" },
 ];
@@ -61,9 +98,12 @@ const panels = [
     <meta property="og:image:width" content="1280" />
     <meta property="og:image:height" content="600" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@glebkalinin" />
+    <meta name="twitter:creator" content="@glebkalinin" />
     <meta name="twitter:title" content={TITLE} />
     <meta name="twitter:description" content={DESCRIPTION} />
     <meta name="twitter:image" content="https://cenno.salient.community/og.png" />
+    <meta name="twitter:image:alt" content="cenno — agents ask. you answer." />
     <script
       type="application/ld+json"
       set:html={JSON.stringify({
@@ -228,8 +268,63 @@ const panels = [
       </div>
     </section>
 
-    <!-- 5 · EMA — data & respect -->
-    <section class="panel" id="data" data-flow="ema" aria-label="Privacy and policy">
+    <!-- 5 · EMA — getting started for agents -->
+    <section class="panel" id="agents" data-flow="ema" aria-label="Getting started for agents">
+      <div class="panel-body reveal">
+        <p class="caption">Getting started · For agents</p>
+        <h2>Three prompts.<br />Drop one in.</h2>
+        <p class="lede agent-lede">
+          cenno speaks MCP — any agent that knows the
+          <a href={SKILL_URL}>cenno skill</a> can ask you questions through it.
+          Copy a prompt below and hand it to Claude Code, Claude Desktop, or any MCP-capable agent.
+        </p>
+        <div class="recipes">
+          <div class="recipe">
+            <div class="recipe-header">
+              <div class="recipe-meta">
+                <p class="caption recipe-label">01 · UX &amp; product discovery</p>
+                <p class="recipe-desc">Six questions on priorities, audience, direction, and trade-offs. Useful before a work session or a planning call.</p>
+              </div>
+              <button class="btn btn-ghost copy recipe-copy" data-copy={PROMPT_UX} type="button">
+                <span class="copy-hint" role="status">copy</span>
+              </button>
+            </div>
+            <pre><code>{PROMPT_UX}</code></pre>
+          </div>
+          <div class="recipe">
+            <div class="recipe-header">
+              <div class="recipe-meta">
+                <p class="caption recipe-label">02 · Wellbeing check-in</p>
+                <p class="recipe-desc">Mood, sleep, body, and mind — five questions that surface how you actually are, not just how you say you are.</p>
+              </div>
+              <button class="btn btn-ghost copy recipe-copy" data-copy={PROMPT_WELLBEING} type="button">
+                <span class="copy-hint" role="status">copy</span>
+              </button>
+            </div>
+            <pre><code>{PROMPT_WELLBEING}</code></pre>
+          </div>
+          <div class="recipe">
+            <div class="recipe-header">
+              <div class="recipe-meta">
+                <p class="caption recipe-label">03 · Goals alignment</p>
+                <p class="recipe-desc">Five questions to reconnect with what matters — before drift becomes a pattern.</p>
+              </div>
+              <button class="btn btn-ghost copy recipe-copy" data-copy={PROMPT_GOALS} type="button">
+                <span class="copy-hint" role="status">copy</span>
+              </button>
+            </div>
+            <pre><code>{PROMPT_GOALS}</code></pre>
+          </div>
+        </div>
+        <p class="code-note agents-skill-note">
+          Each prompt includes the install step — hand it to a fresh agent and it runs end to end.
+          The <a href={SKILL_URL}>cenno skill</a> in the repo teaches agents all input kinds, etiquette, and timeout handling.
+        </p>
+      </div>
+    </section>
+
+    <!-- 6 · REMINDER — data & respect -->
+    <section class="panel" id="data" data-flow="reminder" aria-label="Privacy and policy">
       <div class="panel-body reveal">
         <p class="caption">Whose data?</p>
         <h2>Yours. All of it.</h2>
@@ -250,7 +345,7 @@ const panels = [
       </div>
     </section>
 
-    <!-- 6 · PAPER — for developers -->
+    <!-- 7 · PAPER — for developers -->
     <section class="panel" id="dev" data-flow="paper" aria-label="For developers">
       <div class="panel-body reveal">
         <p class="caption">For developers</p>
@@ -294,7 +389,7 @@ const panels = [
       </div>
     </section>
 
-    <!-- 7 · AMBIENT — the confirm panel -->
+    <!-- 8 · AMBIENT — the confirm panel -->
     <section class="panel" id="ship" data-flow="ambient" aria-label="Download and links">
       <div class="panel-body ship-body reveal">
         <p class="caption">Confirm</p>
@@ -794,6 +889,47 @@ const panels = [
       .panel[data-flow="paper"] .claims code { color: var(--cenno-color-flow-ambient); }
       .panel[data-flow="paper"] .code-note { color: rgb(20 23 26 / 75%); }
       .dev-cta { margin-top: var(--cenno-space-4); }
+
+      /* ——— agent recipes ——————————————————————————————————— */
+      .agent-lede { margin-bottom: var(--cenno-space-4); }
+      .recipes {
+        display: flex; flex-direction: column; gap: var(--cenno-space-4);
+        margin-bottom: var(--cenno-space-3);
+      }
+      .recipe {
+        border-top: 1px solid var(--cenno-color-line);
+        padding-top: var(--cenno-space-3);
+        display: flex; flex-direction: column; gap: var(--cenno-space-2);
+      }
+      .recipe-header {
+        display: flex; align-items: flex-start;
+        justify-content: space-between; gap: var(--cenno-space-3);
+      }
+      .recipe-meta { display: flex; flex-direction: column; gap: var(--cenno-space-1); }
+      .recipe-label { color: var(--cenno-color-text-dim); }
+      .recipe-desc {
+        font-size: var(--cenno-type-body);
+        color: var(--cenno-color-text-dim);
+        max-width: 52ch;
+      }
+      .recipe pre {
+        background: rgb(20 23 26 / 25%);
+        border-radius: var(--cenno-radius-control);
+        padding: var(--cenno-space-3);
+        overflow-x: auto;
+        font-size: 13px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .recipe-copy {
+        flex-shrink: 0;
+        min-height: 36px;
+        padding: 4px var(--cenno-space-2);
+        font-size: var(--cenno-type-caption);
+        align-self: flex-start;
+      }
+      .agents-skill-note { max-width: 56ch; }
 
       /* ——— ship / footer ——————————————————————————————————— */
       .ship-body { text-align: center; }
