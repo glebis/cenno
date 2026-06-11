@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CennoShared-primary.dia",
+    "emit-module-dependencies" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CennoShared-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CennoShared-primary-emit-module.dia",
+    "pch" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CennoShared-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CennoShared-primary.swiftdeps"
+  },
+  "/Users/glebkalinin/ai_projects/cenno/companion/Sources/Shared/A2UIRouter.swift" : {
+    "const-values" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/A2UIRouter.swiftconstvalues",
+    "dependencies" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/A2UIRouter.d",
+    "diagnostics" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/A2UIRouter.dia",
+    "index-unit-output-path" : "/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/A2UIRouter.o",
+    "llvm-bc" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/A2UIRouter.bc",
+    "object" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/A2UIRouter.o",
+    "swift-dependencies" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/A2UIRouter.swiftdeps",
+    "swiftmodule" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/A2UIRouter~partial.swiftmodule"
+  },
+  "/Users/glebkalinin/ai_projects/cenno/companion/Sources/Shared/CloudKitRelay.swift" : {
+    "const-values" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CloudKitRelay.swiftconstvalues",
+    "dependencies" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CloudKitRelay.d",
+    "diagnostics" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CloudKitRelay.dia",
+    "index-unit-output-path" : "/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CloudKitRelay.o",
+    "llvm-bc" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CloudKitRelay.bc",
+    "object" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CloudKitRelay.o",
+    "swift-dependencies" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CloudKitRelay.swiftdeps",
+    "swiftmodule" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/CloudKitRelay~partial.swiftmodule"
+  },
+  "/Users/glebkalinin/ai_projects/cenno/companion/Sources/Shared/PromptRecord.swift" : {
+    "const-values" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/PromptRecord.swiftconstvalues",
+    "dependencies" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/PromptRecord.d",
+    "diagnostics" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/PromptRecord.dia",
+    "index-unit-output-path" : "/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/PromptRecord.o",
+    "llvm-bc" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/PromptRecord.bc",
+    "object" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/PromptRecord.o",
+    "swift-dependencies" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/PromptRecord.swiftdeps",
+    "swiftmodule" : "/Users/glebkalinin/ai_projects/cenno/companion/build/CennoCompanion.build/Debug-iphonesimulator/CennoShared.build/Objects-normal/arm64/PromptRecord~partial.swiftmodule"
+  }
+}
