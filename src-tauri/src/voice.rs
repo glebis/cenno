@@ -110,10 +110,10 @@ mod mac {
         format: Retained<AVAudioFormat>,
         request: Retained<SFSpeechAudioBufferRecognitionRequest>,
         task: Retained<SFSpeechRecognitionTask>,
-        /// Finalized segments so far. `Arc<Mutex<_>>` because the result
-        /// handler runs off the main thread. Does NOT include the field text
-        /// the user already had — the frontend prepends that.
-        committed: Arc<Mutex<String>>,
+        /// Accumulated dictation. `Arc<Mutex<_>>` because the result handler
+        /// runs off the main thread. Does NOT include the field text the user
+        /// already had — the frontend prepends that.
+        transcript: Arc<Mutex<Transcript>>,
     }
 
     thread_local! {
@@ -189,28 +189,93 @@ mod mac {
         }
     }
 
-    /// Append `seg` to the committed transcript with single-space joins.
-    fn commit_segment(committed: &Arc<Mutex<String>>, seg: &str) {
-        if seg.is_empty() {
-            return;
-        }
-        let mut c = committed.lock().unwrap();
-        if !c.is_empty() && !c.ends_with(' ') {
-            c.push(' ');
-        }
-        c.push_str(seg);
-        c.push(' ');
+    /// Accumulated dictation. `committed` holds utterances the recognizer has
+    /// moved past; `segment` is the current live utterance (its high-water
+    /// text). Apple's on-device recognizer auto-segments on a speech pause and
+    /// RESETS `formattedString` to the new utterance WITHOUT an isFinal — so we
+    /// detect the rollback ourselves and fold the prior utterance into
+    /// `committed` before adopting the new one. Nothing is ever dropped.
+    #[derive(Default)]
+    struct Transcript {
+        committed: String,
+        segment: String,
     }
 
-    /// Full transcript to display: everything committed plus the live segment.
-    fn full_transcript(committed: &Arc<Mutex<String>>, seg: &str) -> String {
-        let c = committed.lock().unwrap();
-        if c.is_empty() {
-            seg.to_string()
-        } else if c.ends_with(' ') || seg.is_empty() {
-            format!("{c}{seg}")
-        } else {
-            format!("{c} {seg}")
+    /// Length of the shared leading run of two strings, in chars.
+    fn common_prefix_len(a: &str, b: &str) -> usize {
+        a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count()
+    }
+
+    /// Is `new` a continuation of the live `segment`, or a fresh utterance?
+    ///
+    /// Within one utterance the recognizer's text either grows (`new` extends
+    /// `segment`), trims its tail while revising (`segment` extends `new`), or
+    /// revises a word in place (most of the leading text is preserved). A
+    /// pause-reset starts a new utterance that shares little with what came
+    /// before. We deliberately bias toward "reset": a false reset only
+    /// duplicates a little text (the user can edit), whereas a false
+    /// continuation would OVERWRITE — losing dictated words, which is the one
+    /// outcome we must never allow.
+    fn is_continuation(segment: &str, new: &str) -> bool {
+        if segment.is_empty() {
+            return true;
+        }
+        if new.starts_with(segment) || segment.starts_with(new) {
+            return true; // clean growth or tail-trim revision
+        }
+        // Word-level revision keeps most of the previous text as a shared
+        // prefix; require >= 60% of the previous segment preserved.
+        common_prefix_len(segment, new) * 5 >= segment.chars().count() * 3
+    }
+
+    impl Transcript {
+        /// Fold `seg` into the committed text with single-space joins.
+        fn commit(&mut self, seg: &str) {
+            if seg.is_empty() {
+                return;
+            }
+            if !self.committed.is_empty() && !self.committed.ends_with(' ') {
+                self.committed.push(' ');
+            }
+            self.committed.push_str(seg);
+            self.committed.push(' ');
+        }
+
+        /// Apply a partial transcript; returns the full text to display. Commits
+        /// the prior utterance first if the recognizer rolled over to a new one.
+        fn apply(&mut self, new: &str) -> String {
+            if self.segment.is_empty() {
+                self.segment = new.to_string();
+            } else if is_continuation(&self.segment, new) {
+                // Keep the high-water text so a transient shorter revision never
+                // loses the tail.
+                if new.chars().count() >= self.segment.chars().count() {
+                    self.segment = new.to_string();
+                }
+            } else {
+                // Pause-reset: the prior utterance is done — bank it, start anew.
+                let prior = std::mem::take(&mut self.segment);
+                self.commit(&prior);
+                self.segment = new.to_string();
+            }
+            self.display()
+        }
+
+        /// Finalize the live utterance (isFinal / stop): bank it and clear.
+        fn finalize(&mut self) {
+            let seg = std::mem::take(&mut self.segment);
+            self.commit(&seg);
+        }
+
+        /// committed + live segment, single-spaced.
+        fn display(&self) -> String {
+            if self.committed.is_empty() {
+                self.segment.clone()
+            } else if self.committed.ends_with(' ') || self.segment.is_empty() {
+                format!("{}{}", self.committed, self.segment)
+            } else {
+                format!("{} {}", self.committed, self.segment)
+            }
         }
     }
 
@@ -248,7 +313,7 @@ mod mac {
             };
 
             let cb_app = app.clone();
-            let committed = sess.committed.clone();
+            let transcript = sess.transcript.clone();
             let handler = RcBlock::new(
                 move |result: *mut SFSpeechRecognitionResult, error: *mut NSError| {
                     if GENERATION.load(Ordering::SeqCst) != generation {
@@ -257,20 +322,29 @@ mod mac {
                     if !result.is_null() {
                         let seg = unsafe { (*result).bestTranscription().formattedString() }
                             .to_string();
-                        // Live view never shrinks: committed segments + this one.
-                        emit(&cb_app, VoiceEvent::Partial { text: full_transcript(&committed, &seg) });
-                        if unsafe { (*result).isFinal() } {
-                            // Commit this segment and continue dictating with a
-                            // fresh request — survives the recognizer's limit.
-                            if seg.is_empty() {
-                                if EMPTY_RESTARTS.fetch_add(1, Ordering::SeqCst) + 1
+                        let is_final = unsafe { (*result).isFinal() };
+                        // apply() handles pause-resets (no isFinal) by banking the
+                        // prior utterance; the live view therefore never shrinks.
+                        let display = {
+                            let mut t = transcript.lock().unwrap();
+                            let d = t.apply(&seg);
+                            if is_final {
+                                t.finalize();
+                            }
+                            d
+                        };
+                        emit(&cb_app, VoiceEvent::Partial { text: display });
+                        if !seg.is_empty() {
+                            EMPTY_RESTARTS.store(0, Ordering::SeqCst);
+                        }
+                        if is_final {
+                            // The ~1-min hard limit: continue dictating on a fresh
+                            // request unless the recognizer has gone silent.
+                            if seg.is_empty()
+                                && EMPTY_RESTARTS.fetch_add(1, Ordering::SeqCst) + 1
                                     >= MAX_EMPTY_RESTARTS
-                                {
-                                    return; // recognizer producing nothing; let it idle
-                                }
-                            } else {
-                                EMPTY_RESTARTS.store(0, Ordering::SeqCst);
-                                commit_segment(&committed, &seg);
+                            {
+                                return;
                             }
                             let app2 = cb_app.clone();
                             let _ = app2.clone().run_on_main_thread(move || {
@@ -281,11 +355,12 @@ mod mac {
                         }
                     } else if !error.is_null() {
                         // The ~1-min limit can arrive as an error rather than a
-                        // final result. Treat it as a segment boundary and keep
-                        // going (bounded by EMPTY_RESTARTS); only surface an
-                        // error if nothing has been recognized at all.
+                        // final result. Bank the live utterance, then continue on
+                        // a fresh request (bounded by EMPTY_RESTARTS); surface an
+                        // error only if nothing has been recognized at all.
+                        transcript.lock().unwrap().finalize();
                         if EMPTY_RESTARTS.fetch_add(1, Ordering::SeqCst) + 1 >= MAX_EMPTY_RESTARTS {
-                            if committed.lock().unwrap().is_empty() {
+                            if transcript.lock().unwrap().committed.is_empty() {
                                 let message =
                                     unsafe { (*error).localizedDescription() }.to_string();
                                 emit(&cb_app, VoiceEvent::Error { message });
@@ -357,7 +432,7 @@ mod mac {
                 format,
                 request,
                 task,
-                committed: Arc::new(Mutex::new(String::new())),
+                transcript: Arc::new(Mutex::new(Transcript::default())),
             })
         });
         // Install the real first segment (tap + result handler) over the seed.
@@ -439,50 +514,78 @@ mod mac {
 
     #[cfg(test)]
     mod tests {
-        use super::{commit_segment, full_transcript};
-        use std::sync::{Arc, Mutex};
+        use super::Transcript;
 
-        fn buf() -> Arc<Mutex<String>> {
-            Arc::new(Mutex::new(String::new()))
+        #[test]
+        fn growing_partials_within_one_utterance_just_extend() {
+            let mut t = Transcript::default();
+            assert_eq!(t.apply("I"), "I");
+            assert_eq!(t.apply("I went"), "I went");
+            assert_eq!(t.apply("I went to"), "I went to");
+            assert_eq!(t.apply("I went to the store"), "I went to the store");
+            // Nothing committed yet — it's all one live utterance.
+            assert_eq!(t.committed, "");
         }
 
         #[test]
-        fn full_transcript_joins_committed_and_live_segment() {
-            let c = buf();
-            // Nothing committed yet: the live segment stands alone.
-            assert_eq!(full_transcript(&c, "hello"), "hello");
-            commit_segment(&c, "hello world");
-            // Committed + live, single-spaced.
-            assert_eq!(full_transcript(&c, "how are"), "hello world how are");
-            // Empty live segment between utterances: just the committed text.
-            assert_eq!(full_transcript(&c, ""), "hello world ");
+        fn tail_trim_revision_keeps_the_high_water_text() {
+            let mut t = Transcript::default();
+            t.apply("I went to the store");
+            // Recognizer briefly trims its tail while revising — must not lose it.
+            assert_eq!(t.apply("I went to the"), "I went to the store");
         }
 
         #[test]
-        fn segments_accumulate_and_never_drop_earlier_text() {
-            // The exact failure the user hit: a later segment must never
-            // overwrite earlier ones.
-            let c = buf();
-            commit_segment(&c, "the first thing I said");
-            commit_segment(&c, "the second thing");
-            commit_segment(&c, "and the third");
-            // A fresh segment's live partial still shows everything before it.
+        fn pause_reset_without_final_banks_the_prior_utterance() {
+            // THE bug the user hit: after a pause the recognizer resets
+            // formattedString to the new utterance with NO isFinal. Earlier
+            // text must be banked, not lost.
+            let mut t = Transcript::default();
+            t.apply("the first long thing I said before pausing");
+            // New short utterance that is not a continuation → reset.
             assert_eq!(
-                full_transcript(&c, "plus a fourth"),
-                "the first thing I said the second thing and the third plus a fourth"
+                t.apply("But"),
+                "the first long thing I said before pausing But"
+            );
+            assert_eq!(t.apply("But maybe"), "the first long thing I said before pausing But maybe");
+            assert_eq!(
+                t.apply("But maybe it's fine"),
+                "the first long thing I said before pausing But maybe it's fine"
             );
         }
 
         #[test]
-        fn commit_segment_ignores_empty_and_normalizes_spacing() {
-            let c = buf();
-            commit_segment(&c, "");
-            assert_eq!(*c.lock().unwrap(), "");
-            commit_segment(&c, "one");
-            commit_segment(&c, "two");
-            // Exactly one space between committed segments, trailing space kept
-            // so the next live segment joins cleanly.
-            assert_eq!(*c.lock().unwrap(), "one two ");
+        fn many_pause_resets_accumulate_everything() {
+            let mut t = Transcript::default();
+            t.apply("first sentence here");
+            t.apply("a second sentence"); // reset (not a continuation)
+            t.apply("and a third one entirely"); // reset
+            t.apply("tiny"); // reset
+            assert_eq!(
+                t.apply("tiny tail"),
+                "first sentence here a second sentence and a third one entirely tiny tail"
+            );
+        }
+
+        #[test]
+        fn word_revision_mid_utterance_is_not_a_reset() {
+            // "stork" → "store": neither is a prefix of the other, but they
+            // share most of the leading text — a revision, not a new utterance.
+            let mut t = Transcript::default();
+            t.apply("I went to the stork");
+            assert_eq!(t.apply("I went to the store"), "I went to the store");
+            assert_eq!(t.committed, "", "a revision must not bank anything");
+        }
+
+        #[test]
+        fn finalize_banks_the_live_utterance() {
+            let mut t = Transcript::default();
+            t.apply("hello world");
+            t.finalize();
+            assert_eq!(t.committed, "hello world ");
+            assert_eq!(t.segment, "");
+            // A following utterance continues after the banked text.
+            assert_eq!(t.apply("again"), "hello world again");
         }
     }
 }
