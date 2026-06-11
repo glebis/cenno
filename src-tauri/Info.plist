@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>cenno records audio only while you hold the mic button, to dictate an answer. Audio never leaves this Mac.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>cenno transcribes your dictation on-device with Apple Speech. Nothing is sent to the network.</string>
+</dict>
+</plist>

@@ -255,7 +255,13 @@
   border-bottom-color: var(--cenno-text);
 }
 
-/* mic stub: simple circle outline, disabled until plan 3 */
+.cenno-field-wrap {
+  display: grid;
+  gap: var(--cenno-space-1);
+}
+
+/* mic affordance: simple circle outline; recording = pulsing dot (BRAND.md —
+   no waveforms). */
 .cenno-field__mic {
   appearance: none;
   flex: none;
@@ -264,6 +270,57 @@
   border: 1px solid var(--cenno-line);
   border-radius: 50%;
   background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.cenno-field__mic::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cenno-text);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.cenno-field__mic:hover {
+  border-color: var(--cenno-text);
+}
+
+.cenno-field__mic--recording {
+  border-color: var(--cenno-text);
+}
+
+.cenno-field__mic--recording::after {
+  opacity: 1;
+  animation: cenno-mic-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes cenno-mic-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.6);
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cenno-field__mic--recording::after {
+    animation: none;
+  }
+}
+
+.cenno-field__voice-error {
+  margin: 0;
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-leading-caption, 1.3);
+  color: var(--cenno-text-dim);
 }
 
 /* ---- datetime: native picker, text-field underline ---- */

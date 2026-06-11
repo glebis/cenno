@@ -148,13 +148,18 @@ export function ChipsView({
 /**
  * Free-text input: bottom-border underline only (Reporter's "Alone ____"
  * pattern). Enter submits (IME composition guarded). When `voice` is set, a
- * disabled mic stub circle is shown — voice arrives in plan 3.
+ * mic circle toggles push-to-talk dictation: idle = plain outline circle,
+ * recording = pulsing dot (the brand's mic affordance — no waveforms). A
+ * dictation failure surfaces as a caption-size error line under the field.
  */
 export function TextFieldView({
   value = "",
   label,
   placeholder,
   voice = false,
+  recording = false,
+  voiceError = null,
+  onMicToggle,
   onChange,
   onSubmit,
 }: {
@@ -163,6 +168,12 @@ export function TextFieldView({
   label?: string;
   placeholder?: string;
   voice?: boolean;
+  /** Live dictation in progress (drives the pulsing-dot state). */
+  recording?: boolean;
+  /** Graceful error state (permission denied, recognizer unavailable, …). */
+  voiceError?: string | null;
+  /** Mic tap handler; without one the mic renders disabled. */
+  onMicToggle?: () => void;
   onChange?: (text: string) => void;
   onSubmit: (text: string) => void;
 }) {
@@ -171,32 +182,44 @@ export function TextFieldView({
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return (
-    <div className="cenno-field">
-      <input
-        className="cenno-field__input"
-        type="text"
-        value={draft}
-        aria-label={label}
-        placeholder={placeholder ?? label}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          onChange?.(e.target.value);
-        }}
-        onKeyDown={(e) => {
-          // IME: Enter confirms the composition, not the answer
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-            onSubmit(e.currentTarget.value);
-          }
-        }}
-      />
-      {voice && (
-        <button
-          type="button"
-          className="cenno-field__mic"
-          disabled
-          title="voice arrives in plan 3"
-          aria-label="voice input (coming soon)"
+    <div className="cenno-field-wrap">
+      <div className="cenno-field">
+        <input
+          className="cenno-field__input"
+          type="text"
+          value={draft}
+          aria-label={label}
+          placeholder={placeholder ?? label}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            onChange?.(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            // IME: Enter confirms the composition, not the answer
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              onSubmit(e.currentTarget.value);
+            }
+          }}
         />
+        {voice && (
+          <button
+            type="button"
+            className={
+              recording
+                ? "cenno-field__mic cenno-field__mic--recording"
+                : "cenno-field__mic"
+            }
+            disabled={!onMicToggle}
+            aria-pressed={recording}
+            aria-label={recording ? "Stop dictation" : "Dictate your answer"}
+            onClick={onMicToggle}
+          />
+        )}
+      </div>
+      {voiceError && (
+        <p className="cenno-field__voice-error" role="alert">
+          {voiceError}
+        </p>
       )}
     </div>
   );

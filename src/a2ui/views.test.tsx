@@ -153,12 +153,21 @@ describe("ChipsView", () => {
 });
 
 describe("TextFieldView", () => {
-  it("submits on Enter, shows mic stub when voice", () => {
+  it("submits on Enter, shows the mic when voice", () => {
     const onSubmit = vi.fn();
-    render(<TextFieldView voice label="Your reply" onSubmit={onSubmit} />);
-    const mic = screen.getByTitle("voice arrives in plan 3");
-    expect(mic).toBeTruthy();
-    expect((mic as HTMLButtonElement).disabled).toBe(true);
+    const onMicToggle = vi.fn();
+    render(
+      <TextFieldView
+        voice
+        label="Your reply"
+        onSubmit={onSubmit}
+        onMicToggle={onMicToggle}
+      />,
+    );
+    const mic = screen.getByRole("button", { name: "Dictate your answer" });
+    expect(mic.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(mic);
+    expect(onMicToggle).toHaveBeenCalledTimes(1);
     // the label is the input's accessible name (placeholder alone is fragile)
     const input = screen.getByRole("textbox", { name: "Your reply" });
     fireEvent.change(input, { target: { value: "deep work" } });
@@ -166,10 +175,50 @@ describe("TextFieldView", () => {
     expect(onSubmit).toHaveBeenCalledWith("deep work");
   });
 
-  it("has no mic stub without voice and guards IME composition", () => {
+  it("recording flips the mic state; the field stays editable", () => {
+    render(
+      <TextFieldView
+        voice
+        recording
+        label="Your reply"
+        onSubmit={vi.fn()}
+        onMicToggle={vi.fn()}
+      />,
+    );
+    const mic = screen.getByRole("button", { name: "Stop dictation" });
+    expect(mic.getAttribute("aria-pressed")).toBe("true");
+    expect(mic.className).toContain("cenno-field__mic--recording");
+    const input = screen.getByRole("textbox", { name: "Your reply" });
+    expect((input as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("voiceError renders the graceful error caption", () => {
+    render(
+      <TextFieldView
+        voice
+        voiceError="Microphone permission denied"
+        label="Your reply"
+        onSubmit={vi.fn()}
+        onMicToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Microphone permission denied",
+    );
+  });
+
+  it("mic without a toggle handler renders disabled", () => {
+    render(<TextFieldView voice label="Your reply" onSubmit={vi.fn()} />);
+    const mic = screen.getByRole("button", { name: "Dictate your answer" });
+    expect((mic as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("has no mic without voice and guards IME composition", () => {
     const onSubmit = vi.fn();
     render(<TextFieldView onSubmit={onSubmit} />);
-    expect(screen.queryByTitle("voice arrives in plan 3")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Dictate your answer" }),
+    ).toBeNull();
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "おはよう" } });
     // Enter that confirms an IME composition must NOT submit
