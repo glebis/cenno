@@ -192,6 +192,38 @@ pub fn covers_display(window: Rect, display: Rect) -> bool {
         && (0.0..=FULLSCREEN_TOP_SLACK).contains(&top_offset)
 }
 
+/// macOS menu-bar window level (`kCGMainMenuWindowLevel`). The system menu bar
+/// and its status items sit at or above this; normal app windows are layer 0.
+pub const MENU_BAR_MIN_LAYER: i64 = 24;
+/// Tallest a top strip can be and still be the menu bar (observed 33–38pt on
+/// notched MacBooks; padded for safety). Excludes full-height notch/overlay
+/// utilities that also start at the display top.
+pub const MENU_BAR_MAX_HEIGHT: f64 = 50.0;
+
+/// Is this window the system menu bar on `display`?
+///
+/// The discriminator between *maximized* and *fullscreen*: on a notched Mac a
+/// maximized window and a fullscreen Space have identical [`covers_display`]
+/// geometry (both start at y = menu-bar height ≈ 33). But a fullscreen Space
+/// auto-hides the menu bar, while a maximized window leaves it on screen. So a
+/// visible menu bar on the display means nothing there is truly fullscreen.
+///
+/// Identified by layer + geometry only (never window names — those need the
+/// screen-recording permission): a short, full-width strip flush to the
+/// display's top, at or above the menu-bar window level.
+///
+/// Caveat: with "Automatically hide and show the menu bar" enabled the bar is
+/// absent even when not fullscreen, so a maximized window could still suppress
+/// — an accepted edge case (far rarer than a maximized browser).
+pub fn is_menu_bar(window: Rect, layer: i64, display: Rect) -> bool {
+    layer >= MENU_BAR_MIN_LAYER
+        && window.x == display.x
+        && window.w == display.w
+        && window.y == display.y
+        && window.h > 0.0
+        && window.h <= MENU_BAR_MAX_HEIGHT
+}
+
 /// Which display should the fullscreen check be scoped to?
 ///
 /// A fullscreen app only matters on the screen where the cenno panel would
@@ -289,15 +321,25 @@ pub fn fullscreen_on_display(target: Option<Rect>) -> bool {
     let layer_key = unsafe { CFString::wrap_under_get_rule(cgw::kCGWindowLayer) };
     let bounds_key = unsafe { CFString::wrap_under_get_rule(cgw::kCGWindowBounds) };
 
+    // One pass collects both signals: a layer-0 window that covers the display
+    // (candidate fullscreen) and whether the menu bar is still visible on it.
+    // A maximized window covers the display too, but only a real fullscreen
+    // Space hides the menu bar — so suppress only when covered AND no menu bar.
+    let mut covered = false;
+    let mut menu_bar_visible = false;
     for item in windows.iter() {
         let dict = unsafe {
             CFDictionary::<CFString, CFType>::wrap_under_get_rule(*item as CFDictionaryRef)
         };
-        let layer = dict
+        let Some(layer) = dict
             .find(&layer_key)
             .and_then(|v| v.downcast::<CFNumber>())
-            .and_then(|n| n.to_i64());
-        if layer != Some(0) {
+            .and_then(|n| n.to_i64())
+        else {
+            continue;
+        };
+        // Only layer-0 (normal app) and menu-bar-level windows are relevant.
+        if layer != 0 && layer < MENU_BAR_MIN_LAYER {
             continue;
         }
         let Some(bounds) = dict
@@ -313,11 +355,15 @@ pub fn fullscreen_on_display(target: Option<Rect>) -> bool {
             w: bounds.size.width,
             h: bounds.size.height,
         };
-        if covers_display(rect, display) {
-            return true;
+        if layer == 0 {
+            if covers_display(rect, display) {
+                covered = true;
+            }
+        } else if is_menu_bar(rect, layer, display) {
+            menu_bar_visible = true;
         }
     }
-    false
+    covered && !menu_bar_visible
 }
 
 /// Current mouse location in CG global coordinates (points, top-left origin
@@ -553,6 +599,23 @@ mod tests {
         assert!(covers_display(r(0.0, 33.0, 1512.0, 949.0), display));
         // The fullscreen toolbar accessory window (same top, short) is not.
         assert!(!covers_display(r(0.0, 33.0, 1512.0, 68.0), display));
+    }
+
+    #[test]
+    fn menu_bar_recognized_by_layer_and_geometry() {
+        // Live-observed on a notched MacBook: Window Server "Menubar" at
+        // (0, 0, 1512, 33), layer 24; Control Center / Ice overlay at layer 25.
+        let display = r(0.0, 0.0, 1512.0, 982.0);
+        assert!(is_menu_bar(r(0.0, 0.0, 1512.0, 33.0), 24, display));
+        assert!(is_menu_bar(r(0.0, 0.0, 1512.0, 38.0), 25, display));
+        // Not the menu bar: a normal app window (layer 0)…
+        assert!(!is_menu_bar(r(0.0, 0.0, 1512.0, 33.0), 0, display));
+        // …a tall notch/overlay utility flush to the top (e.g. "Vibe Notch")…
+        assert!(!is_menu_bar(r(0.0, 0.0, 1512.0, 750.0), 27, display));
+        // …a status item that doesn't span the full width…
+        assert!(!is_menu_bar(r(1352.0, 0.0, 162.0, 33.0), 25, display));
+        // …or a strip not flush to the display top.
+        assert!(!is_menu_bar(r(0.0, 33.0, 1512.0, 33.0), 24, display));
     }
 
     #[test]
