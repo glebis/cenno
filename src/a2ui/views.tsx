@@ -148,9 +148,9 @@ export function ChipsView({
 /**
  * Free-text input: bottom-border underline only (Reporter's "Alone ____"
  * pattern). Enter submits (IME composition guarded). When `voice` is set, a
- * mic circle toggles push-to-talk dictation: idle = plain outline circle,
- * recording = pulsing dot (the brand's mic affordance — no waveforms). A
- * dictation failure surfaces as a caption-size error line under the field.
+ * mic circle toggles push-to-talk dictation: idle = circle with a mic glyph,
+ * recording = pulsing dot (no waveforms — BRAND.md). A dictation failure
+ * surfaces as a caption-size error line under the field.
  */
 export function TextFieldView({
   value = "",
@@ -213,7 +213,35 @@ export function TextFieldView({
             aria-pressed={recording}
             aria-label={recording ? "Stop dictation" : "Dictate your answer"}
             onClick={onMicToggle}
-          />
+          >
+            {/* mic glyph (idle) — CSS swaps it for the pulsing dot while
+                recording. Drawn inline so it follows currentColor. */}
+            <svg
+              className="cenno-field__mic-glyph"
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              aria-hidden="true"
+            >
+              <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" />
+              <path
+                d="M 5.5 11.5 a 6.5 6.5 0 0 0 13 0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+              <line
+                x1="12"
+                y1="18"
+                x2="12"
+                y2="21"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         )}
       </div>
       {voiceError && (

@@ -275,8 +275,14 @@
   cursor: pointer;
 }
 
+/* The glyph and the recording dot share the circle's center cell. */
+.cenno-field__mic > * {
+  grid-area: 1 / 1;
+}
+
 .cenno-field__mic::after {
   content: "";
+  grid-area: 1 / 1;
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -285,12 +291,25 @@
   transition: opacity 0.2s;
 }
 
+.cenno-field__mic-glyph {
+  color: var(--cenno-text-dim);
+  transition: color 0.2s, opacity 0.2s;
+}
+
 .cenno-field__mic:hover {
   border-color: var(--cenno-text);
 }
 
+.cenno-field__mic:hover .cenno-field__mic-glyph {
+  color: var(--cenno-text);
+}
+
 .cenno-field__mic--recording {
   border-color: var(--cenno-text);
+}
+
+.cenno-field__mic--recording .cenno-field__mic-glyph {
+  opacity: 0;
 }
 
 .cenno-field__mic--recording::after {
