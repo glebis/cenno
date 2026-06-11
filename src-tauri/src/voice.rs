@@ -75,13 +75,13 @@ pub async fn voice_stop(app: AppHandle) -> Result<(), String> {
 mod mac {
     use std::cell::RefCell;
     use std::ptr::NonNull;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
 
     use block2::RcBlock;
     use objc2::rc::Retained;
     use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
-    use objc2_avf_audio::{AVAudioEngine, AVAudioPCMBuffer, AVAudioTime};
+    use objc2_avf_audio::{AVAudioEngine, AVAudioFormat, AVAudioPCMBuffer, AVAudioTime};
     use objc2_foundation::NSError;
     use objc2_speech::{
         SFSpeechAudioBufferRecognitionRequest, SFSpeechRecognitionResult,
@@ -92,19 +92,36 @@ mod mac {
     use super::{emit, VoiceEvent};
 
     const MAX_RECORDING_SECS: u64 = 600; // 10 minutes
+    /// Apple Speech finalizes a recognition request after ~1 minute (or at a
+    /// speech pause), resetting its transcript to the new segment. To dictate
+    /// for longer without losing a word, each finalized segment is committed
+    /// and a fresh request is started. This bounds consecutive EMPTY restarts
+    /// (silence, or a genuinely failing recognizer) so it can't spin forever —
+    /// any real recognized speech resets the count.
+    const MAX_EMPTY_RESTARTS: u32 = 4;
 
-    /// Live recording session. Main-thread only (see module docs).
+    /// Live recording session. Main-thread only (see module docs). The engine
+    /// and recognizer persist across segments; `request`/`task` are swapped each
+    /// time the recognizer finalizes. `committed` accumulates every finalized
+    /// segment so no dictated word is ever dropped on a segment rollover.
     struct Session {
         engine: Retained<AVAudioEngine>,
+        recognizer: Retained<SFSpeechRecognizer>,
+        format: Retained<AVAudioFormat>,
         request: Retained<SFSpeechAudioBufferRecognitionRequest>,
         task: Retained<SFSpeechRecognitionTask>,
-        // The recognizer must outlive its task.
-        _recognizer: Retained<SFSpeechRecognizer>,
+        /// Finalized segments so far. `Arc<Mutex<_>>` because the result
+        /// handler runs off the main thread. Does NOT include the field text
+        /// the user already had — the frontend prepends that.
+        committed: Arc<Mutex<String>>,
     }
 
     thread_local! {
         static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
     }
+
+    /// Consecutive segment restarts that produced no new committed text.
+    static EMPTY_RESTARTS: AtomicU32 = AtomicU32::new(0);
 
     /// Bumped on every start/stop; callbacks capture the generation at start
     /// and go inert when it moves on.
@@ -172,7 +189,132 @@ mod mac {
         }
     }
 
-    /// Build and start the whole pipeline. Main thread only.
+    /// Append `seg` to the committed transcript with single-space joins.
+    fn commit_segment(committed: &Arc<Mutex<String>>, seg: &str) {
+        if seg.is_empty() {
+            return;
+        }
+        let mut c = committed.lock().unwrap();
+        if !c.is_empty() && !c.ends_with(' ') {
+            c.push(' ');
+        }
+        c.push_str(seg);
+        c.push(' ');
+    }
+
+    /// Full transcript to display: everything committed plus the live segment.
+    fn full_transcript(committed: &Arc<Mutex<String>>, seg: &str) -> String {
+        let c = committed.lock().unwrap();
+        if c.is_empty() {
+            seg.to_string()
+        } else if c.ends_with(' ') || seg.is_empty() {
+            format!("{c}{seg}")
+        } else {
+            format!("{c} {seg}")
+        }
+    }
+
+    /// Create a fresh recognition request + task on the existing engine and
+    /// repoint the mic tap at it. Main thread only; reads the live `Session`.
+    ///
+    /// Called once at session start and again after every finalization, so a
+    /// segment boundary (the recognizer's ~1-min / pause limit) is invisible:
+    /// the committed text already holds the prior segments, and the new request
+    /// picks up where the audio left off.
+    fn start_segment(app: &AppHandle, generation: u64) {
+        SESSION.with(|s| {
+            let mut slot = s.borrow_mut();
+            let Some(sess) = slot.as_mut() else { return };
+
+            let request = unsafe { SFSpeechAudioBufferRecognitionRequest::new() };
+            unsafe {
+                request.setShouldReportPartialResults(true);
+                request.setRequiresOnDeviceRecognition(true);
+            }
+
+            // Repoint the mic tap at the new request (no audible gap — segment
+            // boundaries land on the silence that triggered finalization).
+            let input = unsafe { sess.engine.inputNode() };
+            unsafe { input.removeTapOnBus(0) };
+            let tap_request = request.clone();
+            let tap = RcBlock::new(
+                move |buffer: NonNull<AVAudioPCMBuffer>, _when: NonNull<AVAudioTime>| unsafe {
+                    tap_request.appendAudioPCMBuffer(buffer.as_ref());
+                },
+            );
+            let tap_ptr = &*tap as *const block2::DynBlock<_> as *mut block2::DynBlock<_>;
+            unsafe {
+                input.installTapOnBus_bufferSize_format_block(0, 1024, Some(&sess.format), tap_ptr)
+            };
+
+            let cb_app = app.clone();
+            let committed = sess.committed.clone();
+            let handler = RcBlock::new(
+                move |result: *mut SFSpeechRecognitionResult, error: *mut NSError| {
+                    if GENERATION.load(Ordering::SeqCst) != generation {
+                        return; // stale session (user stopped, restarted, or timed out)
+                    }
+                    if !result.is_null() {
+                        let seg = unsafe { (*result).bestTranscription().formattedString() }
+                            .to_string();
+                        // Live view never shrinks: committed segments + this one.
+                        emit(&cb_app, VoiceEvent::Partial { text: full_transcript(&committed, &seg) });
+                        if unsafe { (*result).isFinal() } {
+                            // Commit this segment and continue dictating with a
+                            // fresh request — survives the recognizer's limit.
+                            if seg.is_empty() {
+                                if EMPTY_RESTARTS.fetch_add(1, Ordering::SeqCst) + 1
+                                    >= MAX_EMPTY_RESTARTS
+                                {
+                                    return; // recognizer producing nothing; let it idle
+                                }
+                            } else {
+                                EMPTY_RESTARTS.store(0, Ordering::SeqCst);
+                                commit_segment(&committed, &seg);
+                            }
+                            let app2 = cb_app.clone();
+                            let _ = app2.clone().run_on_main_thread(move || {
+                                if GENERATION.load(Ordering::SeqCst) == generation {
+                                    start_segment(&app2, generation);
+                                }
+                            });
+                        }
+                    } else if !error.is_null() {
+                        // The ~1-min limit can arrive as an error rather than a
+                        // final result. Treat it as a segment boundary and keep
+                        // going (bounded by EMPTY_RESTARTS); only surface an
+                        // error if nothing has been recognized at all.
+                        if EMPTY_RESTARTS.fetch_add(1, Ordering::SeqCst) + 1 >= MAX_EMPTY_RESTARTS {
+                            if committed.lock().unwrap().is_empty() {
+                                let message =
+                                    unsafe { (*error).localizedDescription() }.to_string();
+                                emit(&cb_app, VoiceEvent::Error { message });
+                                emit(&cb_app, VoiceEvent::State { state: "stopped" });
+                            }
+                            return;
+                        }
+                        let app2 = cb_app.clone();
+                        let _ = app2.clone().run_on_main_thread(move || {
+                            if GENERATION.load(Ordering::SeqCst) == generation {
+                                start_segment(&app2, generation);
+                            }
+                        });
+                    }
+                },
+            );
+            let task = unsafe {
+                sess.recognizer
+                    .recognitionTaskWithRequest_resultHandler(&request, &handler)
+            };
+
+            // Finalize the previous segment's task (if any) and swap in the new.
+            unsafe { sess.task.finish() };
+            sess.request = request;
+            sess.task = task;
+        });
+    }
+
+    /// Build the engine + recognizer and start the first segment. Main thread.
     fn start_session(app: AppHandle, generation: u64) -> Result<(), String> {
         let recognizer = unsafe { SFSpeechRecognizer::new() };
         if !unsafe { recognizer.isAvailable() } {
@@ -184,71 +326,42 @@ mod mac {
             );
         }
 
-        let request = unsafe { SFSpeechAudioBufferRecognitionRequest::new() };
-        unsafe {
-            request.setShouldReportPartialResults(true);
-            request.setRequiresOnDeviceRecognition(true);
-        }
-
         let engine = unsafe { AVAudioEngine::new() };
         let input = unsafe { engine.inputNode() };
         let format = unsafe { input.outputFormatForBus(0) };
 
-        // Feed mic buffers to the recognition request. The tap block runs on
-        // the audio thread; appending to a buffer recognition request is the
-        // documented streaming pattern.
-        let tap_request = request.clone();
-        let tap = RcBlock::new(
-            move |buffer: NonNull<AVAudioPCMBuffer>, _when: NonNull<AVAudioTime>| unsafe {
-                tap_request.appendAudioPCMBuffer(buffer.as_ref());
-            },
+        // A throwaway request/task seed the Session; start_segment immediately
+        // replaces them with the real first segment (and installs the tap).
+        let request = unsafe { SFSpeechAudioBufferRecognitionRequest::new() };
+        let seed_handler = RcBlock::new(
+            |_r: *mut SFSpeechRecognitionResult, _e: *mut NSError| {},
         );
-        // The generated binding takes the tap block as a raw pointer
-        // (AVAudioNodeTapBlock typedef); the engine copies it on install.
-        let tap_ptr = &*tap as *const block2::DynBlock<_> as *mut block2::DynBlock<_>;
-        unsafe { input.installTapOnBus_bufferSize_format_block(0, 1024, Some(&format), tap_ptr) };
+        let task = unsafe {
+            recognizer.recognitionTaskWithRequest_resultHandler(&request, &seed_handler)
+        };
 
         unsafe { engine.prepare() };
         if let Err(e) = unsafe { engine.startAndReturnError() } {
-            unsafe { input.removeTapOnBus(0) };
+            unsafe { task.cancel() };
             return Err(format!(
                 "Could not start the microphone: {}",
                 e.localizedDescription()
             ));
         }
 
-        // Stream results back. Runs on a framework queue; generation-guarded.
-        let cb_app = app.clone();
-        let handler = RcBlock::new(
-            move |result: *mut SFSpeechRecognitionResult, error: *mut NSError| {
-                if GENERATION.load(Ordering::SeqCst) != generation {
-                    return; // stale session
-                }
-                if !result.is_null() {
-                    let text =
-                        unsafe { (*result).bestTranscription().formattedString() }.to_string();
-                    emit(&cb_app, VoiceEvent::Partial { text });
-                    if unsafe { (*result).isFinal() } {
-                        emit(&cb_app, VoiceEvent::State { state: "stopped" });
-                    }
-                } else if !error.is_null() {
-                    let message = unsafe { (*error).localizedDescription() }.to_string();
-                    emit(&cb_app, VoiceEvent::Error { message });
-                    emit(&cb_app, VoiceEvent::State { state: "stopped" });
-                }
-            },
-        );
-        let task =
-            unsafe { recognizer.recognitionTaskWithRequest_resultHandler(&request, &handler) };
-
+        EMPTY_RESTARTS.store(0, Ordering::SeqCst);
         SESSION.with(|s| {
             *s.borrow_mut() = Some(Session {
                 engine,
+                recognizer,
+                format,
                 request,
                 task,
-                _recognizer: recognizer,
+                committed: Arc::new(Mutex::new(String::new())),
             })
         });
+        // Install the real first segment (tap + result handler) over the seed.
+        start_segment(&app, generation);
         emit(&app, VoiceEvent::State { state: "recording" });
         Ok(())
     }
@@ -322,5 +435,54 @@ mod mac {
             }
         })
         .await
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{commit_segment, full_transcript};
+        use std::sync::{Arc, Mutex};
+
+        fn buf() -> Arc<Mutex<String>> {
+            Arc::new(Mutex::new(String::new()))
+        }
+
+        #[test]
+        fn full_transcript_joins_committed_and_live_segment() {
+            let c = buf();
+            // Nothing committed yet: the live segment stands alone.
+            assert_eq!(full_transcript(&c, "hello"), "hello");
+            commit_segment(&c, "hello world");
+            // Committed + live, single-spaced.
+            assert_eq!(full_transcript(&c, "how are"), "hello world how are");
+            // Empty live segment between utterances: just the committed text.
+            assert_eq!(full_transcript(&c, ""), "hello world ");
+        }
+
+        #[test]
+        fn segments_accumulate_and_never_drop_earlier_text() {
+            // The exact failure the user hit: a later segment must never
+            // overwrite earlier ones.
+            let c = buf();
+            commit_segment(&c, "the first thing I said");
+            commit_segment(&c, "the second thing");
+            commit_segment(&c, "and the third");
+            // A fresh segment's live partial still shows everything before it.
+            assert_eq!(
+                full_transcript(&c, "plus a fourth"),
+                "the first thing I said the second thing and the third plus a fourth"
+            );
+        }
+
+        #[test]
+        fn commit_segment_ignores_empty_and_normalizes_spacing() {
+            let c = buf();
+            commit_segment(&c, "");
+            assert_eq!(*c.lock().unwrap(), "");
+            commit_segment(&c, "one");
+            commit_segment(&c, "two");
+            // Exactly one space between committed segments, trailing space kept
+            // so the next live segment joins cleanly.
+            assert_eq!(*c.lock().unwrap(), "one two ");
+        }
     }
 }
