@@ -153,6 +153,15 @@ Quit cenno
 - Pause and quiet mode never break the agent contract — unseen prompts simply time out as usual.
 - **Check for updates…** queries GitHub releases (signature-verified via [the Tauri updater](https://v2.tauri.app/plugin/updater/)), and installs + restarts only after you confirm. A restart drops any on-screen prompt — its agent sees a normal timeout.
 
+## Configuration
+
+Drop optional files in `~/.cenno/` to customize cenno (both optional; absent → built-in defaults):
+
+- **`config.json`** — panel width/height and default position, prompt defaults (timeout, flow), and **custom widgets** defined declaratively as templates composing built-in controls.
+- **`tokens.json`** — design-token overrides ([W3C DTCG](https://www.w3.org/community/design-tokens/)); only the values you include change, flattened to `--cenno-*` CSS variables over the built-in theme.
+
+Full reference and working examples: **[docs/CONFIG.md](docs/CONFIG.md)** · [docs/examples/dot-cenno/](docs/examples/dot-cenno/).
+
 ## Roadmap
 
 - **EMA scheduling engine** — recurring check-ins defined in cenno itself

@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import PromptPanel, { Prompt, Via } from "./PromptPanel";
 import { nextNotedWord } from "./notedWords";
 import { PANEL_MIN_HEIGHT } from "./panelResize";
+import { getDefaults } from "./userConfig";
 import "./App.css";
 
 // The Rust side emits the whole AskRequest as `request` (see PromptEvent in
@@ -30,14 +31,24 @@ interface PromptEvent {
   seq?: { index: number; total: number; last: boolean };
 }
 
+const FLOWS = ["mood", "question", "ema", "reminder", "ambient"] as const;
+
 function toPrompt({ id, request, seq }: PromptEvent): Prompt {
+  // Fall back to the configured default flow (~/.cenno) when the agent omits
+  // one; ignore an invalid configured value.
+  const fallbackFlow = getDefaults()?.flow;
+  const flow =
+    request.flow ??
+    (FLOWS.includes(fallbackFlow as (typeof FLOWS)[number])
+      ? (fallbackFlow as Prompt["flow"])
+      : undefined);
   return {
     id,
     title: request.title,
     body_md: request.body_md,
     input: request.input,
     choices: request.choices,
-    flow: request.flow,
+    flow,
     progress: request.progress,
     a2ui: request.a2ui,
     seq,

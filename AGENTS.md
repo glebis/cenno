@@ -54,7 +54,9 @@ npx tauri build --no-bundle         # unsigned release binary → src-tauri/targ
 - "Panel doesn't appear" during manual testing is usually fullscreen quiet mode working as designed (stderr says `suppressed (paused or fullscreen) — queued for replay`), not a bug.
 - CSP is only enforced in bundled builds — test security changes against `npx tauri build` output, never `tauri dev`.
 - Never edit generated CSS in `src/styles/` directly; change `tokens/tokens.json` and run `npm run tokens`.
-- The app's data is the user's: `cenno.db` is `0600`, local-only. Don't add network calls — the only permitted network access is the user-initiated updater.
+- The app's data is the user's: `cenno.db` is `0600`, local-only. Don't add network calls — the only permitted network access is the user-initiated updater (and a one-time SpeechTranscriber model download for voice).
+- `voice.rs` bridges a Swift package (`swift/`, SpeechTranscriber) via swift-rs. `cargo test`/`cargo run` need the system Swift runtime on the loader path; build.rs bakes an `-rpath /usr/lib/swift` so they work without a `DYLD_*` env (which macOS strips).
+- External config lives in `~/.cenno/` (`config.json` + `tokens.json`); loader is `config.rs`, applied in `lib.rs` setup and exposed to the webview via `get_user_config`/`get_user_tokens` (frontend: `src/userConfig.ts`). See [docs/CONFIG.md](docs/CONFIG.md).
 
 ## Releasing
 
