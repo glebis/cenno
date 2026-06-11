@@ -1,0 +1,101 @@
+name: CennoCompanion
+options:
+  bundleIdPrefix: app.cenno
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+
+settings:
+  DEVELOPMENT_TEAM: "B9CBCK2CJY"
+
+targets:
+
+  # ── Shared framework ────────────────────────────────────────────────────────
+  CennoShared:
+    type: framework
+    platform: iOS
+    supportedDestinations: [iOS, watchOS]
+    sources:
+      - path: Sources/Shared
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion.shared
+      GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - sdk: CloudKit.framework
+
+  # ── iPhone app ──────────────────────────────────────────────────────────────
+  CennoiPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/iPhone
+    dependencies:
+      - target: CennoShared
+    info:
+      path: Sources/iPhone/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSRemoteNotificationUsageDescription: "cenno needs notifications to deliver agent prompts."
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion
+      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+    entitlements:
+      path: Sources/iPhone/CennoiPhone.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.app.cenno
+        com.apple.developer.icloud-services:
+          - CloudKit
+        aps-environment: development
+
+  # ── Watch app ───────────────────────────────────────────────────────────────
+  CennoWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: Sources/Watch
+    dependencies:
+      - target: CennoShared
+        embed: true
+    info:
+      path: Sources/Watch/Info.plist
+      properties:
+        WKApplication: true
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: app.cenno.watch
+    entitlements:
+      path: Sources/Watch/CennoWatch.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.app.cenno
+        com.apple.developer.icloud-services:
+          - CloudKit
+
+schemes:
+  CennoiPhone:
+    build:
+      targets:
+        CennoiPhone: all
+        CennoShared: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+  CennoWatch:
+    build:
+      targets:
+        CennoWatch: all
+        CennoShared: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    archive:
+      config: Release
