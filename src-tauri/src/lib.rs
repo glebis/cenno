@@ -1,6 +1,7 @@
 pub mod a2ui_guard;
 pub mod bridge;
 pub mod cli;
+pub mod config;
 pub mod db;
 pub mod mcp;
 pub mod protocol;
@@ -50,37 +51,92 @@ fn pending_prompts(state: tauri::State<PromptRegistry>) -> Vec<PromptEvent> {
         .collect()
 }
 
-/// Panel geometry: width is fixed by design; height adapts to the prompt's
-/// content (the webview measures itself and calls `resize_panel`). The band
-/// keeps a degenerate measurement from collapsing the panel or letting a
-/// runaway payload cover the screen.
-const PANEL_WIDTH: f64 = 420.0;
-const PANEL_MIN_HEIGHT: f64 = 240.0;
-const PANEL_MAX_HEIGHT: f64 = 560.0;
-
 /// Clamp a webview-reported content height to the allowed panel band.
 /// Non-finite input (NaN/∞ — nothing sane measures to that) falls back to
-/// the design minimum instead of poisoning the clamp.
-fn clamp_panel_height(height: f64) -> f64 {
+/// the band minimum instead of poisoning the clamp.
+fn clamp_panel_height(height: f64, geo: &crate::config::PanelGeometry) -> f64 {
     if !height.is_finite() {
-        return PANEL_MIN_HEIGHT;
+        return geo.min_height;
     }
-    height.clamp(PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT)
+    height.clamp(geo.min_height, geo.max_height)
 }
 
 /// Content-driven panel height: the webview measures the rendered prompt
-/// (see src/panelResize.ts) and asks for a window that fits it. Width stays
-/// fixed. Works on the swizzled NSPanel too — setClass doesn't change how
-/// tao applies frame sizes, and the nspanel conversion installed autoresizing
-/// masks so the webview follows the new frame.
+/// (see src/panelResize.ts) and asks for a window that fits it. Width is fixed
+/// by config (`~/.cenno/config.json` panel.width, else 420). Works on the
+/// swizzled NSPanel too — setClass doesn't change how tao applies frame sizes,
+/// and the nspanel conversion installed autoresizing masks so the webview
+/// follows the new frame.
 ///
 /// The window-state plugin persists POSITION only (see the builder below),
 /// so this resize never fights a restored size.
 #[tauri::command]
-fn resize_panel(window: tauri::WebviewWindow, height: f64) {
-    let height = clamp_panel_height(height);
-    if let Err(e) = window.set_size(tauri::LogicalSize::new(PANEL_WIDTH, height)) {
+fn resize_panel(
+    window: tauri::WebviewWindow,
+    geo: tauri::State<crate::config::PanelGeometry>,
+    height: f64,
+) {
+    let height = clamp_panel_height(height, &geo);
+    if let Err(e) = window.set_size(tauri::LogicalSize::new(geo.width, height)) {
         eprintln!("cenno: resize_panel({height}) failed: {e}");
+    }
+}
+
+/// Expose the resolved config to the webview (panel geometry, prompt defaults,
+/// custom widget templates) so the frontend can apply defaults and register
+/// declarative widgets.
+#[tauri::command]
+fn get_user_config(config: tauri::State<crate::config::Config>) -> crate::config::Config {
+    config.inner().clone()
+}
+
+/// Raw `~/.cenno/tokens.json` (DTCG) for the webview to flatten into
+/// `--cenno-*` CSS variables, or null when absent/malformed.
+#[tauri::command]
+fn get_user_tokens() -> Option<serde_json::Value> {
+    crate::config::user_tokens()
+}
+
+/// Apply the configured panel width and default position at startup. Width is
+/// set here (it is not persisted — resize_panel re-applies it per prompt);
+/// position is the configured default (the window-state plugin then remembers
+/// any manual move). No-ops cleanly if the window or monitor lookup fails.
+fn apply_panel_layout(
+    handle: &tauri::AppHandle,
+    geo: &crate::config::PanelGeometry,
+    position: Option<&crate::config::PanelPosition>,
+) {
+    use crate::config::{Anchor, PanelPosition};
+    use tauri::Manager as _;
+
+    let Some(win) = handle.get_webview_window("main") else {
+        return;
+    };
+    let _ = win.set_size(tauri::LogicalSize::new(geo.width, geo.min_height));
+
+    let Some(position) = position else {
+        return;
+    };
+    let target = match position {
+        PanelPosition::Coords { x, y } => Some((*x, *y)),
+        PanelPosition::Anchored { anchor, margin } => {
+            win.current_monitor().ok().flatten().map(|m| {
+                let scale = m.scale_factor();
+                let mp = m.position().to_logical::<f64>(scale);
+                let ms = m.size().to_logical::<f64>(scale);
+                let (w, h, mg) = (geo.width, geo.min_height, *margin);
+                match anchor {
+                    Anchor::TopLeft => (mp.x + mg, mp.y + mg),
+                    Anchor::TopRight => (mp.x + ms.width - w - mg, mp.y + mg),
+                    Anchor::BottomLeft => (mp.x + mg, mp.y + ms.height - h - mg),
+                    Anchor::BottomRight => (mp.x + ms.width - w - mg, mp.y + ms.height - h - mg),
+                    Anchor::Center => (mp.x + (ms.width - w) / 2.0, mp.y + (ms.height - h) / 2.0),
+                }
+            })
+        }
+    };
+    if let Some((x, y)) = target {
+        let _ = win.set_position(tauri::LogicalPosition::new(x, y));
     }
 }
 
@@ -397,6 +453,19 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             convert_to_panel(app)?;
 
+            // External config (~/.cenno/config.json): panel geometry/position,
+            // prompt defaults, declarative widget templates. Absent/malformed →
+            // built-in defaults (see config::Config::load).
+            let user_config = crate::config::Config::load();
+            let geometry = crate::config::PanelGeometry::from_config(&user_config.panel);
+            apply_panel_layout(app.handle(), &geometry, user_config.panel.position.as_ref());
+            let default_timeout_s = user_config
+                .defaults
+                .timeout_s
+                .unwrap_or(crate::protocol::DEFAULT_TIMEOUT_S);
+            app.manage(geometry);
+            app.manage(user_config);
+
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let sock_path = data_dir.join("mcp.sock");
@@ -530,8 +599,9 @@ pub fn run() {
                             id: id.to_string(),
                             request: req.clone(),
                             // A notify fires at ask() registration: nothing has
-                            // elapsed yet, so the full budget remains.
-                            remaining_s: req.timeout_s,
+                            // elapsed yet, so the full budget remains. The MCP
+                            // layer already resolved timeout_s against config.
+                            remaining_s: req.timeout_secs(None),
                             // None for plain ask_user; Some for ask_sequence steps.
                             seq,
                         };
@@ -541,6 +611,7 @@ pub fn run() {
                         show_prompt_window(&handle);
                     },
                     db,
+                    default_timeout_s,
                 )
                 .await;
                 if let Err(e) = result {
@@ -558,6 +629,8 @@ pub fn run() {
             dismiss_prompt,
             pending_prompts,
             resize_panel,
+            get_user_config,
+            get_user_tokens,
             voice::voice_start,
             voice::voice_stop
         ])
@@ -571,20 +644,22 @@ mod tests {
 
     #[test]
     fn clamp_panel_height_clamps_to_band() {
-        assert_eq!(clamp_panel_height(100.0), PANEL_MIN_HEIGHT);
-        assert_eq!(clamp_panel_height(240.0), 240.0);
-        assert_eq!(clamp_panel_height(381.5), 381.5);
-        assert_eq!(clamp_panel_height(560.0), 560.0);
-        assert_eq!(clamp_panel_height(10_000.0), PANEL_MAX_HEIGHT);
+        let geo = crate::config::PanelGeometry::DEFAULT;
+        assert_eq!(clamp_panel_height(100.0, &geo), geo.min_height);
+        assert_eq!(clamp_panel_height(240.0, &geo), 240.0);
+        assert_eq!(clamp_panel_height(381.5, &geo), 381.5);
+        assert_eq!(clamp_panel_height(560.0, &geo), 560.0);
+        assert_eq!(clamp_panel_height(10_000.0, &geo), geo.max_height);
     }
 
     #[test]
     fn clamp_panel_height_rejects_non_finite() {
         // NaN/∞ can only come from a buggy or hostile webview — fall back to
-        // the design minimum rather than letting NaN through f64::clamp.
-        assert_eq!(clamp_panel_height(f64::NAN), PANEL_MIN_HEIGHT);
-        assert_eq!(clamp_panel_height(f64::INFINITY), PANEL_MIN_HEIGHT);
-        assert_eq!(clamp_panel_height(f64::NEG_INFINITY), PANEL_MIN_HEIGHT);
+        // the band minimum rather than letting NaN through f64::clamp.
+        let geo = crate::config::PanelGeometry::DEFAULT;
+        assert_eq!(clamp_panel_height(f64::NAN, &geo), geo.min_height);
+        assert_eq!(clamp_panel_height(f64::INFINITY, &geo), geo.min_height);
+        assert_eq!(clamp_panel_height(f64::NEG_INFINITY, &geo), geo.min_height);
     }
 
     #[test]

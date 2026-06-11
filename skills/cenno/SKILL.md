@@ -1,6 +1,6 @@
 ---
 name: cenno
-description: This skill should be used when an agent needs a decision, preference, confirmation, rating, or free-text input from the human user — to ask through a cenno panel and get a structured answer back, instead of guessing or blocking. Use it instead of saying "I'll assume…", before a risky or irreversible action (a yes/no), for a 1–N rating or pick-one-of-N choice, or to run a check-in / questionnaire. Also use it to set cenno up — install it or add it to a project's MCP config — when the ask_user tool is missing or an ask_user call failed with "not running / not found". Triggers on "ask me", "check with me first", "let me decide", "rate this", "confirm before", mood/EMA check-ins, "set up cenno", "configure cenno", "add cenno to this project", and any moment a human judgment call beats an assumption. macOS only.
+description: This skill should be used when an agent needs a decision, preference, confirmation, rating, or free-text input from the human user — to ask through a cenno panel and get a structured answer back, instead of guessing or blocking. Use it instead of saying "I'll assume…", before a risky or irreversible action (a yes/no), for a 1–N rating or pick-one-of-N choice, or to run a check-in / questionnaire. Also use it to set cenno up — install it or add it to a project's MCP config — when the ask_user tool is missing or an ask_user call failed with "not running / not found". Also use it to configure the cenno app itself — interview the user (through cenno panels by default) to build `~/.cenno/config.json` and `tokens.json`: panel size/position, default theme/timeout, custom widget types, and color theme. Triggers on "ask me", "check with me first", "let me decide", "rate this", "confirm before", mood/EMA check-ins, "set up cenno", "configure cenno", "customize cenno", "change the panel size/position/theme", "make a custom cenno widget", "set up ~/.cenno", "add cenno to this project", and any moment a human judgment call beats an assumption. macOS only.
 ---
 
 ## Loading your config (do this first, every time)
@@ -129,6 +129,126 @@ EOF
 ```
 
 Then confirm to the user: *"cenno configured — defaults saved to ~/.claude/skills/cenno/config.json."* Show the saved values in one line.
+
+---
+
+## Configuring the cenno APP (`~/.cenno`)
+
+> This is different from the skill config above. The **skill** config
+> (`~/.claude/skills/cenno/config.json`) tunes how *you* call cenno. The **app**
+> config (`~/.cenno/`) tunes the cenno *app itself* — panel size, where it
+> appears, default theme/timeout, custom widget types, and the color theme. Full
+> reference: the app's `docs/CONFIG.md`.
+
+Run this when the user says "configure the cenno app", "customize cenno", "change
+the panel size / position / theme", "make my own cenno widget", or "set up
+`~/.cenno`". **Interview the user — don't guess.** By default conduct the
+interview **through cenno itself** (`ask_sequence`, so the user picks answers in
+the very panels they're customizing); fall back to `AskUserQuestion` only if
+cenno isn't running.
+
+### The interview (via cenno — default)
+
+Read any existing config first so you preset, not clobber:
+
+```bash
+cat ~/.cenno/config.json 2>/dev/null || echo "{}"
+```
+
+Then ask the geometry/defaults in one panel sequence:
+
+```json
+{
+  "flow": "question",
+  "questions": [
+    { "title": "How wide should the panel be?", "input": { "kind": "choice" },
+      "choices": ["Compact (380)", "Default (420)", "Roomy (460)", "Wide (520)"], "progress": { "step": 1, "total": 4 } },
+    { "title": "Where should it appear?", "input": { "kind": "choice" },
+      "choices": ["Top-right", "Top-left", "Bottom-right", "Bottom-left", "Center", "Remember where I drag it"], "progress": { "step": 2, "total": 4 } },
+    { "title": "Default color theme when an agent doesn't pick one?", "input": { "kind": "choice" },
+      "choices": ["mood", "question", "ema", "reminder", "ambient"], "progress": { "step": 3, "total": 4 } },
+    { "title": "Default wait time before a prompt times out?", "input": { "kind": "choice" },
+      "choices": ["30 seconds", "60 seconds", "90 seconds", "2 minutes"], "progress": { "step": 4, "total": 4 } }
+  ]
+}
+```
+
+Then ask the two **optional** add-ons (only if the user seems interested, or they
+asked for a custom widget / new colors):
+
+```json
+{
+  "flow": "ema",
+  "questions": [
+    { "title": "Add a custom widget you can ask with by name?", "input": { "kind": "choice" },
+      "choices": ["No thanks", "rating5 (1–5 scale)", "nps (0–10 scale)"], "progress": { "step": 1, "total": 2 } },
+    { "title": "Recolor a flow theme?", "input": { "kind": "choice" },
+      "choices": ["Leave the built-in colors", "Let me name a flow + color"] }
+  ]
+}
+```
+
+If they pick "Let me name a flow + color", follow up with two `text` prompts
+(which flow; which color as a hex like `#6C4DF6`) — or just `AskUserQuestion` for
+a freeform hex, since typing hex in a panel is fiddly.
+
+### Mapping answers → files
+
+Map the choices and **write `~/.cenno/config.json`** (omit keys the user left at
+default; `position` becomes an `anchor` object, or drop it entirely for "remember
+where I drag it"):
+
+```bash
+mkdir -p ~/.cenno
+cat > ~/.cenno/config.json << 'EOF'
+{
+  "panel": {
+    "width": <380|420|460|520>,
+    "position": { "anchor": "<top-right|top-left|bottom-right|bottom-left|center>", "margin": 16 }
+  },
+  "defaults": {
+    "timeout_s": <30|60|90|120>,
+    "flow": "<mood|question|ema|reminder|ambient>"
+  },
+  "widgets": {
+    // include ONLY if they chose a custom widget:
+    "rating5": {
+      "childIds": ["scale"],
+      "components": [
+        { "id": "scale", "component": "Scale", "min": 1, "max": 5,
+          "minLabel": "poor", "maxLabel": "great", "value": { "path": "/scale" },
+          "selectAction": { "event": { "name": "submit-scale", "context": { "value": { "path": "/scale" }, "via": "choice" } } } }
+      ]
+    }
+  }
+}
+EOF
+```
+
+(For `nps`, use the same template with `"max": 10`, `"minLabel": "not likely"`,
+`"maxLabel": "very likely"`. To add more controls per widget, see the app's
+`docs/design/CONTROLS.md`.)
+
+If they chose to recolor a flow, **also write `~/.cenno/tokens.json`** (W3C DTCG;
+include only the colors changed):
+
+```bash
+cat > ~/.cenno/tokens.json << 'EOF'
+{ "color": { "$type": "color", "flow": { "<flow>": { "$value": "<#hex>" } } } }
+EOF
+```
+
+### After saving
+
+cenno reads `~/.cenno` **at launch**, so tell the user to **quit and reopen cenno**
+(or "Quit cenno" from the tray, then relaunch) for changes to take effect.
+Confirm in one line what changed, e.g. *"Saved ~/.cenno: 460px panel, top-right,
+ema default, 90s timeout, + a rating5 widget. Relaunch cenno to apply."*
+
+### `AskUserQuestion` fallback (cenno not running)
+
+If `ask_user`/`ask_sequence` aren't available, run the same interview with
+`AskUserQuestion` (same questions/choices), then write the same files.
 
 ---
 

@@ -58,8 +58,11 @@ pub struct AskRequest {
     pub choices: Option<Vec<String>>,
     #[serde(default = "default_urgency")]
     pub urgency: Urgency,
-    #[serde(default = "default_timeout")]
-    pub timeout_s: u64,
+    /// Seconds to wait for an answer. `None` (agent omitted it) defers to the
+    /// configured default (`~/.cenno` defaults.timeout_s) and finally to
+    /// [`DEFAULT_TIMEOUT_S`]. Resolve via [`AskRequest::timeout_secs`].
+    #[serde(default)]
+    pub timeout_s: Option<u64>,
     #[serde(default)]
     pub a2ui: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -70,8 +73,16 @@ pub struct AskRequest {
 fn default_urgency() -> Urgency {
     Urgency::Normal
 }
-fn default_timeout() -> u64 {
-    120
+
+/// Built-in fallback when neither the agent nor `~/.cenno` config sets a timeout.
+pub const DEFAULT_TIMEOUT_S: u64 = 120;
+
+impl AskRequest {
+    /// Resolve the effective timeout: the agent's value, else the configured
+    /// default, else [`DEFAULT_TIMEOUT_S`].
+    pub fn timeout_secs(&self, config_default: Option<u64>) -> u64 {
+        self.timeout_s.or(config_default).unwrap_or(DEFAULT_TIMEOUT_S)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -173,7 +184,13 @@ mod tests {
         assert_eq!(req.title, "Check-in");
         assert!(matches!(req.input.kind, InputKind::Text));
         assert!(matches!(req.urgency, Urgency::Normal));
-        assert_eq!(req.timeout_s, 120);
+        // Omitted timeout → None, resolving to the built-in default (or config).
+        assert_eq!(req.timeout_s, None);
+        assert_eq!(req.timeout_secs(None), 120);
+        assert_eq!(req.timeout_secs(Some(45)), 45); // config default applies
+        let explicit: AskRequest =
+            serde_json::from_str(r#"{"title":"t","timeout_s":30}"#).unwrap();
+        assert_eq!(explicit.timeout_secs(Some(45)), 30); // agent value wins
         let back = serde_json::to_string(&req).unwrap();
         assert!(back.contains("\"urgency\":\"normal\""));
     }

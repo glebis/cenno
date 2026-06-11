@@ -1,0 +1,4 @@
+Target dependency graph (2 targets)
+Target 'CennoiPhone' in project 'CennoCompanion'
+➜ Explicit dependency on target 'CennoShared' in project 'CennoCompanion'
+Target 'CennoShared' in project 'CennoCompanion' (no dependencies)

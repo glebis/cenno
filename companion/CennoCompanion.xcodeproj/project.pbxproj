@@ -1,0 +1,602 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0A9C3DDCBFC25F67C654CBDF /* CennoShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		105572D9E3C1A7419266CF61 /* iPhoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F2CB5326FC0247530DE3F5 /* iPhoneApp.swift */; };
+		1D86C6AD36D66BC09FCAE2DB /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D0F5967C6775045E6AE57061 /* CloudKit.framework */; };
+		31036D7B66374ECF6FA4D626 /* CennoShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		3ACCD0A640DE5EA22042D5AE /* PromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDDE64B70A9012CE0AD8FC0A /* PromptView.swift */; };
+		3B35C5C6B98052EC06AD1522 /* PromptQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 262BEEECA665777113FFE4EE /* PromptQueueView.swift */; };
+		46247F774C94420553524BD9 /* PhonePromptDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */; };
+		C688087EA8C4B7CE2E485869 /* PromptRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A79829A1E821488844DE1A /* PromptRecord.swift */; };
+		D1DDFFA9D6D840DD3C231F14 /* CennoShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; };
+		E39B7002CBEED5A4A95EC7B8 /* A2UIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */; };
+		E430EAB1F9DE12ACD90214B6 /* WatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE964B1EE155939E74083F /* WatchApp.swift */; };
+		E87BB3F57B45A0C23DD3C3EE /* PhonePromptQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */; };
+		F205B47236BA31FC86394A7D /* CloudKitRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */; };
+		F24C0DDDE01BBC04F945D532 /* CennoShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		2FE2BFC482711397B18F2F89 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 313EB8996C0C0C3F1089C1C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 442EF29E5473EA8AD6388F37;
+			remoteInfo = CennoShared;
+		};
+		EA3F50D224400D6861B3783E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 313EB8996C0C0C3F1089C1C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 442EF29E5473EA8AD6388F37;
+			remoteInfo = CennoShared;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		340DCD197447DAC0E55F79D8 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				0A9C3DDCBFC25F67C654CBDF /* CennoShared.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		62FF3AEC9933B8FDCAE370B8 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				31036D7B66374ECF6FA4D626 /* CennoShared.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIRouter.swift; sourceTree = "<group>"; };
+		18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRelay.swift; sourceTree = "<group>"; };
+		262BEEECA665777113FFE4EE /* PromptQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptQueueView.swift; sourceTree = "<group>"; };
+		2A093FDFC5DF7ED29D0808C0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		49FE964B1EE155939E74083F /* WatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchApp.swift; sourceTree = "<group>"; };
+		57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhonePromptDetailView.swift; sourceTree = "<group>"; };
+		5A190FA828572F0F5AA2C82C /* CennoiPhone.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CennoiPhone.entitlements; sourceTree = "<group>"; };
+		643920CA01F24FA300D9FA61 /* CennoWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CennoWatch.entitlements; sourceTree = "<group>"; };
+		87A79829A1E821488844DE1A /* PromptRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRecord.swift; sourceTree = "<group>"; };
+		99F2CB5326FC0247530DE3F5 /* iPhoneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPhoneApp.swift; sourceTree = "<group>"; };
+		9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhonePromptQueueView.swift; sourceTree = "<group>"; };
+		B07CAB34C1E39709D207949B /* CennoShared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = CennoShared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		B11E463B157D0E0741D3EF4B /* CennoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CennoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF87DB1281A8CA63B8B301B4 /* CennoiPhone.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CennoiPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D0F5967C6775045E6AE57061 /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
+		DDDE64B70A9012CE0AD8FC0A /* PromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptView.swift; sourceTree = "<group>"; };
+		EC94B9D904E9B43A229FB470 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		09E2A79F146623600D4D0D73 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1DDFFA9D6D840DD3C231F14 /* CennoShared.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		71B7322CEFF6C53D3749393A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D86C6AD36D66BC09FCAE2DB /* CloudKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FE6412E292FA2B2D2702A329 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F24C0DDDE01BBC04F945D532 /* CennoShared.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		235E5BA8A29A1D76CC6451F5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				CF87DB1281A8CA63B8B301B4 /* CennoiPhone.app */,
+				B07CAB34C1E39709D207949B /* CennoShared.framework */,
+				B11E463B157D0E0741D3EF4B /* CennoWatch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		57D9B427D2D33974C05DC7A7 /* iPhone */ = {
+			isa = PBXGroup;
+			children = (
+				5A190FA828572F0F5AA2C82C /* CennoiPhone.entitlements */,
+				EC94B9D904E9B43A229FB470 /* Info.plist */,
+				99F2CB5326FC0247530DE3F5 /* iPhoneApp.swift */,
+				57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */,
+				9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */,
+			);
+			name = iPhone;
+			path = Sources/iPhone;
+			sourceTree = "<group>";
+		};
+		60ECFD501DABDDD2CC1A405C /* Watch */ = {
+			isa = PBXGroup;
+			children = (
+				643920CA01F24FA300D9FA61 /* CennoWatch.entitlements */,
+				2A093FDFC5DF7ED29D0808C0 /* Info.plist */,
+				262BEEECA665777113FFE4EE /* PromptQueueView.swift */,
+				DDDE64B70A9012CE0AD8FC0A /* PromptView.swift */,
+				49FE964B1EE155939E74083F /* WatchApp.swift */,
+			);
+			name = Watch;
+			path = Sources/Watch;
+			sourceTree = "<group>";
+		};
+		8A56ED5BF8DC5B3CBA44F2A3 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */,
+				18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */,
+				87A79829A1E821488844DE1A /* PromptRecord.swift */,
+			);
+			name = Shared;
+			path = Sources/Shared;
+			sourceTree = "<group>";
+		};
+		ADDDAD80258261473EF7077B = {
+			isa = PBXGroup;
+			children = (
+				57D9B427D2D33974C05DC7A7 /* iPhone */,
+				8A56ED5BF8DC5B3CBA44F2A3 /* Shared */,
+				60ECFD501DABDDD2CC1A405C /* Watch */,
+				EECD30A54127E290A0E6D14D /* Frameworks */,
+				235E5BA8A29A1D76CC6451F5 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EECD30A54127E290A0E6D14D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				D0F5967C6775045E6AE57061 /* CloudKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0DDD721A75A6906CE70F27B3 /* CennoiPhone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A38DB93B93FF61E030A8F49 /* Build configuration list for PBXNativeTarget "CennoiPhone" */;
+			buildPhases = (
+				8F0492971BBA7D95D261C3E2 /* Sources */,
+				FE6412E292FA2B2D2702A329 /* Frameworks */,
+				62FF3AEC9933B8FDCAE370B8 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FD7D9B961EEE92B5BCCC6BE4 /* PBXTargetDependency */,
+			);
+			name = CennoiPhone;
+			productName = CennoiPhone;
+			productReference = CF87DB1281A8CA63B8B301B4 /* CennoiPhone.app */;
+			productType = "com.apple.product-type.application";
+		};
+		442EF29E5473EA8AD6388F37 /* CennoShared */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7E398B62508138B700905505 /* Build configuration list for PBXNativeTarget "CennoShared" */;
+			buildPhases = (
+				291B252FE7591A9AF1610E47 /* Sources */,
+				71B7322CEFF6C53D3749393A /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CennoShared;
+			productName = CennoShared;
+			productReference = B07CAB34C1E39709D207949B /* CennoShared.framework */;
+			productType = "com.apple.product-type.framework";
+		};
+		BD4C3B9B29CF1DB429558400 /* CennoWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FD3D51318B19A3D368EAC54A /* Build configuration list for PBXNativeTarget "CennoWatch" */;
+			buildPhases = (
+				60E23B40A775E0C2B7102AAF /* Sources */,
+				09E2A79F146623600D4D0D73 /* Frameworks */,
+				340DCD197447DAC0E55F79D8 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				67BA644BFC994A6F7AEA7226 /* PBXTargetDependency */,
+			);
+			name = CennoWatch;
+			productName = CennoWatch;
+			productReference = B11E463B157D0E0741D3EF4B /* CennoWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		313EB8996C0C0C3F1089C1C1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					0DDD721A75A6906CE70F27B3 = {
+						DevelopmentTeam = B9CBCK2CJY;
+					};
+					442EF29E5473EA8AD6388F37 = {
+						DevelopmentTeam = B9CBCK2CJY;
+					};
+					BD4C3B9B29CF1DB429558400 = {
+						DevelopmentTeam = B9CBCK2CJY;
+					};
+				};
+			};
+			buildConfigurationList = 8B805998C086FB403EDFD0F8 /* Build configuration list for PBXProject "CennoCompanion" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = ADDDAD80258261473EF7077B;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				442EF29E5473EA8AD6388F37 /* CennoShared */,
+				BD4C3B9B29CF1DB429558400 /* CennoWatch */,
+				0DDD721A75A6906CE70F27B3 /* CennoiPhone */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		291B252FE7591A9AF1610E47 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E39B7002CBEED5A4A95EC7B8 /* A2UIRouter.swift in Sources */,
+				F205B47236BA31FC86394A7D /* CloudKitRelay.swift in Sources */,
+				C688087EA8C4B7CE2E485869 /* PromptRecord.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		60E23B40A775E0C2B7102AAF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3B35C5C6B98052EC06AD1522 /* PromptQueueView.swift in Sources */,
+				3ACCD0A640DE5EA22042D5AE /* PromptView.swift in Sources */,
+				E430EAB1F9DE12ACD90214B6 /* WatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8F0492971BBA7D95D261C3E2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				46247F774C94420553524BD9 /* PhonePromptDetailView.swift in Sources */,
+				E87BB3F57B45A0C23DD3C3EE /* PhonePromptQueueView.swift in Sources */,
+				105572D9E3C1A7419266CF61 /* iPhoneApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		67BA644BFC994A6F7AEA7226 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 442EF29E5473EA8AD6388F37 /* CennoShared */;
+			targetProxy = EA3F50D224400D6861B3783E /* PBXContainerItemProxy */;
+		};
+		FD7D9B961EEE92B5BCCC6BE4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 442EF29E5473EA8AD6388F37 /* CennoShared */;
+			targetProxy = 2FE2BFC482711397B18F2F89 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		299DD79D15EEB30605A66687 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/Watch/CennoWatch.entitlements;
+				INFOPLIST_FILE = Sources/Watch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.watch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Debug;
+		};
+		3AD07EB30CF9B58DD6ABFF83 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = B9CBCK2CJY;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		42C50E8AA9D2B2529A53DE25 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = B9CBCK2CJY;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		44C70B7D72A99482165E0B3A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.shared;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				TARGETED_DEVICE_FAMILY = "1,2,4";
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		867504F9C1EE3CD3FCFB032A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.shared;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
+				TARGETED_DEVICE_FAMILY = "1,2,4";
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		88054603B561107A645057E6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/Watch/CennoWatch.entitlements;
+				INFOPLIST_FILE = Sources/Watch/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.watch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Release;
+		};
+		AA49BD01299D38CE57732376 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/iPhone/CennoiPhone.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Sources/iPhone/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F47602633DE722F35F128E97 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/iPhone/CennoiPhone.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = Sources/iPhone/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5A38DB93B93FF61E030A8F49 /* Build configuration list for PBXNativeTarget "CennoiPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F47602633DE722F35F128E97 /* Debug */,
+				AA49BD01299D38CE57732376 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7E398B62508138B700905505 /* Build configuration list for PBXNativeTarget "CennoShared" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				44C70B7D72A99482165E0B3A /* Debug */,
+				867504F9C1EE3CD3FCFB032A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8B805998C086FB403EDFD0F8 /* Build configuration list for PBXProject "CennoCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3AD07EB30CF9B58DD6ABFF83 /* Debug */,
+				42C50E8AA9D2B2529A53DE25 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FD3D51318B19A3D368EAC54A /* Build configuration list for PBXNativeTarget "CennoWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				299DD79D15EEB30605A66687 /* Debug */,
+				88054603B561107A645057E6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 313EB8996C0C0C3F1089C1C1 /* Project object */;
+}

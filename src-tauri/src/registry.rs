@@ -44,11 +44,11 @@ impl PromptRegistry {
         let n = self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let id = format!("p_{n}");
         let (tx, rx) = oneshot::channel();
-        let deadline = Instant::now() + Duration::from_secs(req.timeout_s);
+        let deadline = Instant::now() + Duration::from_secs(req.timeout_secs(None));
         self.inner.lock().insert(id.clone(), Pending { tx: Some(tx), request: req.clone(), deadline });
         notify(&id, &req);
         let started = Instant::now();
-        match tokio::time::timeout(Duration::from_secs(req.timeout_s), rx).await {
+        match tokio::time::timeout(Duration::from_secs(req.timeout_secs(None)), rx).await {
             Ok(Ok((answer, via))) => {
                 self.inner.lock().remove(&id);
                 AskResponse::Answered { answer, via, elapsed_s: started.elapsed().as_secs_f64() }

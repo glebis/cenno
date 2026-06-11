@@ -11,7 +11,7 @@
  * vars (--cenno-type-*, --cenno-space-*, --cenno-radius-*). Background stays
  * transparent — the panel root owns --cenno-surface.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -181,13 +181,27 @@ export function TextFieldView({
   // input stays editable even when the host doesn't echo changes back.
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
+
+  // Auto-grow the textarea to fit its content (so dictated text is visible as
+  // it streams in, not hidden off the right edge of a one-line field), then
+  // scroll to the newest words once it hits its max height.
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+    el.scrollTop = el.scrollHeight; // keep the latest line in view
+  }, [draft]);
+
   return (
     <div className="cenno-field-wrap">
       <div className="cenno-field">
-        <input
+        <textarea
+          ref={taRef}
           className="cenno-field__input"
-          type="text"
           value={draft}
+          rows={1}
           aria-label={label}
           placeholder={placeholder ?? label}
           onChange={(e) => {
@@ -195,8 +209,14 @@ export function TextFieldView({
             onChange?.(e.target.value);
           }}
           onKeyDown={(e) => {
-            // IME: Enter confirms the composition, not the answer
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            // Enter submits; Shift+Enter inserts a newline. IME: Enter that
+            // confirms a composition must not submit.
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing
+            ) {
+              e.preventDefault();
               onSubmit(e.currentTarget.value);
             }
           }}
