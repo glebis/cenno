@@ -1,0 +1,35 @@
+{
+  "panel": {
+    "width": 460,
+    "min_height": 240,
+    "max_height": 620,
+    "position": { "anchor": "top-right", "margin": 24 }
+  },
+  "defaults": {
+    "timeout_s": 90,
+    "flow": "ema"
+  },
+  "widgets": {
+    "rating5": {
+      "childIds": ["scale"],
+      "components": [
+        {
+          "id": "scale",
+          "component": "Scale",
+          "min": 1,
+          "max": 5,
+          "minLabel": "poor",
+          "maxLabel": "great",
+          "value": { "path": "/scale" },
+          "selectAction": {
+            "event": {
+              "name": "submit-scale",
+              "context": { "value": { "path": "/scale" }, "via": "choice" }
+            }
+          }
+        }
+      ],
+      "dataModel": {}
+    }
+  }
+}

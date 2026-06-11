@@ -302,6 +302,47 @@ describe("desugar mapping table", () => {
     }
   });
 
+  it("custom widget: input.kind matching a configured template expands it", () => {
+    // A declarative custom "rating5" widget from ~/.cenno/config.json that
+    // composes the built-in Scale with custom bounds/labels.
+    const widgets = {
+      rating5: {
+        childIds: ["scale"],
+        components: [
+          {
+            id: "scale",
+            component: "Scale",
+            min: 1,
+            max: 5,
+            minLabel: "poor",
+            maxLabel: "great",
+            value: { path: "/scale" },
+            selectAction: {
+              event: {
+                name: "submit-scale",
+                context: { value: { path: "/scale" }, via: "choice" },
+              },
+            },
+          },
+        ],
+        dataModel: {},
+      },
+    };
+    const messages = desugar(prompt({ input: { kind: "rating5" } }), widgets) as any[];
+    const components = messages[1].updateComponents.components;
+    const byId = new Map(components.map((c: any) => [c.id, c]));
+    const col = byId.get("col") as any;
+    // The template's component is mounted in place of a built-in control.
+    expect(col.children).toEqual(["title", "body", "scale"]);
+    expect(byId.get("scale")).toMatchObject({ component: "Scale", min: 1, max: 5 });
+  });
+
+  it("custom widget: an unknown kind with no template falls back to text", () => {
+    const { col, byId } = parts(prompt({ input: { kind: "nonexistent" } }));
+    expect(col.children).toContain("input");
+    expect(byId.get("input")).toMatchObject({ component: "TextField" });
+  });
+
   it("contract: every action name starts with 'submit' and context carries {value, via}", () => {
     const kinds = ["text", "voice", "voice_text", "choice", "scale", "confirm"];
     for (const kind of kinds) {

@@ -63,15 +63,24 @@ pub struct CennoServer {
     registry: PromptRegistry,
     notify: NotifyFn,
     db: Option<Db>,
+    /// Default prompt timeout (from `~/.cenno` config, else the built-in 120)
+    /// applied when an agent omits `timeout_s`.
+    default_timeout_s: u64,
     tool_router: ToolRouter<Self>,
 }
 
 impl CennoServer {
-    pub fn new(registry: PromptRegistry, notify: NotifyFn, db: Option<Db>) -> Self {
+    pub fn new(
+        registry: PromptRegistry,
+        notify: NotifyFn,
+        db: Option<Db>,
+        default_timeout_s: u64,
+    ) -> Self {
         Self {
             registry,
             notify,
             db,
+            default_timeout_s,
             tool_router: Self::tool_router(),
         }
     }
@@ -86,8 +95,11 @@ impl CennoServer {
     )]
     async fn ask_user(
         &self,
-        Parameters(params): Parameters<AskRequest>,
+        Parameters(mut params): Parameters<AskRequest>,
     ) -> Result<String, String> {
+        // Resolve the timeout against config now, so the registry and the
+        // panel's auto-hide budget all see the same concrete value.
+        params.timeout_s = Some(params.timeout_secs(Some(self.default_timeout_s)));
         // Boundary guard: the web renderer silently drops malformed/mis-versioned
         // a2ui messages, so reject HERE — before a prompt is registered — and
         // hand the agent an actionable error instead of a surface that never
@@ -164,7 +176,8 @@ impl CennoServer {
             let last = index + 1 == total;
 
             // Apply the sequence-level defaults to questions that lack them:
-            // inherit `flow`, and auto-fill progress dots (1-based step).
+            // inherit `flow`, auto-fill progress dots (1-based step), and
+            // resolve the timeout against config.
             let mut question = question;
             if question.flow.is_none() {
                 question.flow = params.flow.clone();
@@ -172,6 +185,7 @@ impl CennoServer {
             if question.progress.is_none() {
                 question.progress = Some(Progress { step: index + 1, total });
             }
+            question.timeout_s = Some(question.timeout_secs(Some(self.default_timeout_s)));
 
             let created_at = Utc::now();
             let captured_id: Arc<parking_lot::Mutex<String>> =
@@ -249,6 +263,7 @@ pub async fn start_socket_server(
     registry: PromptRegistry,
     notify: impl Fn(&str, &AskRequest, Option<SeqMeta>) + Send + Sync + 'static,
     db: Option<Db>,
+    default_timeout_s: u64,
 ) -> anyhow::Result<()> {
     // TODO(plan4): two concurrent launches can unlink each other's live socket —
     // enforce single instance (tauri-plugin-single-instance) instead of smarter
@@ -286,7 +301,8 @@ pub async fn start_socket_server(
                     continue;
                 }
             };
-            let server = CennoServer::new(registry.clone(), notify.clone(), db.clone());
+            let server =
+                CennoServer::new(registry.clone(), notify.clone(), db.clone(), default_timeout_s);
             tokio::spawn(async move {
                 let (read, write) = tokio::io::split(stream);
                 match server.serve((read, write)).await {

@@ -29,6 +29,7 @@ import { injectBasicCatalogStyles } from "@a2ui/web_core/v0_9/basic_catalog";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { cennoCatalog } from "./a2ui/catalog";
 import { desugar, SURFACE_ID } from "./a2ui/desugar";
+import { getWidgets } from "./userConfig";
 import { observePanelContent } from "./panelResize";
 
 // Once at module level. Guarded: jsdom (vitest) has no adoptedStyleSheets,
@@ -159,7 +160,7 @@ export default function PromptPanel({
         return created;
       };
 
-      const desugared = () => build(desugar(prompt));
+      const desugared = () => build(desugar(prompt, getWidgets()));
       if (prompt.a2ui == null) {
         return { surface: desugared(), fallback: null };
       }
