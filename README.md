@@ -156,7 +156,6 @@ Quit cenno
 ## Roadmap
 
 - **EMA scheduling engine** — recurring check-ins defined in cenno itself
-- **Voice input** — local whisper.cpp dictation with optional BYOK (Groq/OpenAI)
 - **Tray inbox** — answer prompts you missed
 
 ## Development
