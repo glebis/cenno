@@ -81,13 +81,39 @@ function button(
   ];
 }
 
+/**
+ * A custom widget template from `~/.cenno/config.json` — the same shape
+ * `desugarInput` returns, so a configured widget name slots straight in. Its
+ * components are validated against the catalog at render time like any payload.
+ */
+export interface WidgetTemplate {
+  childIds: string[];
+  components: A2uiComponent[];
+  dataModel?: Record<string, unknown>;
+}
+
 /** Input-kind specific components + initial data model. */
-function desugarInput(req: Prompt): {
+function desugarInput(
+  req: Prompt,
+  widgets: Record<string, WidgetTemplate>,
+): {
   childIds: string[];
   components: A2uiComponent[];
   dataModel: Record<string, unknown>;
 } {
-  switch (req.input?.kind) {
+  const kind = req.input?.kind;
+  // A configured custom widget takes precedence over the built-in kinds: the
+  // agent invokes it by name (input.kind) and we expand its declarative
+  // template (a composition of built-in controls — no code).
+  if (kind && widgets[kind]) {
+    const t = widgets[kind];
+    return {
+      childIds: t.childIds,
+      components: t.components,
+      dataModel: t.dataModel ?? {},
+    };
+  }
+  switch (kind) {
     case "choice": {
       const options = (req.choices ?? []).map((c) => ({ label: c, value: c }));
       // Mood flow renders choices as bare oversized words in one row
@@ -194,9 +220,16 @@ function desugarInput(req: Prompt): {
   }
 }
 
-/** Pure: AskRequest/Prompt -> A2UI v0.9 message envelope. */
-export function desugar(req: Prompt): A2uiMessages {
-  const input = desugarInput(req);
+/**
+ * Pure: AskRequest/Prompt -> A2UI v0.9 message envelope. `widgets` are the
+ * custom templates from `~/.cenno/config.json`; an `input.kind` matching one
+ * expands the template instead of a built-in control.
+ */
+export function desugar(
+  req: Prompt,
+  widgets: Record<string, WidgetTemplate> = {},
+): A2uiMessages {
+  const input = desugarInput(req, widgets);
   const hasBody = req.body_md !== "";
 
   const childIds = [

@@ -235,14 +235,22 @@
 
 .cenno-field__input {
   flex: 1;
+  min-width: 0;
   appearance: none;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--cenno-line);
   border-radius: 0;
   color: var(--cenno-text);
+  font-family: inherit;
   font-size: var(--cenno-type-body);
+  line-height: var(--cenno-leading-body, 1.4);
+  /* textarea: wrap, auto-grow (JS sets height), then scroll past a cap so the
+     latest dictated words stay visible instead of running off the edge. */
   min-height: 44px;
+  max-height: 180px;
+  overflow-y: auto;
+  resize: none;
   padding: var(--cenno-space-1) 0;
 }
 
