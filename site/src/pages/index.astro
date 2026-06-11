@@ -36,6 +36,7 @@ const panels = [
   { id: "how", flow: "reminder", label: "How it works" },
   { id: "wire", flow: "question", label: "Quickstart" },
   { id: "data", flow: "ema", label: "Privacy and policy" },
+  { id: "dev", flow: "paper", label: "For developers" },
   { id: "ship", flow: "ambient", label: "Download and links" },
 ];
 ---
@@ -99,26 +100,52 @@ const panels = [
       </header>
 
       <div class="panel-body hero-body">
-        <svg class="mark mark-xl" viewBox="0 0 22 22" aria-hidden="true">
-          <path class="mark-arc" d="M 5.6874 7.5765 A 5.5 5.5 0 0 1 16.3126 7.5765" fill="none" stroke="currentColor" stroke-width="2.5" pathLength="100"/>
-          <circle class="mark-dot" cx="11" cy="16.25" r="2.75" fill="currentColor"/>
-        </svg>
-        <h1 class="enter enter-1">agents ask.<br />you answer.</h1>
-        <p class="lede enter enter-2">
-          cenno gives MCP agents a polite way to reach you: a small panel slides
-          over your work — without stealing your keyboard — you tap or type, and
-          the agent gets a structured answer back.
-        </p>
-        <div class="cta-row enter enter-3">
-          <a class="btn btn-solid" href={DMG}>Download for macOS</a>
-          <button class="btn btn-ghost copy" data-copy={BREW} type="button">
-            <code>{BREW}</code>
-            <span class="copy-hint" role="status">copy</span>
-          </button>
+        <div class="hero-copy">
+          <svg class="mark mark-xl" viewBox="0 0 22 22" aria-hidden="true">
+            <path class="mark-arc" d="M 5.6874 7.5765 A 5.5 5.5 0 0 1 16.3126 7.5765" fill="none" stroke="currentColor" stroke-width="2.5" pathLength="100"/>
+            <circle class="mark-dot" cx="11" cy="16.25" r="2.75" fill="currentColor"/>
+          </svg>
+          <h1 class="enter enter-1">agents ask.<br />you answer.</h1>
+          <p class="lede enter enter-2">
+            cenno gives MCP agents a polite way to reach you: a small panel slides
+            over your work — without stealing your keyboard — you tap or type, and
+            the agent gets a structured answer back.
+          </p>
+          <div class="cta-row enter enter-3">
+            <a class="btn btn-solid" href={DMG}>Download for macOS</a>
+            <button class="btn btn-ghost copy" data-copy={BREW} type="button">
+              <code>{BREW}</code>
+              <span class="copy-hint" role="status">copy</span>
+            </button>
+          </div>
+          <p class="fine enter enter-4">
+            Apple Silicon · macOS&nbsp;12+ · free &amp; open source
+          </p>
         </div>
-        <p class="fine enter enter-4">
-          Signed &amp; notarized · Apple Silicon · macOS&nbsp;12+ · free &amp; open source
-        </p>
+
+        <!-- interactive demo: the agent interviews you, one panel at a time -->
+        <div class="demo enter enter-3" id="demo">
+          <div class="demo-term" role="log" aria-label="Terminal transcript">
+            <p><span class="t-dim">$</span> claude "interview me — learn my preferences"</p>
+            <p class="t-dim">⏺ cenno · ask_user</p>
+          </div>
+          <div class="demo-panel" data-flow="question" aria-live="polite">
+            <div class="demo-head">
+              <span class="demo-brand">
+                <svg viewBox="0 0 22 22" width="14" height="14" aria-hidden="true">
+                  <path d="M 5.6874 7.5765 A 5.5 5.5 0 0 1 16.3126 7.5765" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                  <circle cx="11" cy="16.25" r="2.75" fill="currentColor"/>
+                </svg>
+                cenno
+              </span>
+              <span class="demo-x" aria-hidden="true">×</span>
+            </div>
+            <p class="demo-q"></p>
+            <div class="demo-controls"></div>
+            <div class="demo-dots" aria-hidden="true"></div>
+          </div>
+          <p class="fine demo-hint">Live demo — answer it yourself, or let it play.</p>
+        </div>
       </div>
     </section>
 
@@ -223,7 +250,51 @@ const panels = [
       </div>
     </section>
 
-    <!-- 6 · AMBIENT — the confirm panel -->
+    <!-- 6 · PAPER — for developers -->
+    <section class="panel" id="dev" data-flow="paper" aria-label="For developers">
+      <div class="panel-body reveal">
+        <p class="caption">For developers</p>
+        <h2>Developer?</h2>
+        <ul class="claims dev-claims">
+          <li>
+            <h3>Ship your own control</h3>
+            <p>
+              The prompt UI is an <a href="https://a2ui.org">A2UI</a> catalog
+              (<code>cenno:catalog/v1</code>): write a plain React view, register a
+              thin adapter, and agents can render it. Raw A2UI payloads are
+              validated at the Rust boundary, so a new control normally needs no
+              Rust changes. <a href={`${GITHUB}/blob/main/docs/design/CONTROLS.md`}>The
+              catalog guide</a> has the inventory and the recipe.
+            </p>
+          </li>
+          <li>
+            <h3>Drive it from the CLI</h3>
+            <p>
+              <code>cenno ask "Ship it?" --timeout 30</code> from any script —
+              exit codes for answered / timed out, JSON on stdout, and
+              <code>cenno export --format csv</code> for the whole answer history.
+            </p>
+          </li>
+          <li>
+            <h3>Or speak MCP</h3>
+            <p>
+              One <code>ask_user</code> tool covers text, choice, scale, and
+              confirm — plus flow color, progress dots, timeouts, and full A2UI
+              layouts when a simple form isn't enough.
+              <a href={`${GITHUB}#the-ask_user-tool`}>The contract is in the README.</a>
+            </p>
+          </li>
+        </ul>
+        <p class="code-note dev-cta">
+          Something missing or broken?
+          <a href={`${GITHUB}/issues/new`}>Create an issue</a> — and see
+          <a href={`${GITHUB}/blob/main/CONTRIBUTING.md`}>CONTRIBUTING</a> before
+          your first PR.
+        </p>
+      </div>
+    </section>
+
+    <!-- 7 · AMBIENT — the confirm panel -->
     <section class="panel" id="ship" data-flow="ambient" aria-label="Download and links">
       <div class="panel-body ship-body reveal">
         <p class="caption">Confirm</p>
@@ -240,15 +311,18 @@ const panels = [
           <div class="builtby">
             <p class="caption">Built by</p>
             <p>
-              <a href="https://glebkalinin.de">Gleb Kalinin</a> — designed,
-              built, and reviewed end-to-end with AI agents in two days. The full
-              spec&nbsp;→&nbsp;plan&nbsp;→&nbsp;review trail
+              <a href="https://glebkalinin.com">Gleb Kalinin</a>
+              (<a href="https://www.linkedin.com/in/glebkalinin/">LinkedIn</a>) —
+              designed, built, and reviewed end-to-end with AI agents in two days.
+              The full spec&nbsp;→&nbsp;plan&nbsp;→&nbsp;review trail
               <a href={`${GITHUB}/tree/main/docs/superpowers`}>ships in the repo</a>.
             </p>
           </div>
           <p class="footer-meta">
             <a href={`${GITHUB}/blob/main/LICENSE`}>Apache-2.0</a> ·
             <a href={`${GITHUB}/blob/main/SECURITY.md`}>Security</a> ·
+            <a href={`${GITHUB}/blob/main/CONTRIBUTING.md`}>Contributing</a> ·
+            <a href={`${GITHUB}/issues/new`}>Create an issue</a> ·
             <a href={`${GITHUB}/releases`}>All releases</a> ·
             <a href={GITHUB}>GitHub</a>
           </p>
@@ -279,7 +353,7 @@ const panels = [
             const dot = byId.get(e.target.id);
             dot?.classList.add("on");
             dot?.setAttribute("aria-current", "true");
-            nav?.classList.toggle("dots-ink", e.target.id === "panels");
+            nav?.classList.toggle("dots-ink", (e.target as HTMLElement).dataset.flow === "paper");
           }
         },
         { threshold: 0.51 }
@@ -298,6 +372,102 @@ const panels = [
         { threshold: 0.2 }
       );
       document.querySelectorAll(".reveal").forEach((el) => revealer.observe(el));
+
+      // ——— interactive demo: a four-question preference interview ———
+      type Scene = {
+        flow: string;
+        q: string;
+        kind: "choice" | "scale" | "confirm";
+        options?: string[];
+        auto: string;
+      };
+      const SCENES: Scene[] = [
+        { flow: "question", q: "Coffee or tea, first thing?", kind: "choice", options: ["Coffee", "Tea", "Water"], auto: "Tea" },
+        { flow: "ema", q: "How adventurous are your weekend plans?", kind: "scale", auto: "5" },
+        { flow: "mood", q: "Your mornings, in one word?", kind: "choice", options: ["Calm", "Focused", "Chaotic", "Slow"], auto: "Focused" },
+        { flow: "reminder", q: "Save these to preferences.md?", kind: "confirm", options: ["Save", "Not now"], auto: "Save" },
+      ];
+      const demo = document.getElementById("demo");
+      const dPanel = demo?.querySelector<HTMLElement>(".demo-panel");
+      const dQ = demo?.querySelector<HTMLElement>(".demo-q");
+      const dControls = demo?.querySelector<HTMLElement>(".demo-controls");
+      const dDots = demo?.querySelector<HTMLElement>(".demo-dots");
+      const dTerm = demo?.querySelector<HTMLElement>(".demo-term");
+      if (demo && dPanel && dQ && dControls && dDots && dTerm) {
+        let scene = 0;
+        let sceneStart = 0;
+        let timer = 0;
+        const AUTO_MS = 5500;
+
+        const termLine = (html: string, dim = false) => {
+          const p = document.createElement("p");
+          if (dim) p.className = "t-dim";
+          p.innerHTML = html;
+          dTerm.appendChild(p);
+          while (dTerm.children.length > 4) dTerm.removeChild(dTerm.firstChild!);
+        };
+
+        const chip = (label: string, solid = false) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = solid ? "demo-chip demo-chip-solid" : "demo-chip";
+          b.textContent = label;
+          b.addEventListener("click", () => answer(label, b));
+          return b;
+        };
+
+        const render = () => {
+          const s = SCENES[scene];
+          sceneStart = performance.now();
+          dPanel.dataset.flow = s.flow;
+          dQ.textContent = s.q;
+          dControls.innerHTML = "";
+          dControls.className = `demo-controls demo-${s.kind}`;
+          if (s.kind === "scale") {
+            for (let i = 1; i <= 7; i++) dControls.appendChild(chip(String(i)));
+          } else {
+            s.options!.forEach((o, i) =>
+              dControls.appendChild(chip(o, s.kind === "confirm" && i === 0)));
+          }
+          dDots.innerHTML = SCENES.map((_, i) =>
+            `<span class="${i === scene ? "demo-dot demo-dot-on" : "demo-dot"}"></span>`).join("");
+          dPanel.classList.remove("demo-swap");
+          void dPanel.offsetWidth; // restart the swap animation
+          dPanel.classList.add("demo-swap");
+          clearTimeout(timer);
+          timer = window.setTimeout(() => {
+            const target = [...dControls.querySelectorAll<HTMLButtonElement>(".demo-chip")]
+              .find((c) => c.textContent === SCENES[scene].auto);
+            if (target) answer(SCENES[scene].auto, target, true);
+          }, AUTO_MS);
+        };
+
+        const answer = (value: string, el: HTMLButtonElement, auto = false) => {
+          clearTimeout(timer);
+          el.classList.add("demo-chip-picked");
+          const via = auto ? "timeout-demo" : "choice";
+          const elapsed = ((performance.now() - sceneStart) / 1000).toFixed(1);
+          termLine(`⏺ {"answer":"${value.toLowerCase()}","via":"${via}","elapsed_s":${elapsed}}`);
+          window.setTimeout(() => {
+            scene++;
+            if (scene >= SCENES.length) {
+              scene = 0;
+              termLine("✓ 4 answers recorded — preferences.md updated", true);
+              window.setTimeout(render, 2600);
+            } else {
+              render();
+            }
+          }, 700);
+        };
+
+        // Start the loop only when the hero is on screen.
+        new IntersectionObserver((entries, obs) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            render();
+            obs.disconnect();
+          }
+        }).observe(demo);
+      }
 
       // Copy-to-clipboard for the brew chip.
       document.querySelectorAll<HTMLButtonElement>(".copy").forEach((btn) => {
@@ -323,7 +493,7 @@ const panels = [
       });
     </script>
 
-    <style>
+    <style is:global>
       /* ——— base ————————————————————————————————————————————— */
       * { box-sizing: border-box; margin: 0; }
       html { scroll-behavior: smooth; }
@@ -430,8 +600,98 @@ const panels = [
         padding-bottom: 2px;
       }
       .strip-link:hover { border-bottom-color: currentColor; }
-      .mark-xl { width: clamp(56px, 9vw, 88px); height: auto; }
-      .hero-body .fine { margin-top: var(--cenno-space-3); color: var(--cenno-color-text-dim); }
+      .mark-xl { width: clamp(48px, 6vw, 72px); height: auto; }
+      .hero-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+        gap: clamp(var(--cenno-space-4), 6vw, calc(var(--cenno-space-5) * 1.5));
+        align-items: center;
+        max-width: 72rem;
+      }
+      .hero-copy .fine { margin-top: var(--cenno-space-3); color: var(--cenno-color-text-dim); }
+      @media (max-width: 960px) {
+        .hero-body { grid-template-columns: minmax(0, 1fr); }
+      }
+
+      /* ——— the interview demo —————————————————————————————— */
+      .demo { display: grid; gap: var(--cenno-space-2); max-width: 440px; width: 100%; }
+      .demo-term {
+        background: var(--cenno-color-flow-ambient);
+        color: var(--cenno-color-text-default);
+        border-radius: var(--cenno-radius-control);
+        padding: var(--cenno-space-2) var(--cenno-space-3);
+        font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+        font-size: var(--cenno-type-caption);
+        line-height: 1.7;
+        font-variant-numeric: tabular-nums;
+        min-height: calc(var(--cenno-type-caption) * 1.7 * 4 + var(--cenno-space-2) * 2);
+        overflow: hidden;
+      }
+      .demo-term p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .t-dim { color: var(--cenno-color-text-dim); }
+      .demo-panel {
+        border-radius: var(--cenno-radius-control);
+        padding: var(--cenno-space-2) var(--cenno-space-3) var(--cenno-space-3);
+        color: var(--cenno-color-text-default);
+        box-shadow: 0 24px 64px rgb(20 23 26 / 30%);
+        min-height: 230px;
+        display: flex; flex-direction: column;
+        transition: background-color 0.45s var(--ease-out-quart);
+      }
+      .demo-panel[data-flow="question"] { background: var(--cenno-color-flow-question); }
+      .demo-panel[data-flow="ema"]      { background: var(--cenno-color-flow-ema); }
+      .demo-panel[data-flow="mood"]     { background: var(--cenno-color-flow-mood); border: 1px solid var(--cenno-color-line); }
+      .demo-panel[data-flow="reminder"] { background: var(--cenno-color-flow-reminder); }
+      .demo-head {
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: var(--cenno-type-caption);
+        letter-spacing: var(--cenno-font-tracking-caption);
+        color: var(--cenno-color-text-dim);
+        margin-bottom: var(--cenno-space-2);
+      }
+      .demo-brand { display: inline-flex; align-items: center; gap: 6px; }
+      .demo-q {
+        font-size: var(--cenno-type-question-m);
+        line-height: var(--cenno-font-leading-question-m);
+        font-weight: var(--cenno-font-weight-question);
+        margin-bottom: var(--cenno-space-3);
+      }
+      .demo-controls { display: flex; flex-wrap: wrap; gap: var(--cenno-space-1); margin-bottom: var(--cenno-space-3); }
+      .demo-chip {
+        min-height: 44px;
+        padding: var(--cenno-space-1) var(--cenno-space-3);
+        border-radius: var(--cenno-radius-pill);
+        border: 1px solid var(--cenno-color-line);
+        background: transparent;
+        color: var(--cenno-color-text-default);
+        font-family: inherit;
+        font-size: var(--cenno-type-body);
+        cursor: pointer;
+        transition: border-color 0.2s, background-color 0.2s, color 0.2s;
+      }
+      .demo-scale .demo-chip { min-width: 44px; padding-inline: 0; }
+      .demo-chip:hover { border-color: currentColor; }
+      .demo-chip-solid, .demo-chip-picked {
+        background: var(--cenno-color-text-default);
+        color: var(--cenno-color-flow-ambient);
+        border-color: var(--cenno-color-text-default);
+      }
+      .demo-dots { display: flex; gap: var(--cenno-space-1); justify-content: center; margin-top: auto; }
+      .demo-dot {
+        width: 6px; height: 6px; border-radius: var(--cenno-radius-pill);
+        background: var(--cenno-color-text-default); opacity: 0.4;
+      }
+      .demo-dot-on { opacity: 1; }
+      .demo-hint { color: var(--cenno-color-text-dim); }
+      @keyframes demo-rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .demo-swap .demo-q, .demo-swap .demo-controls { animation: demo-rise 0.35s var(--ease-out-quart) both; }
+      @media (prefers-reduced-motion: reduce) {
+        .demo-panel { transition: none; }
+        .demo-swap .demo-q, .demo-swap .demo-controls { animation: none; }
+      }
 
       /* ——— buttons: the app's chips ————————————————————————— */
       .cta-row {
@@ -528,6 +788,12 @@ const panels = [
       }
       .claims p { color: var(--cenno-color-text-dim); max-width: 36ch; }
       .claims code { color: var(--cenno-color-text-default); font-size: 15px; }
+
+      /* dev section sits on paper: ink text, not white */
+      .panel[data-flow="paper"] .claims p { color: rgb(20 23 26 / 75%); }
+      .panel[data-flow="paper"] .claims code { color: var(--cenno-color-flow-ambient); }
+      .panel[data-flow="paper"] .code-note { color: rgb(20 23 26 / 75%); }
+      .dev-cta { margin-top: var(--cenno-space-4); }
 
       /* ——— ship / footer ——————————————————————————————————— */
       .ship-body { text-align: center; }
