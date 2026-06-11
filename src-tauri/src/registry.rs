@@ -1,7 +1,7 @@
 use crate::protocol::*;
 use parking_lot::Mutex;
 use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Notify};
 
 /// In-memory pending-prompt store. Timed-out prompts stay in the map by design
 /// (tray-inbox semantics) — the map grows unboundedly until plan 4 adds
@@ -16,10 +16,18 @@ struct Pending {
     /// None after a resolve() consumed the sender (including a late resolve on a timed-out prompt).
     tx: Option<oneshot::Sender<(String, Via)>>,
     pub request: AskRequest,
-    /// When this prompt's ask() stops waiting. Lets pending() distinguish
-    /// still-answerable prompts from timed-out leftovers (which stay in the
-    /// map for plan-4 inbox semantics but must NOT be replayed to the UI).
-    deadline: Instant,
+    /// The prompt's timeout budget. The clock does NOT start at registration —
+    /// it starts when the panel first DISPLAYS the prompt (mark_shown), so a
+    /// prompt queued behind another can't time out while it's still waiting its
+    /// turn (no concurrent request is ever lost to the queue).
+    timeout: Duration,
+    /// Deadline once shown (`mark_shown`); `None` while still queued/unshown.
+    /// pending() treats an unshown prompt as fully answerable with its whole
+    /// budget remaining.
+    deadline: Option<Instant>,
+    /// Notifies the parked ask() the instant the prompt is first shown, so it
+    /// can start its timeout from that moment.
+    shown: Arc<Notify>,
 }
 
 impl Default for PromptRegistry {
@@ -37,24 +45,65 @@ impl PromptRegistry {
     }
 
     /// Registers the prompt, calls `notify(id, req)` (used to emit to the UI),
-    /// then awaits the answer or times out. On timeout the prompt STAYS pending
-    /// (tray inbox semantics; plan 4 reads these via get_response).
-    /// Note: timeout_s == 0 times out immediately — acceptable for the skeleton.
+    /// then awaits the answer. The timeout clock starts only once the prompt is
+    /// first DISPLAYED (`mark_shown`) — until then it parks indefinitely, so a
+    /// prompt waiting in the display queue is never lost to a timeout it never
+    /// had a chance to answer. On timeout the prompt STAYS pending (tray inbox
+    /// semantics; plan 4 reads these via get_response).
+    /// Note: timeout_s == 0 times out immediately once shown.
     pub async fn ask(&self, req: AskRequest, notify: impl FnOnce(&str, &AskRequest)) -> AskResponse {
         let n = self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let id = format!("p_{n}");
-        let (tx, rx) = oneshot::channel();
-        let deadline = Instant::now() + Duration::from_secs(req.timeout_secs(None));
-        self.inner.lock().insert(id.clone(), Pending { tx: Some(tx), request: req.clone(), deadline });
+        let (tx, mut rx) = oneshot::channel();
+        let timeout = Duration::from_secs(req.timeout_secs(None));
+        let shown = Arc::new(Notify::new());
+        self.inner.lock().insert(
+            id.clone(),
+            Pending { tx: Some(tx), request: req.clone(), timeout, deadline: None, shown: shown.clone() },
+        );
         notify(&id, &req);
         let started = Instant::now();
-        match tokio::time::timeout(Duration::from_secs(req.timeout_secs(None)), rx).await {
+
+        // Phase 1 — park until the prompt is first shown OR resolved/dismissed,
+        // with NO timeout running. (Re-check shown under the lock to catch a
+        // mark_shown that raced registration; the Notify permit covers the rest.)
+        let shown_already = self.inner.lock().get(&id).and_then(|p| p.deadline).is_some();
+        if !shown_already {
+            tokio::select! {
+                res = &mut rx => {
+                    self.inner.lock().remove(&id);
+                    return match res {
+                        Ok((answer, via)) => AskResponse::Answered {
+                            answer, via, elapsed_s: started.elapsed().as_secs_f64(),
+                        },
+                        // Sender dropped by dismiss() before the prompt was shown.
+                        Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
+                    };
+                }
+                _ = shown.notified() => { /* now shown — fall through to the timeout */ }
+            }
+        }
+
+        // Phase 2 — shown: wait for the answer on the now-running budget.
+        match tokio::time::timeout(timeout, rx).await {
             Ok(Ok((answer, via))) => {
                 self.inner.lock().remove(&id);
                 AskResponse::Answered { answer, via, elapsed_s: started.elapsed().as_secs_f64() }
             }
-            // Err(Elapsed) = real timeout; Ok(Err(RecvError)) = sender dropped by dismiss(); both Err paths return TimedOut
+            // Err(Elapsed) = real timeout; Ok(Err(RecvError)) = sender dropped by dismiss(); both → TimedOut
             _ => AskResponse::TimedOut { answered: false, prompt_id: id },
+        }
+    }
+
+    /// Mark a prompt as first shown: start its timeout from now. Idempotent —
+    /// only the first call arms the clock (a replay/re-show must not extend it).
+    pub fn mark_shown(&self, id: &str) {
+        let mut map = self.inner.lock();
+        if let Some(p) = map.get_mut(id) {
+            if p.deadline.is_none() {
+                p.deadline = Some(Instant::now() + p.timeout);
+                p.shown.notify_one();
+            }
         }
     }
 
@@ -101,9 +150,15 @@ impl PromptRegistry {
             .inner
             .lock()
             .iter()
-            .filter(|(_, p)| p.tx.is_some() && now < p.deadline)
+            // Answerable = sender still present AND (not yet shown, OR shown but
+            // not past its deadline). An unshown prompt is always answerable.
+            .filter(|(_, p)| p.tx.is_some() && p.deadline.map_or(true, |d| now < d))
             .map(|(id, p)| {
-                let remaining_s = (p.deadline - now).as_secs_f64().ceil() as u64;
+                // Remaining budget: time left if shown, the whole budget if not.
+                let remaining_s = match p.deadline {
+                    Some(d) => (d - now).as_secs_f64().ceil() as u64,
+                    None => p.timeout.as_secs(),
+                };
                 (id.clone(), p.request.clone(), remaining_s)
             })
             .collect();
@@ -135,11 +190,31 @@ mod tests {
     #[tokio::test]
     async fn timeout_returns_timed_out_and_keeps_pending() {
         let reg = PromptRegistry::new();
-        let resp = reg.ask(req(), |_id, _req| {}).await; // timeout_s = 1
-        match resp {
+        let reg2 = reg.clone();
+        let task = tokio::spawn(async move { reg2.ask(req(), |_id, _req| {}).await }); // budget 1s
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let id = reg.pending_ids()[0].clone();
+        reg.mark_shown(&id); // start the clock; the 1s budget then elapses
+        match task.await.unwrap() {
             AskResponse::TimedOut { prompt_id, .. } => assert!(reg.pending_ids().contains(&prompt_id)),
             _ => panic!("expected TimedOut"),
         }
+    }
+
+    #[tokio::test]
+    async fn unshown_prompt_never_times_out_and_keeps_full_budget() {
+        let reg = PromptRegistry::new();
+        let reg2 = reg.clone();
+        // 1s budget, but never shown → the clock never starts.
+        let task = tokio::spawn(async move { reg2.ask(req(), |_id, _req| {}).await });
+        tokio::time::sleep(std::time::Duration::from_millis(1200)).await; // well past the budget
+        let pending = reg.pending();
+        assert_eq!(pending.len(), 1, "an unshown prompt stays answerable");
+        assert_eq!(pending[0].2, 1, "reports the full budget until shown");
+        assert!(!task.is_finished(), "ask() must not have timed out before being shown");
+        // Clean up.
+        assert!(reg.resolve(&pending[0].0, "late".into(), Via::Text));
+        task.await.unwrap();
     }
 
     #[tokio::test]
@@ -168,8 +243,10 @@ mod tests {
         let reg2 = reg.clone();
         let long: AskRequest = serde_json::from_str(r#"{"title":"t","timeout_s":10}"#).unwrap();
         let task = tokio::spawn(async move { reg2.ask(long, |_id, _req| {}).await });
-        // Burn ~1.1s of the 10s budget; remaining must reflect that
-        // (ceil(8.9) = 9), never echo the original timeout_s.
+        // Show it to start the 10s clock, then burn ~1.1s; remaining must
+        // reflect that (ceil(8.9) = 9), never echo the original timeout_s.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        reg.mark_shown(&reg.pending_ids()[0].clone());
         tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
         let pending = reg.pending();
         assert_eq!(pending.len(), 1);
@@ -212,7 +289,11 @@ mod tests {
     #[tokio::test]
     async fn pending_excludes_timed_out_prompt() {
         let reg = PromptRegistry::new();
-        let resp = reg.ask(req(), |_id, _req| {}).await; // timeout_s = 1, elapses
+        let reg2 = reg.clone();
+        let task = tokio::spawn(async move { reg2.ask(req(), |_id, _req| {}).await }); // budget 1s
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        reg.mark_shown(&reg.pending_ids()[0].clone()); // start the clock → elapses
+        let resp = task.await.unwrap();
         assert!(matches!(resp, AskResponse::TimedOut { .. }));
         // Timed-out entry stays in the map (inbox semantics)...
         assert_eq!(reg.pending_ids().len(), 1);

@@ -149,6 +149,24 @@ describe("App answered state machine", () => {
     expect(screen.queryByText("How are you feeling?")).toBeNull();
   });
 
+  it("after answering, advances to the next queued prompt instead of hiding", async () => {
+    await renderApp();
+    emitPrompt(moodEvent(40)); // P1
+    // P2 queued in the registry behind P1.
+    mocks.pending = [secondEvent(40)];
+
+    fireEvent.click(screen.getByRole("button", { name: "good" }));
+    await act(async () => {}); // answer_prompt; confirmation linger begins
+    expectConfirmationShown();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ANSWERED_LINGER_MS);
+    });
+    // Linger over → the queued P2 takes the panel; it was never hidden.
+    expect(screen.getByText("Second question?")).toBeTruthy();
+    expect(mocks.hide).not.toHaveBeenCalled();
+  });
+
   it("asks Rust to shrink the panel to min height for the confirmation card", async () => {
     const { invoke } = await import("@tauri-apps/api/core"); // the mock above
     vi.mocked(invoke).mockClear();
@@ -260,17 +278,41 @@ describe("App hide-timer generation guard (new-prompt races)", () => {
     expect(mocks.hide).not.toHaveBeenCalled();
   });
 
-  it("P1's timeout timer firing before P2's commit does not hide", async () => {
+  it("queues a competing prompt instead of replacing the unanswered one", async () => {
     await renderApp();
-    emitPrompt(moodEvent(2)); // P1's auto-hide armed for 2s
+    emitPrompt(moodEvent(2)); // P1 on screen, 2s budget, unanswered
+    expect(screen.getByText("How are you feeling?")).toBeTruthy();
 
-    emitPromptWithoutCommit(secondEvent(40));
-    vi.advanceTimersByTime(2000); // P1's timer fires pre-commit
-    expect(mocks.hide).not.toHaveBeenCalled();
+    // P2 arrives live while the user is still deciding on P1 → it must be
+    // queued (parked in the registry), NOT steamroll P1 off the screen.
+    emitPrompt(secondEvent(40));
+    expect(screen.getByText("How are you feeling?")).toBeTruthy();
+    expect(screen.queryByText("Second question?")).toBeNull();
 
-    await act(async () => {});
+    // P2 is pending in the registry; when P1 times out we advance to it
+    // (first come, first served) rather than hiding.
+    mocks.pending = [secondEvent(40)];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
     expect(screen.getByText("Second question?")).toBeTruthy();
     expect(mocks.hide).not.toHaveBeenCalled();
+  });
+
+  it("starts the timeout only when shown (mark_shown), not while queued", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await renderApp();
+    vi.mocked(invoke).mockClear();
+
+    emitPrompt(moodEvent(40)); // P1 shown → its clock should start
+    await act(async () => {});
+    emitPrompt(secondEvent(40)); // P2 queued (unanswered P1 on screen) → no clock
+    await act(async () => {});
+
+    const markShown = vi
+      .mocked(invoke)
+      .mock.calls.filter((c) => c[0] === "mark_shown");
+    expect(markShown).toEqual([["mark_shown", { id: "p_0" }]]); // only the shown P1
   });
 });
 
