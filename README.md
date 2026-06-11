@@ -6,7 +6,7 @@
 
 **cenno is a macOS app that lets AI agents ask you questions through minimal floating panels — and get your answer back as structured data.**
 
-If you run MCP-capable agents (Claude Code, Claude Desktop, or anything that speaks the [Model Context Protocol](https://modelcontextprotocol.io)), cenno gives them a polite way to reach you: a small panel slides over whatever you're doing — without stealing your keyboard focus — you tap or type, and the agent receives `{answer, via, elapsed_s}` as the tool result. Every exchange is recorded locally, so your answers become your own queryable dataset.
+If you run MCP-capable agents (Claude Code, Claude Desktop, OpenClaw, Hermes, or any other agent that speaks the [Model Context Protocol](https://modelcontextprotocol.io)), cenno gives them a polite way to reach you: a small panel slides over whatever you're doing — without stealing your keyboard focus — you tap or type, and the agent receives `{answer, via, elapsed_s}` as the tool result. Every exchange is recorded locally, so your answers become your own queryable dataset.
 
 Built for time-sensitive, low-friction interactions: mood check-ins, EMA questionnaires, quick decisions, reminders.
 
