@@ -6,6 +6,7 @@ pub mod db;
 pub mod mcp;
 pub mod protocol;
 pub mod registry;
+pub mod relay;
 pub mod suppress;
 pub mod tray;
 pub mod updater;

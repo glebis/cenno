@@ -119,23 +119,40 @@ impl CennoServer {
             Arc::new(parking_lot::Mutex::new(String::new()));
         let captured_id2 = captured_id.clone();
 
+        // Serialise the params once for the CloudKit payload (fire-and-forget).
+        let payload_for_relay = serde_json::to_string(&params).unwrap_or_default();
+        let timeout_for_relay = params.timeout_secs(Some(self.default_timeout_s));
+
         let resp = self
             .registry
             .ask(params.clone(), |id, req| {
                 *captured_id2.lock() = id.to_string();
                 (self.notify)(id, req, None);
+                // Publish to CloudKit so the Watch/iPhone companion can pick it up.
+                crate::relay::write_prompt(id, &payload_for_relay, timeout_for_relay);
             })
             .await;
 
         // Record the outcome — failures are non-fatal: log and continue.
-        if let Some(db) = &self.db {
+        {
             let prompt_id = match &resp {
                 crate::protocol::AskResponse::Answered { .. } => captured_id.lock().clone(),
                 crate::protocol::AskResponse::TimedOut { prompt_id, .. } => prompt_id.clone(),
             };
-            if let Err(e) = db.record_prompt(&params, &prompt_id, &resp, created_at) {
-                eprintln!("cenno db: failed to record prompt {prompt_id}: {e}");
+            if let Some(db) = &self.db {
+                if let Err(e) = db.record_prompt(&params, &prompt_id, &resp, created_at) {
+                    eprintln!("cenno db: failed to record prompt {prompt_id}: {e}");
+                }
             }
+            // Update CloudKit state so the companion hides the prompt.
+            let (state, answer_json) = match &resp {
+                crate::protocol::AskResponse::Answered { .. } => {
+                    let j = serde_json::to_string(&resp).unwrap_or_default();
+                    ("answered", Some(j))
+                }
+                crate::protocol::AskResponse::TimedOut { .. } => ("timed_out", None),
+            };
+            crate::relay::update_state(&prompt_id, state, answer_json.as_deref());
         }
 
         Ok(serde_json::to_string(&resp).expect("AskResponse is always serializable"))

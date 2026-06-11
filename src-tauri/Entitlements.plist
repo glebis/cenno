@@ -6,5 +6,15 @@
 	     appear at all; without it AVCaptureDevice denies silently. -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
+	<!-- CloudKit relay: write Prompt records so Watch/iPhone companion can
+	     display agent prompts when the user is away from the Mac. -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.app.cenno</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
 </dict>
 </plist>
