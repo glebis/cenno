@@ -124,12 +124,20 @@ describe("desugar mapping table", () => {
   });
 
   it.each(["voice", "voice_text"])(
-    "%s: TextField with voice: true + Send button",
+    "%s: TextField with voice: true + Send button, submitting via 'voice_text'",
     (kind) => {
       const { byId, col } = parts(prompt({ input: { kind } }));
       expect(byId.get("input")).toMatchObject({
         component: "TextField",
         voice: true,
+        // The kind names the modality offered; the wire via is constant
+        // whether the user dictated, edited, or typed (spec contract).
+        submitAction: {
+          event: {
+            name: "submit",
+            context: { value: { path: "/draft" }, via: "voice_text" },
+          },
+        },
       });
       expect(col.children).toContain("send");
     },
@@ -307,7 +315,7 @@ describe("desugar mapping table", () => {
       for (const a of actions) {
         expect(a.event.name).toMatch(/^submit/);
         expect(a.event.context).toHaveProperty("value");
-        expect(["text", "choice"]).toContain(a.event.context.via);
+        expect(["text", "choice", "voice_text"]).toContain(a.event.context.via);
       }
     }
   });

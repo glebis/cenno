@@ -1,6 +1,135 @@
 ---
 name: cenno
-description: This skill should be used when an agent needs a decision, preference, confirmation, rating, or free-text input from the human user — to ask through a cenno panel and get a structured answer back, instead of guessing or blocking. Use it instead of saying "I'll assume…", before a risky or irreversible action (a yes/no), for a 1–N rating or pick-one-of-N choice, or to run a check-in / questionnaire. Also use it to set cenno up — install it or add it to a project's MCP config — when the ask_user tool is missing or an ask_user call failed with "not running / not found". Triggers on "ask me", "check with me first", "let me decide", "rate this", "confirm before", mood/EMA check-ins, "set up cenno", "add cenno to this project", and any moment a human judgment call beats an assumption. macOS only.
+description: This skill should be used when an agent needs a decision, preference, confirmation, rating, or free-text input from the human user — to ask through a cenno panel and get a structured answer back, instead of guessing or blocking. Use it instead of saying "I'll assume…", before a risky or irreversible action (a yes/no), for a 1–N rating or pick-one-of-N choice, or to run a check-in / questionnaire. Also use it to set cenno up — install it or add it to a project's MCP config — when the ask_user tool is missing or an ask_user call failed with "not running / not found". Triggers on "ask me", "check with me first", "let me decide", "rate this", "confirm before", mood/EMA check-ins, "set up cenno", "configure cenno", "add cenno to this project", and any moment a human judgment call beats an assumption. macOS only.
+---
+
+## Loading your config (do this first, every time)
+
+The skill config lives at `~/.claude/skills/cenno/config.json`. **Before doing anything else**, read it:
+
+```bash
+cat ~/.claude/skills/cenno/config.json 2>/dev/null || echo "{}"
+```
+
+If the file exists, use its values as defaults for every `ask_user` call you make this session — only override them when the caller explicitly passes something different. If the file is missing or empty, use the built-in defaults shown below.
+
+### Config schema and built-in defaults
+
+```jsonc
+{
+  "default_timeout_s": 120,          // how long to wait for an answer
+  "default_flow": "question",        // color theme: mood | question | ema | reminder | ambient
+  "log_answers": false,              // append every answer to a log file
+  "log_file": "~/Desktop/cenno-log.md",  // path used when log_answers is true
+  "preferred_input": "mcp"           // mcp (preferred) | cli (always works)
+}
+```
+
+Apply these as defaults silently — don't narrate them to the user unless they asked for a setup summary.
+
+---
+
+## Setup wizard
+
+Run this when the user says "set up cenno", "configure cenno", "cenno setup", or similar. Also run it automatically if `config.json` is missing and the user is about to use cenno for a non-trivial purpose.
+
+The wizard asks 4 questions. Use cenno itself if it's available (MCP tool or CLI); fall back to `AskUserQuestion` if cenno isn't installed yet.
+
+### Step 1 — Default timeout
+
+**Via cenno MCP:**
+```json
+{
+  "title": "How long should cenno wait for your answer by default?",
+  "input": { "kind": "choice" },
+  "choices": ["30 seconds", "60 seconds", "90 seconds", "2 minutes"],
+  "flow": "question",
+  "timeout_s": 60
+}
+```
+
+Map answers → seconds: `"30 seconds"→30`, `"60 seconds"→60`, `"90 seconds"→90`, `"2 minutes"→120`.
+
+**Via AskUserQuestion fallback:**
+```
+question: "Default timeout for cenno panels?"
+options: ["30s", "60s", "90s", "2 min (default)"]
+```
+
+### Step 2 — Default flow theme
+
+**Via cenno MCP:**
+```json
+{
+  "title": "Which panel color feels right for most questions?",
+  "input": { "kind": "choice" },
+  "choices": ["question — neutral cobalt", "ema — teal check-in", "mood — warm coral", "reminder — calm slate", "ambient — quiet dark"],
+  "flow": "question",
+  "timeout_s": 60
+}
+```
+
+Extract the word before the dash as the `default_flow` value.
+
+**Via AskUserQuestion fallback:**
+```
+question: "Default cenno panel theme?"
+options: ["question (cobalt)", "ema (teal)", "mood (coral)", "reminder (slate)"]
+```
+
+### Step 3 — Log answers
+
+**Via cenno MCP:**
+```json
+{
+  "title": "Should cenno log every answer to a file?",
+  "body_md": "Useful for journaling or context-building loops.",
+  "input": { "kind": "confirm" },
+  "flow": "question",
+  "timeout_s": 60
+}
+```
+
+**Via AskUserQuestion fallback:**
+```
+question: "Log all cenno answers to a file?"
+options: ["Yes", "No (default)"]
+```
+
+### Step 4 — Log file path (only if Step 3 → yes)
+
+**Via cenno MCP:**
+```json
+{
+  "title": "Where should cenno write the log?",
+  "body_md": "Enter a full path, e.g. ~/Brains/brain/Daily/cenno-log.md",
+  "input": { "kind": "text" },
+  "flow": "question",
+  "timeout_s": 90
+}
+```
+
+**Via AskUserQuestion fallback:** ask `"Log file path (default: ~/Desktop/cenno-log.md)?"` as a free-text question.
+
+If the user leaves it blank or times out, use `~/Desktop/cenno-log.md`.
+
+### Saving the config
+
+After all answers are collected, write `~/.claude/skills/cenno/config.json`:
+
+```bash
+cat > ~/.claude/skills/cenno/config.json << 'EOF'
+{
+  "default_timeout_s": <answered_value>,
+  "default_flow": "<answered_value>",
+  "log_answers": <true|false>,
+  "log_file": "<answered_value>"
+}
+EOF
+```
+
+Then confirm to the user: *"cenno configured — defaults saved to ~/.claude/skills/cenno/config.json."* Show the saved values in one line.
+
 ---
 
 # Asking the user through cenno

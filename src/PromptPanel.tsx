@@ -62,7 +62,7 @@ export interface Prompt {
   seq?: { index: number; total: number; last: boolean };
 }
 
-export type Via = "text" | "choice";
+export type Via = "text" | "choice" | "voice_text";
 
 /** The component id the React renderer mounts (@a2ui/react A2uiSurface). */
 const ROOT_COMPONENT_ID = "root";
@@ -124,13 +124,16 @@ export default function PromptPanel({
           // a2ui payloads use the same action contract).
           if (!action.name.startsWith("submit")) return;
           // Harden against payload-authored contexts: via defaults to "text"
-          // unless it is literally "choice"; value is coerced via String()
-          // with null/undefined → "" (ack).
+          // unless it is literally "choice" or "voice_text"; value is coerced
+          // via String() with null/undefined → "" (ack).
           const ctx = action.context as
             | { value?: unknown; via?: unknown }
             | null
             | undefined;
-          const via: Via = ctx?.via === "choice" ? "choice" : "text";
+          const via: Via =
+            ctx?.via === "choice" || ctx?.via === "voice_text"
+              ? ctx.via
+              : "text";
           // /choice binding arrives as a 1-element array; unwrap it.
           const raw = Array.isArray(ctx?.value) ? ctx.value[0] : ctx?.value;
           // /scale arrives as a number; stringify. null/undefined → "" (ack).

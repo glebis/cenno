@@ -17,8 +17,9 @@
  * Adapters are intentionally untested here; they are covered by the Task 6
  * renderer integration.
  */
-import { Fragment } from "react";
+import { Fragment, useRef } from "react";
 import { z } from "zod";
+import { useVoiceDictation } from "../voice";
 import {
   Catalog,
   ActionSchema,
@@ -181,7 +182,7 @@ export const CennoTextFieldApi = {
   name: "TextField",
   schema: TextFieldApi.schema.extend({
     voice: DynamicBooleanSchema.optional().describe(
-      "Show the (stubbed until plan 3) voice input affordance.",
+      "Show the push-to-talk dictation affordance (on-device Apple Speech).",
     ),
     submitAction: ActionSchema.optional().describe(
       "Action fired when the user submits the field with Enter.",
@@ -191,19 +192,33 @@ export const CennoTextFieldApi = {
 
 export const CennoTextField = createComponentImplementation(
   CennoTextFieldApi,
-  ({ props }) => (
-    <TextFieldView
-      value={typeof props.value === "string" ? props.value : ""}
-      label={typeof props.label === "string" ? props.label : undefined}
-      voice={props.voice === true}
-      onChange={(text) => props.setValue(text)}
-      onSubmit={(text) => {
-        // keep the bound value current, then notify the host
-        props.setValue(text);
-        props.submitAction?.();
-      }}
-    />
-  ),
+  ({ props }) => {
+    const value = typeof props.value === "string" ? props.value : "";
+    // Latest bound value for the dictation base, without re-arming the hook.
+    const valueRef = useRef(value);
+    valueRef.current = value;
+    const dictation = useVoiceDictation({
+      enabled: props.voice === true,
+      getBase: () => valueRef.current,
+      onText: (text) => props.setValue(text),
+    });
+    return (
+      <TextFieldView
+        value={value}
+        label={typeof props.label === "string" ? props.label : undefined}
+        voice={props.voice === true}
+        recording={dictation.recording}
+        voiceError={dictation.error}
+        onMicToggle={dictation.toggle}
+        onChange={(text) => props.setValue(text)}
+        onSubmit={(text) => {
+          // keep the bound value current, then notify the host
+          props.setValue(text);
+          props.submitAction?.();
+        }}
+      />
+    );
+  },
 );
 
 /* ------------------------------------------------------------------ */

@@ -63,7 +63,7 @@ export const SURFACE_ID = "main";
 /** Must match the Catalog id in src/a2ui/catalog.tsx. */
 export const CATALOG_ID = "cenno:catalog/v1";
 
-type Via = "text" | "choice";
+type Via = "text" | "choice" | "voice_text";
 
 function submitAction(name: string, value: unknown, via: Via) {
   return { event: { name, context: { value, via } } };
@@ -165,7 +165,14 @@ function desugarInput(req: Prompt): {
       // Unknown/missing kind: defensive default to text.
       const voice =
         req.input?.kind === "voice" || req.input?.kind === "voice_text";
-      const submit = submitAction("submit", { path: "/draft" }, "text");
+      // voice_text answers report via "voice_text" whether the user dictated,
+      // edited, or typed — the panel kind names the modality offered, so the
+      // caller-visible shape stays constant (spec: "same shape as text").
+      const submit = submitAction(
+        "submit",
+        { path: "/draft" },
+        voice ? "voice_text" : "text",
+      );
       return {
         childIds: ["input", "send"],
         components: [
