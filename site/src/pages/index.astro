@@ -1,0 +1,628 @@
+---
+// cenno landing — every value comes from tokens/tokens.json via tokens.css.
+// The page is structured like a cenno session: one question per screen,
+// one flow color per panel, dot pagination fixed at the bottom.
+import "../styles/tokens.css";
+
+const GITHUB = "https://github.com/glebis/cenno";
+
+// Resolve the latest *released* DMG at build time; fall back to a known
+// release so the build never emits a 404 link (repo version may be ahead).
+let VERSION = "0.1.0";
+let DMG = `${GITHUB}/releases/download/v${VERSION}/cenno_${VERSION}_aarch64.dmg`;
+try {
+  const res = await fetch("https://api.github.com/repos/glebis/cenno/releases/latest", {
+    headers: { Accept: "application/vnd.github+json" },
+  });
+  if (res.ok) {
+    const rel = await res.json();
+    const asset = rel.assets?.find((a: { name: string }) => a.name.endsWith(".dmg"));
+    if (asset) {
+      DMG = asset.browser_download_url;
+      VERSION = String(rel.tag_name).replace(/^v/, "");
+    }
+  }
+} catch {
+  /* offline build → fallback link */
+}
+const BREW = "brew install --cask glebis/tap/cenno";
+const TITLE = "cenno — agents ask. you answer.";
+const DESCRIPTION =
+  "cenno is a macOS menu-bar app that lets AI agents ask you questions through minimal floating panels — without stealing your focus. Your answer goes back as structured data; every exchange stays in a local database that is yours.";
+
+const panels = [
+  { id: "hero", flow: "mood", label: "Introduction" },
+  { id: "panels", flow: "paper", label: "What it looks like" },
+  { id: "how", flow: "reminder", label: "How it works" },
+  { id: "wire", flow: "question", label: "Quickstart" },
+  { id: "data", flow: "ema", label: "Privacy and policy" },
+  { id: "ship", flow: "ambient", label: "Download and links" },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{TITLE}</title>
+    <meta name="description" content={DESCRIPTION} />
+    <link rel="canonical" href="https://cenno.salient.community/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#ff6250" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="cenno" />
+    <meta property="og:title" content={TITLE} />
+    <meta property="og:description" content={DESCRIPTION} />
+    <meta property="og:url" content="https://cenno.salient.community/" />
+    <meta property="og:image" content="https://cenno.salient.community/og.png" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="600" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={TITLE} />
+    <meta name="twitter:description" content={DESCRIPTION} />
+    <meta name="twitter:image" content="https://cenno.salient.community/og.png" />
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        name: "cenno",
+        operatingSystem: "macOS 12+",
+        applicationCategory: "DeveloperApplication",
+        offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+        softwareVersion: VERSION,
+        downloadUrl: DMG,
+        license: "https://www.apache.org/licenses/LICENSE-2.0",
+        author: { "@type": "Person", name: "Gleb Kalinin", url: "https://glebkalinin.de" },
+        description: DESCRIPTION,
+      })}
+    />
+    <noscript><style>.reveal { opacity: 1 !important; transform: none !important; }</style></noscript>
+  </head>
+
+  <body>
+    <a class="skip" href="#hero">Skip to content</a>
+
+    <!-- 1 · MOOD — the hero asks the only question that matters -->
+    <section class="panel" id="hero" data-flow="mood" aria-label="Introduction">
+      <header class="strip">
+        <span class="lockup" aria-label="cenno">
+          <svg class="mark" viewBox="0 0 22 22" width="22" height="22" aria-hidden="true">
+            <path d="M 5.6874 7.5765 A 5.5 5.5 0 0 1 16.3126 7.5765" fill="none" stroke="currentColor" stroke-width="2.5"/>
+            <circle cx="11" cy="16.25" r="2.75" fill="currentColor"/>
+          </svg>
+          cenno
+        </span>
+        <a class="strip-link" href={GITHUB}>GitHub&nbsp;&#8599;</a>
+      </header>
+
+      <div class="panel-body hero-body">
+        <svg class="mark mark-xl" viewBox="0 0 22 22" aria-hidden="true">
+          <path class="mark-arc" d="M 5.6874 7.5765 A 5.5 5.5 0 0 1 16.3126 7.5765" fill="none" stroke="currentColor" stroke-width="2.5" pathLength="100"/>
+          <circle class="mark-dot" cx="11" cy="16.25" r="2.75" fill="currentColor"/>
+        </svg>
+        <h1 class="enter enter-1">agents ask.<br />you answer.</h1>
+        <p class="lede enter enter-2">
+          cenno gives MCP agents a polite way to reach you: a small panel slides
+          over your work — without stealing your keyboard — you tap or type, and
+          the agent gets a structured answer back.
+        </p>
+        <div class="cta-row enter enter-3">
+          <a class="btn btn-solid" href={DMG}>Download for macOS</a>
+          <button class="btn btn-ghost copy" data-copy={BREW} type="button">
+            <code>{BREW}</code>
+            <span class="copy-hint" role="status">copy</span>
+          </button>
+        </div>
+        <p class="fine enter enter-4">
+          Signed &amp; notarized · Apple Silicon · macOS&nbsp;12+ · free &amp; open source
+        </p>
+      </div>
+    </section>
+
+    <!-- 2 · PAPER — show, don't tell -->
+    <section class="panel" id="panels" data-flow="paper" aria-label="What it looks like">
+      <div class="panel-body reveal">
+        <p class="caption">What it looks like</p>
+        <h2>One question per screen.<br />The answer is the interface.</h2>
+        <div class="shots">
+          <figure>
+            <img src="/qa-mood.png" alt="cenno mood check-in panel: 'How are you feeling right now?' over a coral background with five mood words" width="840" height="480" loading="lazy" />
+            <figcaption>A mood check-in. Tap a word, done.</figcaption>
+          </figure>
+          <figure class="shot-offset">
+            <img src="/qa-scale.png" alt="cenno EMA scale panel: a 1-to-7 scale question on teal with dot pagination" width="840" height="480" loading="lazy" />
+            <figcaption>A multi-step EMA flow with dot pagination.</figcaption>
+          </figure>
+        </div>
+        <p class="etym">
+          <em>Fare un cenno</em> — Italian: to give a small sign. To nod, to
+          mention briefly, to beckon silently. That's the whole interaction
+          model: agents make a small sign, you answer with one.
+        </p>
+      </div>
+    </section>
+
+    <!-- 3 · REMINDER — how it works -->
+    <section class="panel" id="how" data-flow="reminder" aria-label="How it works">
+      <div class="panel-body reveal">
+        <p class="caption">How it works</p>
+        <h2>Three small signs.</h2>
+        <ol class="steps">
+          <li>
+            <span class="step-n">01</span>
+            <h3>The agent asks</h3>
+            <p>Claude Code, Claude Desktop, or anything that speaks MCP calls the <code>ask_user</code> tool — text, choice, scale, or confirm.</p>
+          </li>
+          <li>
+            <span class="step-n">02</span>
+            <h3>A panel slides in</h3>
+            <p>A non-activating macOS panel floats above your work. It never grabs your keyboard — you answer when you glance at it, not when it interrupts.</p>
+          </li>
+          <li>
+            <span class="step-n">03</span>
+            <h3>Structured data comes back</h3>
+            <p>The agent receives <code>{'{answer, via, elapsed_s}'}</code> — typed results, not parsed strings. Timeouts are part of the contract.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 4 · QUESTION — quickstart -->
+    <section class="panel" id="wire" data-flow="question" aria-label="Quickstart">
+      <div class="panel-body reveal">
+        <p class="caption">Quickstart · 60 seconds</p>
+        <h2>Wire it into a project?</h2>
+        <div class="code-pair">
+          <div class="code-block">
+            <p class="caption code-label">.mcp.json</p>
+            <pre><code>{`{
+  "mcpServers": {
+    "cenno": {
+      "command": "/Applications/cenno.app/Contents/MacOS/cenno",
+      "args": ["--mcp-stdio"]
+    }
+  }
+}`}</code></pre>
+          </div>
+          <div class="code-block">
+            <p class="caption code-label">or straight from the shell</p>
+            <pre><code>{`/Applications/cenno.app/Contents/MacOS/cenno \\
+  ask "Ship it?" --timeout 30`}</code></pre>
+            <p class="code-note">A panel appears; your answer prints as JSON. cenno auto-launches if it isn't running.</p>
+          </div>
+        </div>
+        <p class="code-note">
+          There's also a ready-made <a href={`${GITHUB}/tree/main/skills/cenno`}>agent skill</a>
+          that teaches your agent to ask well — input kinds, etiquette, graceful timeouts.
+        </p>
+      </div>
+    </section>
+
+    <!-- 5 · EMA — data & respect -->
+    <section class="panel" id="data" data-flow="ema" aria-label="Privacy and policy">
+      <div class="panel-body reveal">
+        <p class="caption">Whose data?</p>
+        <h2>Yours. All of it.</h2>
+        <ul class="claims">
+          <li>
+            <h3>Local by design</h3>
+            <p>Every exchange lands in a local SQLite file with user-only permissions. cenno makes no network connections on its own.</p>
+          </li>
+          <li>
+            <h3>Queryable history</h3>
+            <p><code>cenno export</code> dumps your whole answer history as JSON or CSV. Your answers become your own dataset.</p>
+          </li>
+          <li>
+            <h3>Respectful by policy</h3>
+            <p>Pause prompts from the tray — 15 minutes to “until tomorrow”. Fullscreen keeps panels quiet automatically. Agents just see a normal timeout.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 6 · AMBIENT — the confirm panel -->
+    <section class="panel" id="ship" data-flow="ambient" aria-label="Download and links">
+      <div class="panel-body ship-body reveal">
+        <p class="caption">Confirm</p>
+        <h2 class="ship-q">Ship it?</h2>
+        <div class="cta-row">
+          <a class="btn btn-solid" href={DMG}>Download for macOS</a>
+          <a class="btn btn-ghost" href={GITHUB}>View on GitHub</a>
+        </div>
+        <p class="fine">
+          <code>{BREW}</code>
+        </p>
+
+        <footer class="footer">
+          <div class="builtby">
+            <p class="caption">Built by</p>
+            <p>
+              <a href="https://glebkalinin.de">Gleb Kalinin</a> — designed,
+              built, and reviewed end-to-end with AI agents in two days. The full
+              spec&nbsp;→&nbsp;plan&nbsp;→&nbsp;review trail
+              <a href={`${GITHUB}/tree/main/docs/superpowers`}>ships in the repo</a>.
+            </p>
+          </div>
+          <p class="footer-meta">
+            <a href={`${GITHUB}/blob/main/LICENSE`}>Apache-2.0</a> ·
+            <a href={`${GITHUB}/blob/main/SECURITY.md`}>Security</a> ·
+            <a href={`${GITHUB}/releases`}>All releases</a> ·
+            <a href={GITHUB}>GitHub</a>
+          </p>
+        </footer>
+      </div>
+    </section>
+
+    <!-- dot pagination — straight from the app's design rules -->
+    <nav class="dots" aria-label="Sections">
+      {panels.map((p, i) => (
+        <a href={`#${p.id}`} class="dot" data-target={p.id} aria-label={`Section ${i + 1}: ${p.label}`}></a>
+      ))}
+    </nav>
+
+    <script>
+      // Active dot follows the visible panel.
+      const dots = [...document.querySelectorAll<HTMLAnchorElement>(".dot")];
+      const byId = new Map(dots.map((d) => [d.dataset.target, d]));
+      const nav = document.querySelector<HTMLElement>(".dots");
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            dots.forEach((d) => {
+              d.classList.remove("on");
+              d.removeAttribute("aria-current");
+            });
+            const dot = byId.get(e.target.id);
+            dot?.classList.add("on");
+            dot?.setAttribute("aria-current", "true");
+            nav?.classList.toggle("dots-ink", e.target.id === "panels");
+          }
+        },
+        { threshold: 0.51 }
+      );
+      document.querySelectorAll(".panel").forEach((s) => observer.observe(s));
+
+      // Below-the-fold panels reveal once, gently.
+      const revealer = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            e.target.classList.add("in");
+            revealer.unobserve(e.target);
+          }
+        },
+        { threshold: 0.2 }
+      );
+      document.querySelectorAll(".reveal").forEach((el) => revealer.observe(el));
+
+      // Copy-to-clipboard for the brew chip.
+      document.querySelectorAll<HTMLButtonElement>(".copy").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const hint = btn.querySelector(".copy-hint");
+          try {
+            await navigator.clipboard.writeText(btn.dataset.copy ?? "");
+            if (hint) {
+              hint.textContent = "copied";
+              setTimeout(() => (hint.textContent = "copy"), 1600);
+            }
+          } catch {
+            if (hint) hint.textContent = "press ⌘C";
+            const range = document.createRange();
+            const code = btn.querySelector("code");
+            if (code) {
+              range.selectNodeContents(code);
+              getSelection()?.removeAllRanges();
+              getSelection()?.addRange(range);
+            }
+          }
+        });
+      });
+    </script>
+
+    <style>
+      /* ——— base ————————————————————————————————————————————— */
+      * { box-sizing: border-box; margin: 0; }
+      html { scroll-behavior: smooth; }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+      }
+      body {
+        font-family: var(--cenno-font-family-default);
+        font-size: var(--cenno-type-body);
+        line-height: var(--cenno-font-leading-body);
+        font-weight: var(--cenno-font-weight-body);
+        background: var(--cenno-color-flow-ambient);
+        -webkit-font-smoothing: antialiased;
+      }
+      code, pre {
+        font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .skip {
+        position: absolute; left: -200vw; top: 0;
+        background: var(--cenno-color-paper); color: var(--cenno-color-flow-ambient);
+        padding: var(--cenno-space-1) var(--cenno-space-2); z-index: 10;
+      }
+      .skip:focus { left: 0; }
+
+      /* ——— panels: one flow color per screen ————————————————— */
+      .panel {
+        min-height: 100svh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: clamp(var(--cenno-space-4), 8vh, var(--cenno-space-5))
+                 clamp(var(--cenno-space-3), 7vw, calc(var(--cenno-space-5) * 2));
+        color: var(--cenno-color-text-default);
+      }
+      .panel[data-flow="mood"]     { background: var(--cenno-color-flow-mood); }
+      .panel[data-flow="question"] { background: var(--cenno-color-flow-question); }
+      .panel[data-flow="ema"]      { background: var(--cenno-color-flow-ema); }
+      .panel[data-flow="reminder"] { background: var(--cenno-color-flow-reminder); }
+      .panel[data-flow="ambient"]  { background: var(--cenno-color-flow-ambient); }
+      .panel[data-flow="paper"] {
+        background: var(--cenno-color-paper);
+        color: var(--cenno-color-flow-ambient);
+      }
+      .panel-body { max-width: 62rem; width: 100%; margin-inline: auto; }
+
+      /* ——— type: hierarchy from size and weight only ———————— */
+      h1 {
+        font-size: clamp(var(--cenno-type-question-l), 8.5vw, 96px);
+        line-height: var(--cenno-font-leading-question-l);
+        font-weight: var(--cenno-font-weight-question);
+        letter-spacing: var(--cenno-font-tracking-default);
+        margin: var(--cenno-space-4) 0 var(--cenno-space-3);
+        text-wrap: balance;
+      }
+      h2 {
+        font-size: clamp(calc(var(--cenno-type-question-m) * 1.45), 5vw, 64px);
+        line-height: var(--cenno-font-leading-question-l);
+        font-weight: var(--cenno-font-weight-question);
+        margin: var(--cenno-space-2) 0 var(--cenno-space-4);
+        text-wrap: balance;
+        max-width: 24ch;
+      }
+      h3 {
+        font-size: var(--cenno-type-question-m);
+        line-height: var(--cenno-font-leading-question-m);
+        font-weight: var(--cenno-font-weight-question);
+        margin-bottom: var(--cenno-space-1);
+      }
+      .caption, .fine, figcaption, .code-label {
+        font-size: var(--cenno-type-caption);
+        line-height: var(--cenno-font-leading-caption);
+        font-weight: var(--cenno-font-weight-caption);
+        letter-spacing: var(--cenno-font-tracking-caption);
+        text-transform: uppercase;
+      }
+      .caption { color: var(--cenno-color-text-dim); }
+      .panel[data-flow="paper"] .caption { color: rgb(20 23 26 / 60%); }
+      .lede {
+        font-size: var(--cenno-type-question-m);
+        line-height: var(--cenno-font-leading-question-m);
+        max-width: 34ch;
+      }
+
+      /* ——— hero ———————————————————————————————————————————— */
+      .strip {
+        position: absolute; inset: 0 0 auto 0;
+        display: flex; justify-content: space-between; align-items: center;
+        padding: var(--cenno-space-3) clamp(var(--cenno-space-3), 7vw, calc(var(--cenno-space-5) * 2));
+      }
+      #hero { position: relative; }
+      .lockup {
+        display: inline-flex; align-items: center; gap: var(--cenno-space-1);
+        font-weight: var(--cenno-font-weight-question);
+        letter-spacing: var(--cenno-font-tracking-caption);
+      }
+      .strip-link {
+        color: inherit;
+        font-size: var(--cenno-type-caption);
+        letter-spacing: var(--cenno-font-tracking-caption);
+        text-transform: uppercase;
+        text-decoration: none;
+        border-bottom: 1px solid var(--cenno-color-line);
+        padding-bottom: 2px;
+      }
+      .strip-link:hover { border-bottom-color: currentColor; }
+      .mark-xl { width: clamp(56px, 9vw, 88px); height: auto; }
+      .hero-body .fine { margin-top: var(--cenno-space-3); color: var(--cenno-color-text-dim); }
+
+      /* ——— buttons: the app's chips ————————————————————————— */
+      .cta-row {
+        display: flex; flex-wrap: wrap; gap: var(--cenno-space-2);
+        align-items: center; margin-top: var(--cenno-space-4);
+      }
+      .btn {
+        display: inline-flex; align-items: center; gap: var(--cenno-space-1);
+        min-height: 44px;
+        padding: var(--cenno-space-1) var(--cenno-space-3);
+        border-radius: var(--cenno-radius-pill);
+        font-size: var(--cenno-type-body);
+        font-weight: var(--cenno-font-weight-question);
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s;
+      }
+      .btn:hover { transform: translateY(-2px); }
+      .btn:active { transform: translateY(0); }
+      .btn-solid { background: var(--cenno-color-text-default); color: var(--cenno-color-flow-ambient); border: 0; }
+      .btn-ghost {
+        background: transparent; color: inherit;
+        border: 1px solid var(--cenno-color-line);
+        font-weight: var(--cenno-font-weight-body);
+      }
+      .btn-ghost:hover { border-color: currentColor; }
+      .copy code { font-size: 15px; }
+      .copy-hint {
+        font-size: var(--cenno-type-caption);
+        letter-spacing: var(--cenno-font-tracking-caption);
+        text-transform: uppercase;
+        color: var(--cenno-color-text-dim);
+      }
+
+      /* ——— screenshots ————————————————————————————————————— */
+      .shots {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+        gap: var(--cenno-space-4);
+        align-items: start;
+        margin-block: var(--cenno-space-4);
+      }
+      .shot-offset { margin-top: var(--cenno-space-5); }
+      .shots img {
+        width: 100%; height: auto; display: block;
+        border-radius: var(--cenno-radius-control);
+        box-shadow: 0 24px 64px rgb(20 23 26 / 18%);
+      }
+      figcaption { margin-top: var(--cenno-space-2); color: rgb(20 23 26 / 60%); }
+      .etym { max-width: 52ch; color: rgb(20 23 26 / 75%); }
+
+      /* ——— steps ——————————————————————————————————————————— */
+      .steps {
+        list-style: none; padding: 0;
+        display: grid; gap: var(--cenno-space-4);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+      }
+      .steps p { color: var(--cenno-color-text-dim); max-width: 36ch; }
+      .steps code { font-size: 15px; color: var(--cenno-color-text-default); }
+      .step-n {
+        display: block;
+        font-size: var(--cenno-type-caption);
+        letter-spacing: var(--cenno-font-tracking-caption);
+        color: var(--cenno-color-text-dim);
+        border-top: 1px solid var(--cenno-color-line);
+        padding-top: var(--cenno-space-2);
+        margin-bottom: var(--cenno-space-2);
+      }
+
+      /* ——— code blocks ————————————————————————————————————— */
+      .code-pair {
+        display: grid; gap: var(--cenno-space-3);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+        margin-bottom: var(--cenno-space-3);
+      }
+      .code-block pre {
+        background: rgb(20 23 26 / 25%);
+        border-radius: var(--cenno-radius-control);
+        padding: var(--cenno-space-3);
+        overflow-x: auto;
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      .code-label { margin-bottom: var(--cenno-space-1); color: var(--cenno-color-text-dim); }
+      .code-note { margin-top: var(--cenno-space-2); color: var(--cenno-color-text-dim); max-width: 40ch; }
+      .panel a:not(.btn) { color: inherit; }
+      .panel a.btn-solid { color: var(--cenno-color-flow-ambient); }
+
+      /* ——— claims —————————————————————————————————————————— */
+      .claims {
+        list-style: none; padding: 0;
+        display: grid; gap: var(--cenno-space-4);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+      }
+      .claims p { color: var(--cenno-color-text-dim); max-width: 36ch; }
+      .claims code { color: var(--cenno-color-text-default); font-size: 15px; }
+
+      /* ——— ship / footer ——————————————————————————————————— */
+      .ship-body { text-align: center; }
+      .ship-q { margin-inline: auto; }
+      .ship-body .cta-row { justify-content: center; }
+      .ship-body .fine { margin-top: var(--cenno-space-3); color: var(--cenno-color-text-dim); text-transform: none; letter-spacing: 0; }
+      .footer {
+        margin-top: calc(var(--cenno-space-5) * 1.5);
+        padding-top: var(--cenno-space-4);
+        border-top: 1px solid var(--cenno-color-line);
+        display: grid; gap: var(--cenno-space-3);
+        text-align: left;
+      }
+      .builtby p:last-child { max-width: 56ch; margin-top: var(--cenno-space-1); }
+      .footer a { color: inherit; }
+      .footer-meta { color: var(--cenno-color-text-dim); font-size: var(--cenno-type-caption); letter-spacing: var(--cenno-font-tracking-caption); text-transform: uppercase; }
+
+      /* ——— dot pagination —————————————————————————————————— */
+      .dots {
+        position: fixed; bottom: 0; left: 50%;
+        translate: -50% 0;
+        display: flex;
+        z-index: 5;
+      }
+      /* 8px visual dot inside a ≥44px tap target (brand rule). */
+      .dot {
+        display: grid; place-items: center;
+        width: calc(8px + var(--cenno-space-1) * 2); min-width: 24px;
+        height: 44px;
+      }
+      .dot::before {
+        content: "";
+        width: 8px; height: 8px;
+        border-radius: var(--cenno-radius-pill);
+        background: var(--cenno-color-text-default);
+        opacity: 0.4;
+        transition: opacity 0.3s, transform 0.3s;
+      }
+      .dot.on::before { opacity: 1; transform: scale(1.25); }
+      .dots-ink .dot::before { background: var(--cenno-color-flow-ambient); }
+      .dot:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+
+      /* ——— motion: the mark beckons, content answers ———————— */
+      :root {
+        --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+        --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes draw-arc {
+        from { stroke-dashoffset: 100; }
+        to { stroke-dashoffset: 0; }
+      }
+      @keyframes land-dot {
+        from { opacity: 0; transform: translateY(-6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(16px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .mark-arc {
+        stroke-dasharray: 100;
+        animation: draw-arc 0.7s var(--ease-out-expo) 0.15s both;
+      }
+      .mark-dot {
+        transform-box: fill-box;
+        animation: land-dot 0.45s var(--ease-out-quart) 0.65s both;
+      }
+      .enter { animation: rise 0.6s var(--ease-out-quart) both; }
+      .enter-1 { animation-delay: 0.25s; }
+      .enter-2 { animation-delay: 0.4s; }
+      .enter-3 { animation-delay: 0.55s; }
+      .enter-4 { animation-delay: 0.7s; }
+      .reveal {
+        opacity: 0;
+        transform: translateY(16px);
+        transition: opacity 0.6s var(--ease-out-quart), transform 0.6s var(--ease-out-quart);
+      }
+      .reveal.in { opacity: 1; transform: none; }
+      .copy-hint { transition: color 0.2s; }
+      @media (prefers-reduced-motion: reduce) {
+        .mark-arc, .mark-dot, .enter { animation: none; }
+        .reveal { opacity: 1; transform: none; transition: none; }
+        .btn, .dot { transition: none; }
+        .btn:hover { transform: none; }
+      }
+      /* No-JS fallback: never hide content behind a class JS must add. */
+      @media (scripting: none) {
+        .reveal { opacity: 1; transform: none; }
+      }
+
+      /* ——— small screens ——————————————————————————————————— */
+      @media (max-width: 640px) {
+        .shot-offset { margin-top: 0; }
+        .panel { padding-bottom: calc(var(--cenno-space-5) + var(--cenno-space-3)); }
+      }
+    </style>
+  </body>
+</html>

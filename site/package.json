@@ -1,0 +1,17 @@
+{
+  "name": "cenno-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tokens": "cp ../src/styles/tokens.css src/styles/tokens.css 2>/dev/null || echo 'tokens: source repo not present, using committed snapshot'",
+    "predev": "npm run tokens",
+    "dev": "astro dev",
+    "prebuild": "npm run tokens",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^5.0.0"
+  }
+}
