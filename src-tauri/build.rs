@@ -6,6 +6,11 @@ fn main() {
         .with_package("CennoVoice", "swift")
         .link();
 
+    // Compile + link the CennoRelay Swift package (CloudKit relay writer).
+    SwiftLinker::new("13.0")
+        .with_package("CennoRelay", "swift")
+        .link();
+
     // Bake an rpath to the system Swift runtime so `cargo test`/`cargo run`
     // binaries can load @rpath/libswift_Concurrency.dylib without a DYLD_* env
     // (which macOS strips). Harmless for the release .app, which finds it via
