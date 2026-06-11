@@ -94,10 +94,59 @@ function App() {
   // hideWindow() would land AFTER the show, leaving live content in an
   // invisible window.
   const hideGenerationRef = useRef(0);
+  // Render-synced mirrors so the `prompt` listener (created once) can read the
+  // latest state without re-subscribing.
+  const activeRef = useRef<ActivePrompt | null>(null);
+  activeRef.current = active;
+  const answeredRef = useRef(false);
+  answeredRef.current = answered;
+  // True only in the gap between answering a non-last ask_sequence step and the
+  // next step's `prompt` event — that event is allowed to swap in place. Any
+  // OTHER incoming prompt while one is on screen is queued, not shown.
+  const awaitingSwapRef = useRef(false);
+
+  // After the on-screen prompt resolves, show the next still-pending one
+  // (oldest first — first come, first served across agents) instead of hiding.
+  // The registry holds every parked prompt; only the *display* is one-at-a-time.
+  async function advanceOrHide() {
+    // Exclude the prompt that just resolved: the registry removes it on
+    // answer/dismiss/timeout, but the frontend timer can race that removal, and
+    // we must never re-show the prompt we're leaving.
+    const resolvedId = activeRef.current?.prompt.id;
+    let next: PromptEvent | null = null;
+    try {
+      const pending = await invoke<PromptEvent[]>("pending_prompts");
+      next = pending.find((p) => p.id !== resolvedId) ?? null;
+    } catch (e) {
+      console.error("pending_prompts failed:", e);
+    }
+    hideGenerationRef.current += 1;
+    awaitingSwapRef.current = false;
+    setAnswered(false);
+    if (next) {
+      setActive({ prompt: toPrompt(next), remainingS: next.remaining_s });
+    } else {
+      setActive(null);
+      void hideWindow();
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
     const unlisten = listen<PromptEvent>("prompt", (event) => {
+      // Queue, don't steamroll: if a different prompt is already on screen and
+      // the user hasn't answered it yet, leave it up. The incoming prompt is
+      // already parked in the registry and will be shown when the current one
+      // resolves (advanceOrHide). The one exception is a sequence's next step,
+      // which is meant to swap in place.
+      if (
+        activeRef.current &&
+        !answeredRef.current &&
+        !awaitingSwapRef.current
+      ) {
+        return;
+      }
+      awaitingSwapRef.current = false;
       hideGenerationRef.current += 1;
       setActive({ prompt: toPrompt(event.payload), remainingS: event.payload.remaining_s });
       // A new prompt cancels any in-flight answered linger.
@@ -113,7 +162,7 @@ function App() {
       try {
         const pending = await invoke<PromptEvent[]>("pending_prompts");
         if (cancelled || pending.length === 0) return;
-        const newest = pending[pending.length - 1];
+        const oldest = pending[0]; // first come, first served
         setActive((current) => {
           if (current) return current;
           // Bump only when actually installing: a live prompt already on
@@ -123,7 +172,7 @@ function App() {
           // idempotent in effect: with current == null no timer is armed,
           // so an extra bump under double-invocation changes nothing.
           hideGenerationRef.current += 1;
-          return { prompt: toPrompt(newest), remainingS: newest.remaining_s };
+          return { prompt: toPrompt(oldest), remainingS: oldest.remaining_s };
         });
       } catch (e) {
         console.error("pending_prompts failed:", e);
@@ -134,6 +183,23 @@ function App() {
       unlisten.then((fn) => fn());
     };
   }, []);
+
+  // Whenever a prompt reaches the screen — fresh, replayed, or pulled off the
+  // queue — tell Rust it's shown so its timeout starts now, not when it was
+  // received. A prompt waiting its turn in the queue thus can't expire before
+  // the user ever sees it. Idempotent server-side, so re-renders are harmless.
+  const shownIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!active) {
+      shownIdRef.current = null;
+      return;
+    }
+    if (shownIdRef.current === active.prompt.id) return;
+    shownIdRef.current = active.prompt.id;
+    invoke("mark_shown", { id: active.prompt.id }).catch((e) =>
+      console.error("mark_shown failed:", e),
+    );
+  }, [active]);
 
   // Timeout auto-hide: when remaining_s elapses the Rust side has already
   // returned TimedOut to the agent — at (roughly) the same moment the panel
@@ -146,8 +212,9 @@ function App() {
       // A newer prompt was installed after this timer was armed (and before
       // cleanup could clear it) — hiding now would hide THAT prompt.
       if (hideGenerationRef.current !== generation) return;
-      setActive(null);
-      void hideWindow();
+      // This prompt timed out server-side too; show the next queued one (or
+      // hide if none) rather than just hiding.
+      void advanceOrHide();
     }, Math.min(active.remainingS * 1000, MAX_TIMEOUT_MS));
     return () => clearTimeout(timer);
   }, [active, answered]);
@@ -161,9 +228,8 @@ function App() {
     const timer = setTimeout(() => {
       // Same new-prompt race as the timeout timer above.
       if (hideGenerationRef.current !== generation) return;
-      setActive(null);
-      setAnswered(false);
-      void hideWindow();
+      // Linger done: advance to the next queued prompt, or hide if none.
+      void advanceOrHide();
     }, ANSWERED_LINGER_MS);
     return () => clearTimeout(timer);
   }, [answered]);
@@ -192,6 +258,9 @@ function App() {
     const seq = active?.prompt.seq;
     if (seq && !seq.last) {
       hideGenerationRef.current += 1;
+      // The next sequence step's `prompt` event is already on its way; let it
+      // swap in place (rather than being queued behind this resolved step).
+      awaitingSwapRef.current = true;
       // Clear any stale answered/confirmation state so the next step renders
       // clean (defensive — it should already be false at this point).
       setAnswered(false);
@@ -222,9 +291,8 @@ function App() {
       // asked for it gone. The prompt will time out on its own server-side.
       console.error("dismiss_prompt failed:", e);
     }
-    setAnswered(false);
-    setActive(null);
-    void hideWindow();
+    // Dismissing the current prompt advances to the next queued one (or hides).
+    void advanceOrHide();
   }
 
   if (!active) return null;
