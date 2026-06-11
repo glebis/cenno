@@ -539,6 +539,10 @@ const panels = [
 
         const answer = (value: string, el: HTMLButtonElement, auto = false) => {
           clearTimeout(timer);
+          // clear any pre-selected or previously picked chip before marking the new one
+          dControls.querySelectorAll<HTMLButtonElement>(".demo-chip").forEach((c) => {
+            c.classList.remove("demo-chip-solid", "demo-chip-picked");
+          });
           el.classList.add("demo-chip-picked");
           const via = auto ? "timeout-demo" : "choice";
           const elapsed = ((performance.now() - sceneStart) / 1000).toFixed(1);
@@ -552,7 +556,7 @@ const panels = [
             } else {
               render();
             }
-          }, 700);
+          }, auto ? 700 : 250);
         };
 
         // Start the loop only when the hero is on screen.
