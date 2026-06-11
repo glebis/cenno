@@ -298,6 +298,22 @@ describe("App hide-timer generation guard (new-prompt races)", () => {
     expect(screen.getByText("Second question?")).toBeTruthy();
     expect(mocks.hide).not.toHaveBeenCalled();
   });
+
+  it("starts the timeout only when shown (mark_shown), not while queued", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await renderApp();
+    vi.mocked(invoke).mockClear();
+
+    emitPrompt(moodEvent(40)); // P1 shown → its clock should start
+    await act(async () => {});
+    emitPrompt(secondEvent(40)); // P2 queued (unanswered P1 on screen) → no clock
+    await act(async () => {});
+
+    const markShown = vi
+      .mocked(invoke)
+      .mock.calls.filter((c) => c[0] === "mark_shown");
+    expect(markShown).toEqual([["mark_shown", { id: "p_0" }]]); // only the shown P1
+  });
 });
 
 describe("App timeout auto-hide", () => {

@@ -159,6 +159,15 @@ fn dismiss_prompt(state: tauri::State<PromptRegistry>, id: String) -> bool {
     state.dismiss(&id)
 }
 
+/// The webview reports a prompt as first DISPLAYED, which starts its timeout
+/// (see PromptRegistry::ask). A prompt waiting in the display queue has no
+/// clock running until it actually reaches the screen, so it can't be lost to
+/// a timeout it never had a chance to answer. Idempotent.
+#[tauri::command]
+fn mark_shown(state: tauri::State<PromptRegistry>, id: String) {
+    state.mark_shown(&id);
+}
+
 /// Startup decision for launch-at-login: `(enabled, persist_default)`.
 /// Pure — the actual plugin call is glue (see `reconcile_launch_at_login`).
 ///
@@ -627,6 +636,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             answer_prompt,
             dismiss_prompt,
+            mark_shown,
             pending_prompts,
             resize_panel,
             get_user_config,

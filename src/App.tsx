@@ -184,6 +184,23 @@ function App() {
     };
   }, []);
 
+  // Whenever a prompt reaches the screen — fresh, replayed, or pulled off the
+  // queue — tell Rust it's shown so its timeout starts now, not when it was
+  // received. A prompt waiting its turn in the queue thus can't expire before
+  // the user ever sees it. Idempotent server-side, so re-renders are harmless.
+  const shownIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!active) {
+      shownIdRef.current = null;
+      return;
+    }
+    if (shownIdRef.current === active.prompt.id) return;
+    shownIdRef.current = active.prompt.id;
+    invoke("mark_shown", { id: active.prompt.id }).catch((e) =>
+      console.error("mark_shown failed:", e),
+    );
+  }, [active]);
+
   // Timeout auto-hide: when remaining_s elapses the Rust side has already
   // returned TimedOut to the agent — at (roughly) the same moment the panel
   // must stop showing the now-unanswerable prompt instead of lingering
