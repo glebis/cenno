@@ -1,4 +1,0 @@
-framework module CennoShared {
-  header "CennoShared-Swift.h"
-  requires objc
-}
