@@ -1,3 +1,9 @@
+use swift_rs::SwiftLinker;
+
 fn main() {
-    tauri_build::build()
+    // Compile + link the CennoVoice Swift package (SpeechTranscriber dictation).
+    SwiftLinker::new("13.0")
+        .with_package("CennoVoice", "swift")
+        .link();
+    tauri_build::build();
 }

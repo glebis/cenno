@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fire a demo prompt of each kind at the running (or auto-launched) cenno.
-# Usage: scripts/demo.sh [text|choice|scale|confirm|mood|all]
+# Usage: scripts/demo.sh [text|voice|choice|scale|confirm|mood|all]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BIN="${CENNO_BIN:-src-tauri/target/release/cenno}"
@@ -16,10 +16,11 @@ ask() { # $1 = ask_user arguments JSON
 
 case "${1:-all}" in
   text)    ask '{"title":"Quick note","body_md":"What are you working on **right now**?","timeout_s":40}' ;;
+  voice)   ask '{"title":"Say a few words about your day.","input":{"kind":"voice_text"},"timeout_s":60}' ;;
   choice)  ask '{"title":"Where did this hour go?","input":{"kind":"choice"},"choices":["Deep work","Meetings","Email","Wandering"],"timeout_s":40}' ;;
   scale)   ask '{"title":"How focused were you this hour?","input":{"kind":"scale"},"flow":"ema","progress":{"step":1,"total":3},"timeout_s":40}' ;;
   confirm) ask '{"title":"Stand up and stretch.","input":{"kind":"confirm"},"flow":"reminder","timeout_s":40}' ;;
   mood)    ask '{"title":"How are you feeling?","input":{"kind":"choice"},"choices":["great","good","okay","low","rough"],"flow":"mood","timeout_s":40}' ;;
-  all)     for k in mood text choice scale confirm; do "$0" "$k"; done ;;
-  *) echo "usage: $0 [text|choice|scale|confirm|mood|all]"; exit 1 ;;
+  all)     for k in mood text voice choice scale confirm; do "$0" "$k"; done ;;
+  *) echo "usage: $0 [text|voice|choice|scale|confirm|mood|all]"; exit 1 ;;
 esac

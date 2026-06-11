@@ -8,6 +8,7 @@ pub mod registry;
 pub mod suppress;
 pub mod tray;
 pub mod updater;
+pub mod voice;
 
 use tauri::{Emitter, Manager};
 
@@ -86,7 +87,7 @@ fn resize_panel(window: tauri::WebviewWindow, height: f64) {
 #[tauri::command]
 fn answer_prompt(state: tauri::State<PromptRegistry>, id: String, answer: String, via: String) -> bool {
     let via = match via.as_str() {
-        "voice" => Via::Voice,
+        "voice_text" => Via::VoiceText,
         "choice" => Via::Choice,
         _ => Via::Text,
     };
@@ -552,7 +553,14 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![answer_prompt, dismiss_prompt, pending_prompts, resize_panel])
+        .invoke_handler(tauri::generate_handler![
+            answer_prompt,
+            dismiss_prompt,
+            pending_prompts,
+            resize_panel,
+            voice::voice_start,
+            voice::voice_stop
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

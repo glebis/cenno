@@ -75,9 +75,10 @@ fn default_timeout() -> u64 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum Via {
-    Voice,
+    /// Answer dictated (possibly then edited) in a voice_text panel.
+    VoiceText,
     Text,
     Choice,
 }
@@ -182,6 +183,19 @@ mod tests {
         let resp = AskResponse::Answered { answer: "ok".into(), via: Via::Text, elapsed_s: 3.2 };
         let json = serde_json::to_string(&resp).unwrap();
         assert_eq!(json, r#"{"answer":"ok","via":"text","elapsed_s":3.2}"#);
+    }
+
+    #[test]
+    fn voice_text_via_serializes_snake_case() {
+        let resp = AskResponse::Answered {
+            answer: "dictated".into(),
+            via: Via::VoiceText,
+            elapsed_s: 4.0,
+        };
+        assert_eq!(
+            serde_json::to_string(&resp).unwrap(),
+            r#"{"answer":"dictated","via":"voice_text","elapsed_s":4.0}"#
+        );
     }
 
     #[test]

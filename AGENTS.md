@@ -50,6 +50,8 @@ npx tauri build --no-bundle         # unsigned release binary → src-tauri/targ
 ### Gotchas
 
 - A plain `cargo build` binary loads the Vite dev server (port 1430) and shows a blank page unless `npm run dev` is running.
+- `npx tauri build` fails at bundling with `failed to run xattr` when a conda/python `xattr` shadows the system one — prefix the build with `PATH="/usr/bin:$PATH"`.
+- "Panel doesn't appear" during manual testing is usually fullscreen quiet mode working as designed (stderr says `suppressed (paused or fullscreen) — queued for replay`), not a bug.
 - CSP is only enforced in bundled builds — test security changes against `npx tauri build` output, never `tauri dev`.
 - Never edit generated CSS in `src/styles/` directly; change `tokens/tokens.json` and run `npm run tokens`.
 - The app's data is the user's: `cenno.db` is `0600`, local-only. Don't add network calls — the only permitted network access is the user-initiated updater.
