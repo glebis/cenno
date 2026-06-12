@@ -16,6 +16,12 @@ dist-ssr
 .enzyme/
 .enzyme-embeddings/
 
+# Xcode build artifacts — XCBuildData captures the build environment (incl. exported
+# API keys); these leaked secrets once. Never track them.
+companion/build/
+**/xcuserdata/
+**/DerivedData/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
