@@ -23,21 +23,30 @@ struct A2UIPromptView: View {
     var body: some View {
         ZStack {
             surfaceColor.ignoresSafeArea()
-            content
+            VStack(spacing: 0) {
+                header
+                content
+            }
         }
         .environment(\.cennoSurface, surfaceColor)
         .foregroundStyle(CennoTheme.ink)
         .tint(CennoTheme.ink)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(surfaceColor, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Skip") { skip() }.foregroundStyle(CennoTheme.ink)
-            }
-        }
+        // cenno draws its own chrome — hide the glassy iOS toolbar.
+        .toolbar(.hidden, for: .navigationBar)
         .onAppear(perform: buildSurface)
+    }
+
+    /// Plain top bar: a text-only Skip, no capsule background.
+    private var header: some View {
+        HStack {
+            Button("Skip") { skip() }
+                .buttonStyle(.plain)
+                .foregroundStyle(CennoTheme.inkDim)
+            Spacer()
+        }
+        .font(CennoTheme.body)
+        .padding(.horizontal, CennoTheme.space3)
+        .padding(.vertical, CennoTheme.space1)
     }
 
     @ViewBuilder private var content: some View {
