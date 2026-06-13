@@ -15,9 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "442EF29E5473EA8AD6388F37"
-               BuildableName = "CennoShared.framework"
-               BlueprintName = "CennoShared"
+               BlueprintIdentifier = "49F61B84300B07ACBF367F09"
+               BuildableName = "CennoSharedWatch.framework"
+               BlueprintName = "CennoSharedWatch"
                ReferencedContainer = "container:CennoCompanion.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -46,9 +46,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "442EF29E5473EA8AD6388F37"
-            BuildableName = "CennoShared.framework"
-            BlueprintName = "CennoShared"
+            BlueprintIdentifier = "49F61B84300B07ACBF367F09"
+            BuildableName = "CennoSharedWatch.framework"
+            BlueprintName = "CennoSharedWatch"
             ReferencedContainer = "container:CennoCompanion.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -70,9 +70,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "442EF29E5473EA8AD6388F37"
-            BuildableName = "CennoShared.framework"
-            BlueprintName = "CennoShared"
+            BlueprintIdentifier = "49F61B84300B07ACBF367F09"
+            BuildableName = "CennoSharedWatch.framework"
+            BlueprintName = "CennoSharedWatch"
             ReferencedContainer = "container:CennoCompanion.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -88,9 +88,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "442EF29E5473EA8AD6388F37"
-            BuildableName = "CennoShared.framework"
-            BlueprintName = "CennoShared"
+            BlueprintIdentifier = "49F61B84300B07ACBF367F09"
+            BuildableName = "CennoSharedWatch.framework"
+            BlueprintName = "CennoSharedWatch"
             ReferencedContainer = "container:CennoCompanion.xcodeproj">
          </BuildableReference>
       </MacroExpansion>

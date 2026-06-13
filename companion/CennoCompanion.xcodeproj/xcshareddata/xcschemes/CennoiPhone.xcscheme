@@ -29,6 +29,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "67FB64FCF505696D6DE2A896"
+               BuildableName = "CennoSharedTests.xctest"
+               BlueprintName = "CennoSharedTests"
+               ReferencedContainer = "container:CennoCompanion.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "0DDD721A75A6906CE70F27B3"
                BuildableName = "CennoiPhone.app"
                BlueprintName = "CennoiPhone"
@@ -53,6 +67,16 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "67FB64FCF505696D6DE2A896"
+               BuildableName = "CennoSharedTests.xctest"
+               BlueprintName = "CennoSharedTests"
+               ReferencedContainer = "container:CennoCompanion.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
