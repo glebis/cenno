@@ -71,11 +71,17 @@ targets:
         embed: true
       - target: CennoWatch
         embed: true
+      - package: A2UISwift
+        product: A2UISwiftUI
     info:
       path: Sources/iPhone/Info.plist
       properties:
         UILaunchScreen: {}
         NSRemoteNotificationUsageDescription: "cenno needs notifications to deliver agent prompts."
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion
       INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true

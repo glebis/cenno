@@ -10,13 +10,25 @@ struct CennoiPhoneApp: App {
 
     var body: some Scene {
         WindowGroup {
-            PhonePromptQueueView()
+            rootView
                 .environmentObject(relay)
-                .task { await relay.start() }
                 .onReceive(NotificationCenter.default.publisher(for: .cennoRemotePush)) { _ in
                     Task { await relay.handleRemoteNotification() }
                 }
         }
+    }
+
+    @ViewBuilder
+    private var rootView: some View {
+        #if DEBUG
+        if let kind = DemoHarness.requestedKind {
+            DemoRootView(kind: kind)   // headless renderer verification; skips CloudKit
+        } else {
+            PhonePromptQueueView().task { await relay.start() }
+        }
+        #else
+        PhonePromptQueueView().task { await relay.start() }
+        #endif
     }
 }
 

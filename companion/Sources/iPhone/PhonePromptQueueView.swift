@@ -65,7 +65,3 @@ private struct PromptRowView: View {
     }
 }
 
-extension PromptRecord: Hashable {
-    static func == (lhs: PromptRecord, rhs: PromptRecord) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
-}

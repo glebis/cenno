@@ -12,12 +12,14 @@
 		174B44154CE6092CF2CA289E /* A2UIAnswerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A279B3497CD93A40DFACB4F8 /* A2UIAnswerBridge.swift */; };
 		1D5EE0446F033ED0D79170F8 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D0CAD497984CEFD84F35D0 /* JSONValue.swift */; };
 		1D86C6AD36D66BC09FCAE2DB /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D0F5967C6775045E6AE57061 /* CloudKit.framework */; };
+		1DF3B76404DB96570E1490CC /* DemoHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */; };
 		21783E87B0742965B599EE9B /* A2UIMessageBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE02A405496F3D899D9978B4 /* A2UIMessageBuilderTests.swift */; };
 		23E94083740397192F5316D7 /* A2UISwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 2199C3497A4CBC6CAF71E50F /* A2UISwiftUI */; };
 		2FE6BB7FDAB12B01BC7D3FBF /* PromptRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A79829A1E821488844DE1A /* PromptRecord.swift */; };
 		31036D7B66374ECF6FA4D626 /* CennoShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		3ACCD0A640DE5EA22042D5AE /* PromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDDE64B70A9012CE0AD8FC0A /* PromptView.swift */; };
 		3B35C5C6B98052EC06AD1522 /* PromptQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 262BEEECA665777113FFE4EE /* PromptQueueView.swift */; };
+		3B657FA282853B3FE81C62A4 /* A2UIPromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C052550FFC24F59FAC6C30F7 /* A2UIPromptView.swift */; };
 		4427A07A773D284E29739E2B /* CennoShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		46247F774C94420553524BD9 /* PhonePromptDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */; };
 		4AC242903245E53AA4953BF0 /* JSONValueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60668160A6279D96D391D7F /* JSONValueTests.swift */; };
@@ -37,11 +39,13 @@
 		CD3E6EB0E95350E05AE442D3 /* CloudKitRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */; };
 		D140F5134FB994DC1B9EFE04 /* CennoComponentRemap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7CEA0C7EC0CF4FEE89C7CC3 /* CennoComponentRemap.swift */; };
 		D24F933AD04EDEEAF045448B /* PromptPayloadDecodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98FEB886452ACFBEA392FBB2 /* PromptPayloadDecodeTests.swift */; };
+		D7494652F8B0179729345E56 /* A2UISwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 9EAA7185A23416A734534A41 /* A2UISwiftUI */; };
 		DB8B5A16C48CBB0B8BB0342B /* A2UIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */; };
 		E1ED69273A89DFE319E30D51 /* A2UIDesugar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D8FD3FCE1A21990FA815F56 /* A2UIDesugar.swift */; };
 		E360F77FFC39CFCD726D3C52 /* A2UIAnswerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A279B3497CD93A40DFACB4F8 /* A2UIAnswerBridge.swift */; };
 		E39B7002CBEED5A4A95EC7B8 /* A2UIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */; };
 		E430EAB1F9DE12ACD90214B6 /* WatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE964B1EE155939E74083F /* WatchApp.swift */; };
+		E876EE201D51D53CDC3DC838 /* CennoComponentCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8781FDF15168BB658C4F728 /* CennoComponentCatalog.swift */; };
 		E87BB3F57B45A0C23DD3C3EE /* PhonePromptQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */; };
 		EDA9A849BB478A6EEDFC5EBB /* A2UIAnswerBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADE59B232F97670FB9E5E4E /* A2UIAnswerBridgeTests.swift */; };
 		EEF96FD256663436823D8EE4 /* CennoComponentRemap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7CEA0C7EC0CF4FEE89C7CC3 /* CennoComponentRemap.swift */; };
@@ -130,6 +134,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoHarness.swift; sourceTree = "<group>"; };
 		0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIRouter.swift; sourceTree = "<group>"; };
 		18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRelay.swift; sourceTree = "<group>"; };
 		262BEEECA665777113FFE4EE /* PromptQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptQueueView.swift; sourceTree = "<group>"; };
@@ -152,10 +157,12 @@
 		9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhonePromptQueueView.swift; sourceTree = "<group>"; };
 		A279B3497CD93A40DFACB4F8 /* A2UIAnswerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIAnswerBridge.swift; sourceTree = "<group>"; };
 		A4404091171E49BF3B8999D4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A8781FDF15168BB658C4F728 /* CennoComponentCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CennoComponentCatalog.swift; sourceTree = "<group>"; };
 		AF36FE5E492E42FAD77E9BCB /* A2UIDesugarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIDesugarTests.swift; sourceTree = "<group>"; };
 		B07CAB34C1E39709D207949B /* CennoShared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = CennoShared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		B11E463B157D0E0741D3EF4B /* CennoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CennoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1968C7188F9ADC319CD6D2E /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		C052550FFC24F59FAC6C30F7 /* A2UIPromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIPromptView.swift; sourceTree = "<group>"; };
 		CE889FCEC37D60DB8EC81C90 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CF87DB1281A8CA63B8B301B4 /* CennoiPhone.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CennoiPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D0F5967C6775045E6AE57061 /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
@@ -210,6 +217,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F24C0DDDE01BBC04F945D532 /* CennoShared.framework in Frameworks */,
+				D7494652F8B0179729345E56 /* A2UISwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -247,8 +255,11 @@
 		57D9B427D2D33974C05DC7A7 /* iPhone */ = {
 			isa = PBXGroup;
 			children = (
+				C052550FFC24F59FAC6C30F7 /* A2UIPromptView.swift */,
 				CE889FCEC37D60DB8EC81C90 /* Assets.xcassets */,
+				A8781FDF15168BB658C4F728 /* CennoComponentCatalog.swift */,
 				5A190FA828572F0F5AA2C82C /* CennoiPhone.entitlements */,
+				0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */,
 				EC94B9D904E9B43A229FB470 /* Info.plist */,
 				99F2CB5326FC0247530DE3F5 /* iPhoneApp.swift */,
 				57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */,
@@ -349,6 +360,9 @@
 				4193C2E2FF2B67B679891CC5 /* PBXTargetDependency */,
 			);
 			name = CennoiPhone;
+			packageProductDependencies = (
+				9EAA7185A23416A734534A41 /* A2UISwiftUI */,
+			);
 			productName = CennoiPhone;
 			productReference = CF87DB1281A8CA63B8B301B4 /* CennoiPhone.app */;
 			productType = "com.apple.product-type.application";
@@ -566,6 +580,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3B657FA282853B3FE81C62A4 /* A2UIPromptView.swift in Sources */,
+				E876EE201D51D53CDC3DC838 /* CennoComponentCatalog.swift in Sources */,
+				1DF3B76404DB96570E1490CC /* DemoHarness.swift in Sources */,
 				46247F774C94420553524BD9 /* PhonePromptDetailView.swift in Sources */,
 				E87BB3F57B45A0C23DD3C3EE /* PhonePromptQueueView.swift in Sources */,
 				105572D9E3C1A7419266CF61 /* iPhoneApp.swift in Sources */,
@@ -1040,6 +1057,10 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		2199C3497A4CBC6CAF71E50F /* A2UISwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = A2UISwiftUI;
+		};
+		9EAA7185A23416A734534A41 /* A2UISwiftUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = A2UISwiftUI;
 		};
