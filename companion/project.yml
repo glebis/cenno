@@ -171,7 +171,6 @@ schemes:
       targets:
         CennoiPhone: all
         CennoShared: all
-        CennoSharedTests: all
     run:
       config: Debug
     test:
