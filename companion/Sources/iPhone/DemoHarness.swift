@@ -32,10 +32,22 @@ enum DemoHarness {
 struct DemoRootView: View {
     let kind: String
     @EnvironmentObject var relay: CloudKitRelay
+    @State private var answered: PromptAnswer?
     var body: some View {
         NavigationStack {
-            A2UIPromptView(prompt: DemoHarness.prompt(kind: kind))
-                .navigationTitle(kind)
+            A2UIPromptView(prompt: DemoHarness.prompt(kind: kind)) { answer in
+                withAnimation { answered = answer }
+            }
+            .navigationTitle(kind)
+            .overlay(alignment: .bottom) {
+                if let answered {
+                    Text("✓ answered: \(answered.answer)  (via \(answered.via))")
+                        .font(.callout.bold()).foregroundStyle(.white)
+                        .padding().frame(maxWidth: .infinity)
+                        .background(.black.opacity(0.5))
+                        .transition(.move(edge: .bottom))
+                }
+            }
         }
     }
 }

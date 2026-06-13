@@ -2,12 +2,16 @@ import SwiftUI
 import A2UISwiftCore
 import A2UISwiftUI
 
-/// Renders cenno's leaf components (remapped to Cenno* typeNames) natively.
+/// Renders cenno's leaf components (remapped to Cenno* typeNames) natively, in
+/// the cenno design language (white ink on a saturated flow surface, outline
+/// pills, bare numerals) — matching the tauri panel. Structural components
+/// (Row/Column/Button) stay basic; A2UIPromptView restyles the basic buttons
+/// via A2UIStyle.buttonStyles.
 ///
 /// Output is pinned to `AnyView`: the protocol declares `associatedtype Output:
 /// View`, and an opaque `some View` from a switch can fail to infer one concrete
-/// `Output`. The `default` branch never fires in practice — the remap only ever
-/// produces the six Cenno* typeNames.
+/// `Output`. The `default` branch never fires — the remap only ever produces
+/// the six Cenno* typeNames.
 struct CennoComponentCatalog: CustomComponentCatalog {
     typealias Output = AnyView
     @MainActor
@@ -37,17 +41,23 @@ private func fire(_ action: Action?, node: ComponentNode, surface: SurfaceModel,
     handler?(ResolvedAction(name: name, sourceComponentId: node.id, context: resolved))
 }
 
-// MARK: - Text (Markdown + variant sizing)
+// MARK: - Text (Markdown + variant sizing). Inherits foreground color so primary
+// button labels can flip to the surface hue (cenno's `.cenno-button .cenno-text`).
 
 private struct CennoTextView: View {
     let node: ComponentNode; let surface: SurfaceModel
     private struct Props: Codable { var text: String?; var variant: String? }
     var body: some View {
-        let _ = node.instance   // register @Observable tracking
+        let _ = node.instance
         let p = (try? node.typedProperties(Props.self)) ?? Props()
-        // desugar emits `text` as a literal string; no data-binding resolve needed.
-        Text(markdown(p.text ?? "")).font(font(for: p.variant))
-            .frame(maxWidth: .infinity, alignment: .leading)
+        if p.variant == "caption" {
+            Text(p.text ?? "").font(CennoTheme.caption).foregroundStyle(CennoTheme.inkDim)
+                .textCase(.uppercase).tracking(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(markdown(p.text ?? "")).font(font(for: p.variant))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
     private func markdown(_ s: String) -> AttributedString {
         (try? AttributedString(markdown: s,
@@ -55,15 +65,14 @@ private struct CennoTextView: View {
     }
     private func font(for variant: String?) -> Font {
         switch variant {
-        case "h1": return .system(size: 34, weight: .bold)
-        case "h2", "h3", "h4", "h5": return .title2.bold()
-        case "caption": return .caption
-        default: return .body
+        case "h1": return CennoTheme.questionL
+        case "h2", "h3", "h4", "h5": return CennoTheme.questionM
+        default: return CennoTheme.body
         }
     }
 }
 
-// MARK: - TextField (voice flag + submitAction)
+// MARK: - TextField (underline only + voice flag + submitAction)
 
 private struct CennoTextFieldView: View {
     let node: ComponentNode; let surface: SurfaceModel
@@ -75,19 +84,20 @@ private struct CennoTextFieldView: View {
         let _ = node.instance
         let p = (try? node.typedProperties(Props.self)) ?? Props()
         let dc = DataContext(surface: surface, path: node.dataContextPath)
-        // No Send button here: the desugar emits a separate `send` Button sibling
-        // (rendered by the basic catalog) that fires the same submitAction. We
-        // only wire keyboard-return submit, so raw a2ui TextFields without a
-        // paired button still submit. `voice: true` uses the system keyboard
-        // dictation mic for MVP (on-device push-to-talk is tauri-only today).
-        TextField(p.label ?? "Your reply", text: dc.stringBinding(for: p.value), axis: .vertical)
-            .textFieldStyle(.roundedBorder).lineLimit(3...).focused($focused)
-            .onAppear { focused = true }
-            .onSubmit { fire(p.submitAction, node: node, surface: surface, handler: handler) }
+        // Bottom-border underline only (cenno-field). No Send button here — the
+        // desugar emits a separate `send` Button; we wire keyboard-return submit.
+        VStack(spacing: 4) {
+            TextField("", text: dc.stringBinding(for: p.value), axis: .vertical)
+                .font(CennoTheme.body).foregroundStyle(CennoTheme.ink).tint(CennoTheme.ink)
+                .lineLimit(1...6).focused($focused)
+                .onAppear { focused = true }
+                .onSubmit { fire(p.submitAction, node: node, surface: surface, handler: handler) }
+            Rectangle().fill(focused ? CennoTheme.ink : CennoTheme.line).frame(height: 1)
+        }
     }
 }
 
-// MARK: - ChoicePicker (chips + words variant + selectAction)
+// MARK: - ChoicePicker (outline pills, wrapping row + words variant + selectAction)
 
 private struct CennoChoicePickerView: View {
     let node: ComponentNode; let surface: SurfaceModel
@@ -99,23 +109,34 @@ private struct CennoChoicePickerView: View {
         let _ = node.instance
         let p = (try? node.typedProperties(Props.self)) ?? Props()
         let dc = DataContext(surface: surface, path: node.dataContextPath)
-        VStack(spacing: 10) {
+        let words = (p.variant == "words")
+        FlowLayout(spacing: words ? CennoTheme.space3 : CennoTheme.space1) {
             ForEach(p.options ?? [], id: \.value) { opt in
-                Button(opt.label) {
+                Button {
                     try? dc.set(bindingPath(p.value), value: .array([.string(opt.value)]))
                     fire(p.selectAction, node: node, surface: surface, handler: handler)
+                } label: {
+                    if words {
+                        Text(opt.label).font(CennoTheme.questionM).foregroundStyle(CennoTheme.ink)
+                            .padding(.vertical, CennoTheme.space2)
+                    } else {
+                        Text(opt.label).font(CennoTheme.body).foregroundStyle(CennoTheme.ink)
+                            .padding(.vertical, CennoTheme.space1).padding(.horizontal, CennoTheme.space3)
+                            .frame(minHeight: 44)
+                            .overlay(Capsule().stroke(CennoTheme.line, lineWidth: 1))
+                    }
                 }
-                .font(p.variant == "words" ? .title2 : .body)
-                .buttonStyle(.bordered).frame(maxWidth: .infinity)
+                .buttonStyle(.plain)
             }
         }
+        .frame(maxWidth: .infinity, alignment: words ? .center : .leading)
     }
     private func bindingPath(_ v: DynamicStringList?) -> String {
         if case .dataBinding(let path)? = v { return path }; return "/choice"
     }
 }
 
-// MARK: - Slider (min/max labels + selectAction on commit)
+// MARK: - Slider (hairline track, white thumb, caption labels)
 
 private struct CennoSliderView: View {
     let node: ComponentNode; let surface: SurfaceModel
@@ -127,20 +148,28 @@ private struct CennoSliderView: View {
         let p = (try? node.typedProperties(Props.self)) ?? Props()
         let dc = DataContext(surface: surface, path: node.dataContextPath)
         let lo = p.min ?? 0, hi = p.max ?? 10
-        VStack {
+        VStack(spacing: CennoTheme.space1) {
             Slider(value: dc.doubleBinding(for: p.value ?? .literal(lo), fallback: lo), in: lo...hi) { editing in
                 if !editing { fire(p.selectAction, node: node, surface: surface, handler: handler) }
             }
-            HStack { Text(p.minLabel ?? "").font(.caption); Spacer(); Text(p.maxLabel ?? "").font(.caption) }
+            .tint(CennoTheme.ink)
+            labels(p.minLabel, p.maxLabel)
+        }
+    }
+    @ViewBuilder private func labels(_ lo: String?, _ hi: String?) -> some View {
+        if lo != nil || hi != nil {
+            HStack { Text(lo ?? "").font(CennoTheme.caption); Spacer(); Text(hi ?? "").font(CennoTheme.caption) }
+                .foregroundStyle(CennoTheme.inkDim)
         }
     }
 }
 
-// MARK: - Scale (discrete numeral row + selectAction)
+// MARK: - Scale (outline-circle numerals; selected = filled, numeral flips to surface)
 
 private struct CennoScaleView: View {
     let node: ComponentNode; let surface: SurfaceModel
     @Environment(\.a2uiActionHandler) private var handler
+    @Environment(\.cennoSurface) private var surfaceColor
     private struct Props: Codable { var min: Double?; var max: Double?; var value: DynamicNumber?
                                     var minLabel: String?; var maxLabel: String?; var selectAction: Action? }
     var body: some View {
@@ -148,14 +177,31 @@ private struct CennoScaleView: View {
         let p = (try? node.typedProperties(Props.self)) ?? Props()
         let dc = DataContext(surface: surface, path: node.dataContextPath)
         let lo = Int(p.min ?? 1), hi = Int(p.max ?? 7)
-        VStack(spacing: 8) {
-            HStack { ForEach(lo...hi, id: \.self) { n in
-                Button("\(n)") {
-                    try? dc.set(bindingPath(p.value), value: .number(Double(n)))
-                    fire(p.selectAction, node: node, surface: surface, handler: handler)
-                }.buttonStyle(.bordered).frame(maxWidth: .infinity)
-            } }
-            HStack { Text(p.minLabel ?? "").font(.caption); Spacer(); Text(p.maxLabel ?? "").font(.caption) }
+        let selected = dc.resolve(p.value ?? .literal(.nan)).map { Int($0) }
+        VStack(alignment: .leading, spacing: CennoTheme.space1) {
+            HStack(spacing: CennoTheme.space1) {
+                ForEach(lo...hi, id: \.self) { n in
+                    let isSel = (selected == n)
+                    Button {
+                        try? dc.set(bindingPath(p.value), value: .number(Double(n)))
+                        fire(p.selectAction, node: node, surface: surface, handler: handler)
+                    } label: {
+                        Text("\(n)").font(CennoTheme.body)
+                            .foregroundStyle(isSel ? surfaceColor : CennoTheme.ink)
+                            .frame(width: 44, height: 44)
+                            .background(Circle().fill(isSel ? CennoTheme.ink : Color.clear))
+                            .overlay(Circle().stroke(isSel ? CennoTheme.ink : CennoTheme.line, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain).frame(maxWidth: .infinity)
+                }
+            }
+            labels(p.minLabel, p.maxLabel)
+        }
+    }
+    @ViewBuilder private func labels(_ lo: String?, _ hi: String?) -> some View {
+        if lo != nil || hi != nil {
+            HStack { Text(lo ?? "").font(CennoTheme.caption); Spacer(); Text(hi ?? "").font(CennoTheme.caption) }
+                .foregroundStyle(CennoTheme.inkDim)
         }
     }
     private func bindingPath(_ v: DynamicNumber?) -> String {
@@ -163,7 +209,7 @@ private struct CennoScaleView: View {
     }
 }
 
-// MARK: - Dots (step pagination)
+// MARK: - Dots (6px dots, active full, inactive 40%)
 
 private struct CennoDotsView: View {
     let node: ComponentNode; let surface: SurfaceModel
@@ -172,11 +218,12 @@ private struct CennoDotsView: View {
         let _ = node.instance
         let p = (try? node.typedProperties(Props.self)) ?? Props()
         let total = Int(p.total ?? 1), step = Int(p.step ?? 1)
-        HStack(spacing: 6) {
+        HStack(spacing: CennoTheme.space1) {
             ForEach(1...max(total, 1), id: \.self) { i in
-                Circle().fill(i == step ? Color.primary : Color.secondary.opacity(0.3))
-                    .frame(width: 7, height: 7)
+                Circle().fill(CennoTheme.ink).opacity(i == step ? 1 : 0.4)
+                    .frame(width: 6, height: 6)
             }
         }
+        .frame(maxWidth: .infinity)
     }
 }

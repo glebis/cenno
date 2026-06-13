@@ -77,6 +77,16 @@
                ReferencedContainer = "container:CennoCompanion.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "E00FE12DD1EC5768CE90754E"
+               BuildableName = "CennoiPhoneUITests.xctest"
+               BlueprintName = "CennoiPhoneUITests"
+               ReferencedContainer = "container:CennoCompanion.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

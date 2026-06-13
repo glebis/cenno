@@ -95,6 +95,19 @@ targets:
           - CloudKit
         aps-environment: development
 
+  # ── iPhone UI tests (render → tap → submit) ──────────────────────────────────
+  CennoiPhoneUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/CennoiPhoneUITests
+    dependencies:
+      - target: CennoiPhone
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion.uitests
+      TEST_TARGET_NAME: CennoiPhone
+
   # ── Watch app ───────────────────────────────────────────────────────────────
   CennoWatch:
     type: application
@@ -165,6 +178,7 @@ schemes:
       config: Debug
       targets:
         - CennoSharedTests
+        - CennoiPhoneUITests
     profile:
       config: Release
     analyze:
