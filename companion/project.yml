@@ -50,6 +50,10 @@ targets:
     platform: watchOS
     sources:
       - path: Sources/Shared
+        # The A2UI renderer bridge is iPhone-only (Watch stays native simple
+        # prompts); excluding it keeps a2ui-swift out of the watchOS build.
+        excludes:
+          - A2UIMessageBuilder.swift
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: app.cenno.shared.watch
       GENERATE_INFOPLIST_FILE: YES
