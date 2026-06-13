@@ -1195,7 +1195,7 @@ import CennoShared
     let messages = try! A2UIMessageBuilder.messages(for: payload)
     let vm = SurfaceViewModel(catalog: basicCatalog)
     _ = vm.processMessages(messages)
-    return A2UISurfaceView(viewModel: vm, catalog: basicCatalog).a2uiCatalog(CennoComponentCatalog())
+    return A2UISurfaceView(viewModel: vm, catalog: CennoComponentCatalog())
 }
 #endif
 ```
@@ -1242,10 +1242,12 @@ struct A2UIPromptView: View {
     var body: some View {
         Group {
             if let vm {
-                A2UISurfaceView(viewModel: vm, catalog: basicCatalog, scrolls: true) { action in
+                // `catalog:` IS the custom component catalog (generic
+                // `where Catalog: CustomComponentCatalog`); the core component
+                // registry lives on the SurfaceViewModel via `init(catalog:)`.
+                A2UISurfaceView(viewModel: vm, catalog: CennoComponentCatalog(), scrolls: true) { action in
                     handle(action)
                 }
-                .a2uiCatalog(CennoComponentCatalog())
             } else if let buildError {
                 ContentUnavailableView("Couldn't render", systemImage: "exclamationmark.triangle",
                                        description: Text(buildError))
