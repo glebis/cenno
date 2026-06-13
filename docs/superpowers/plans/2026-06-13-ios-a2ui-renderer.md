@@ -86,7 +86,7 @@ git rev-parse HEAD > /dev/null   # record the commit below
 # Pin: detach at current main HEAD so upstream can't move under us.
 PIN=$(git rev-parse HEAD); echo "pinned a2ui-swift @ $PIN"
 # Drop the nested .git so it vendors as plain source under cenno's repo.
-rm -rf .git
+trash .git
 cd /Users/glebkalinin/ai_projects/cenno
 ```
 
@@ -389,7 +389,9 @@ git commit -m "feat(companion): decode a2ui/progress/urgency in PromptPayload"
 - Create: `companion/Sources/Shared/A2UIDesugar.swift`
 - Test: `companion/Tests/CennoSharedTests/A2UIDesugarTests.swift` (mirrors `src/a2ui/desugar.test.ts`)
 
-Produces `[JSONValue]` (the three-message envelope). Component names match the TS output exactly (`Text`/`Button`/`TextField`/`ChoicePicker`/`Slider`/`Scale`/`Dots`/`Row`/`Column`); the rename to `Cenno*` happens later in Task 5. The iPhone has no `~/.cenno` widget config, so the `widgets` map is always empty — custom widget kinds fall through to the text default (documented limitation).
+Produces `[JSONValue]` (the three-message envelope). Component names match the TS output exactly (`Text`/`Button`/`TextField`/`ChoicePicker`/`Slider`/`Scale`/`Dots`/`Row`/`Column`); the rename to `Cenno*` happens later in Task 5.
+
+**Custom-widget scope (intentional divergence from `desugar.ts`):** the TS `desugar(req, widgets)` expands custom `~/.cenno` widget templates, and `desugar.test.ts` has two widget tests. The iPhone has no `~/.cenno` config, so the Swift port omits the `widgets` parameter entirely — a custom `input.kind` with no built-in match falls through to the text default. The two TS widget tests are **deliberately not ported**; `testUnknownKindFallsBackToText` is the parity guarantee for the no-config path. (If agents need a custom widget rendered on iPhone, they must send it via the `a2ui` passthrough field, which already works.)
 
 - [ ] **Step 1: Write the failing tests (mirror the TS table)**
 
@@ -861,7 +863,13 @@ public enum A2UIAnswerBridge {
         case .some(.number(let n)): return n == n.rounded() ? String(Int(n)) : String(n)
         case .some(.bool(let b)): return b ? "true" : "false"
         case .none, .some(.null): return ""
-        default: return ""
+        // A nested object/array value should not occur for /draft, /choice[0],
+        // or /scale, but mirror JS String() best-effort rather than dropping it.
+        case .some(let other):
+            if let data = try? JSONEncoder().encode(other), let s = String(data: data, encoding: .utf8) {
+                return s
+            }
+            return ""
         }
     }
 }
@@ -941,7 +949,14 @@ public enum A2UIMessageBuilder {
             guard let arr = a2ui.arrayValue else { throw BuildError.passthroughNotAnArray }
             return try decode(CennoComponentRemap.apply(arr))
         }
-        return try decode(CennoComponentRemap.apply(A2UIDesugar.messages(for: payload)))
+        return try desugarMessages(for: payload)
+    }
+
+    /// The desugared-only envelope, ignoring any `a2ui` passthrough. Used as the
+    /// fallback when a passthrough payload fails to build/process (parity with
+    /// PromptPanel.tsx, which renders `desugar(prompt)` if the rich surface throws).
+    public static func desugarMessages(for payload: PromptPayload) throws -> [A2uiMessage] {
+        try decode(CennoComponentRemap.apply(A2UIDesugar.messages(for: payload)))
     }
 
     private static func decode(_ values: [JSONValue]) throws -> [A2uiMessage] {
@@ -981,17 +996,25 @@ import SwiftUI
 import A2UISwiftUI
 
 /// Renders cenno's leaf components (remapped to Cenno* typeNames) natively.
+///
+/// Output is pinned to `AnyView` rather than `some View`: the protocol declares
+/// `associatedtype Output: View`, and an opaque `some View` from a switch can
+/// fail to infer a single concrete `Output`. `AnyView` removes that ambiguity
+/// (Codex BLOCKER #1). The `default` branch never fires in practice — the remap
+/// only ever produces the six Cenno* typeNames — so losing a2ui-swift's
+/// "EmptyView ⇒ render children" fallback for unknown types is acceptable here.
 struct CennoComponentCatalog: CustomComponentCatalog {
-    @ViewBuilder @MainActor
-    func build(typeName: String, node: ComponentNode, surface: SurfaceModel) -> some View {
+    typealias Output = AnyView
+    @MainActor
+    func build(typeName: String, node: ComponentNode, surface: SurfaceModel) -> AnyView {
         switch typeName {
-        case "CennoText":         CennoTextView(node: node, surface: surface)
-        case "CennoTextField":    CennoTextFieldView(node: node, surface: surface)
-        case "CennoChoicePicker": CennoChoicePickerView(node: node, surface: surface)
-        case "CennoSlider":       CennoSliderView(node: node, surface: surface)
-        case "CennoScale":        CennoScaleView(node: node, surface: surface)
-        case "CennoDots":         CennoDotsView(node: node, surface: surface)
-        default:                  EmptyView()
+        case "CennoText":         return AnyView(CennoTextView(node: node, surface: surface))
+        case "CennoTextField":    return AnyView(CennoTextFieldView(node: node, surface: surface))
+        case "CennoChoicePicker": return AnyView(CennoChoicePickerView(node: node, surface: surface))
+        case "CennoSlider":       return AnyView(CennoSliderView(node: node, surface: surface))
+        case "CennoScale":        return AnyView(CennoScaleView(node: node, surface: surface))
+        case "CennoDots":         return AnyView(CennoDotsView(node: node, surface: surface))
+        default:                  return AnyView(EmptyView())
         }
     }
 }
@@ -1017,8 +1040,8 @@ private struct CennoTextView: View {
     var body: some View {
         let _ = node.instance   // register @Observable tracking
         let p = (try? node.typedProperties(Props.self)) ?? Props()
-        let dc = surface.makeDataContext(path: node.dataContextPath)
-        let raw = p.text ?? dc.resolve(.dataBinding(path: ""))    // literal text expected
+        // desugar emits `text` as a literal string; no data-binding resolve needed.
+        let raw = p.text ?? ""
         Text(markdown(raw)).font(font(for: p.variant)).frame(maxWidth: .infinity, alignment: .leading)
     }
     private func markdown(_ s: String) -> AttributedString {
@@ -1157,9 +1180,31 @@ private struct CennoDotsView: View {
 - [ ] **Step 2: Build to verify it compiles**
 
 Run: `cd companion && xcodegen generate && xcodebuild build -project CennoCompanion.xcodeproj -scheme CennoiPhone -destination 'platform=iOS Simulator,name=iPhone 17'`
-Expected: `** BUILD SUCCEEDED **`. Fix any API mismatch against `Vendor/a2ui-swift` source (the most likely: `DataContext.set` label, `doubleBinding` signature, `AnyCodable` case names — all listed in Reference facts; consult the vendored source if a name differs).
+Expected: `** BUILD SUCCEEDED **`. Fix any API mismatch against `Vendor/a2ui-swift` source. Most likely points (confirm against the vendored source if a name differs): the `CustomComponentCatalog` Output/`@ViewBuilder` shape (the plan pins `typealias Output = AnyView`); `DataContext.set` argument label; `doubleBinding` signature; `AnyCodable` case names; whether `Action` decodes from the `submitAction`/`selectAction`/`action` props as written.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Verify architecture risk #1 early (basic Button renders remapped child labels)**
+
+Before wiring the full screen, prove that a2ui-swift's **basic** `Button` and containers render the remapped `CennoText` children. Add a temporary preview at the bottom of `CennoComponentCatalog.swift`:
+
+```swift
+#if DEBUG
+import CennoShared
+#Preview("Risk1: Button+Row labels") {
+    let json = #"{"title":"Proceed?","body_md":"","input":{"kind":"confirm"}}"#
+    let payload = try! JSONDecoder().decode(PromptPayload.self, from: Data(json.utf8))
+    let messages = try! A2UIMessageBuilder.messages(for: payload)
+    let vm = SurfaceViewModel(catalog: basicCatalog)
+    _ = vm.processMessages(messages)
+    return A2UISurfaceView(viewModel: vm, catalog: basicCatalog).a2uiCatalog(CennoComponentCatalog())
+}
+#endif
+```
+
+Run this preview in Xcode. **Expected:** the title "Proceed?" renders (CennoText inside a basic Column) and the **Yes / No buttons show their labels** (CennoText inside a basic Button inside a basic Row).
+
+**Contingency (if labels are blank):** a2ui-swift's basic Button does not route its `child` through the custom catalog. Then add `"Button"` to `CennoComponentRemap.leaves` and implement a `CennoButton` leaf in the catalog that renders its child label by reading the `child` id from `node.children` (or `node.instance.properties["child"]`) and rendering that child node's text, and fires `action` via the shared `fire(...)` helper. Re-run this preview before proceeding. Delete the temporary preview once verified (it is re-added properly in Task 10).
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add companion/Sources/iPhone/CennoComponentCatalog.swift companion/CennoCompanion.xcodeproj
@@ -1220,12 +1265,26 @@ struct A2UIPromptView: View {
 
     private func buildSurface() {
         guard vm == nil else { return }
-        do {
-            let messages = try A2UIMessageBuilder.messages(for: prompt.payload)
-            let model = SurfaceViewModel(catalog: basicCatalog)
-            let errors = model.processMessages(messages)
-            if let first = errors.first { buildError = "\(first)" } else { vm = model }
-        } catch { buildError = "\(error)" }
+        // Try the primary path (passthrough if present, else desugar). If a
+        // passthrough payload fails to build or process, fall back to the
+        // desugared prompt — parity with PromptPanel.tsx's error boundary.
+        if let model = makeSurface(try? A2UIMessageBuilder.messages(for: prompt.payload)) {
+            vm = model; return
+        }
+        if prompt.payload.a2ui != nil,
+           let model = makeSurface(try? A2UIMessageBuilder.desugarMessages(for: prompt.payload)) {
+            vm = model; return
+        }
+        buildError = "This prompt couldn't be rendered."
+    }
+
+    /// Process messages into a SurfaceViewModel, or nil if they're absent,
+    /// errored, or produced no component tree.
+    private func makeSurface(_ messages: [A2uiMessage]?) -> SurfaceViewModel? {
+        guard let messages else { return nil }
+        let model = SurfaceViewModel(catalog: basicCatalog)
+        guard model.processMessages(messages).isEmpty, model.componentTree != nil else { return nil }
+        return model
     }
 
     private func handle(_ action: ResolvedAction) {
