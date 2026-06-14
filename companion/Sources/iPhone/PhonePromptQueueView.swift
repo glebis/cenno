@@ -6,19 +6,21 @@ struct PhonePromptQueueView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            // Always a List so pull-to-refresh works even when empty (an
+            // overlaid ContentUnavailableView isn't scrollable on its own).
+            List(relay.pendingPrompts) { prompt in
+                NavigationLink(value: prompt) {
+                    PromptRowView(prompt: prompt)
+                }
+            }
+            .overlay {
                 if relay.pendingPrompts.isEmpty {
                     ContentUnavailableView(
                         "Nothing pending",
                         systemImage: "checkmark.circle",
-                        description: Text("Prompts from your agents will appear here.")
+                        description: Text("Prompts from your agents will appear here.\nPull down to refresh.")
                     )
-                } else {
-                    List(relay.pendingPrompts) { prompt in
-                        NavigationLink(value: prompt) {
-                            PromptRowView(prompt: prompt)
-                        }
-                    }
+                    .allowsHitTesting(false)   // let the pull gesture reach the List
                 }
             }
             .navigationTitle("cenno")
