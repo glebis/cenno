@@ -1,5 +1,5 @@
 import SwiftUI
-import CennoShared
+import CennoSharedWatch
 
 /// Entry point on Watch — shows the next pending prompt, or an idle state.
 struct PromptQueueView: View {
