@@ -23,6 +23,9 @@ struct CennoiPhoneApp: App {
         #if DEBUG
         if let kind = DemoHarness.requestedKind {
             DemoRootView(kind: kind)   // headless renderer verification; skips CloudKit
+        } else if DemoHarness.queueDemo {
+            // Exercise the real queue → tap → detail path with seeded prompts.
+            PhonePromptQueueView().task { relay.pendingPrompts = DemoHarness.queuePrompts() }
         } else {
             PhonePromptQueueView().task { await relay.start() }
         }

@@ -13,6 +13,17 @@ enum DemoHarness {
         return args[i + 1]
     }
 
+    /// True when launched with `-cennoQueueDemo` — seeds the REAL queue so the
+    /// queue → tap row → detail navigation path can be exercised (the per-kind
+    /// `-cennoDemo` mode bypasses the queue).
+    static var queueDemo: Bool {
+        ProcessInfo.processInfo.arguments.contains("-cennoQueueDemo")
+    }
+
+    static func queuePrompts() -> [PromptRecord] {
+        ["choice", "scale", "confirm", "text"].map { prompt(kind: $0) }
+    }
+
     static func prompt(kind: String) -> PromptRecord {
         // "markdown" exercises rich body formatting on a plain text prompt.
         let inputKind = (kind == "markdown") ? "text" : kind

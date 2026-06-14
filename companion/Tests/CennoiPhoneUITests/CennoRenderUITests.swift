@@ -41,4 +41,20 @@ final class CennoRenderUITests: XCTestCase {
         XCTAssertTrue(answered.waitForExistence(timeout: 5), "scale submit should surface the answer")
         XCTAssertTrue(answered.label.contains("5"), "answer should be the tapped numeral")
     }
+
+    func testQueueRowOpensDetail() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-cennoQueueDemo"]
+        app.launch()
+        let firstRow = app.cells.firstMatch
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 8), "queue should list seeded prompts")
+        firstRow.tap()
+        // first seeded prompt is "choice" → its chips render in the detail
+        XCTAssertTrue(app.buttons["Calm"].waitForExistence(timeout: 5),
+                      "tapping a row should open the detail and render the prompt")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "pushed-detail"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
 }

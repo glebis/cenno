@@ -37,7 +37,7 @@ private struct PromptRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(prompt.payload.title)
+            Text(Self.plainTitle(prompt.payload.title))
                 .font(.headline)
                 .lineLimit(2)
             HStack {
@@ -53,6 +53,14 @@ private struct PromptRowView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// Strip Markdown markers from the title for the list row (the detail view
+    /// renders full Markdown; rows want a clean single line).
+    static func plainTitle(_ md: String) -> String {
+        (try? AttributedString(markdown: md,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            .map { String($0.characters) } ?? md
     }
 
     private func kindIcon(_ kind: String) -> String {
