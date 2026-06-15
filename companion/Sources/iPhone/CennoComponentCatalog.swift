@@ -23,6 +23,8 @@ struct CennoComponentCatalog: CustomComponentCatalog {
         case "CennoSlider":       return AnyView(CennoSliderView(node: node, surface: surface))
         case "CennoScale":        return AnyView(CennoScaleView(node: node, surface: surface))
         case "CennoDots":         return AnyView(CennoDotsView(node: node, surface: surface))
+        case "CennoDateTimeInput": return AnyView(CennoDateTimeInputView(node: node, surface: surface))
+        case "CennoScoreMatrix":  return AnyView(CennoUnsupportedView(control: "ScoreMatrix"))
         default:                  return AnyView(EmptyView())
         }
     }
@@ -225,5 +227,70 @@ private struct CennoDotsView: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - DateTimeInput (native compact picker, cenno-tinted: white ink, dark
+// scheme so the pill reads on the saturated flow surface — vs. a2ui-swift's
+// standard view, which renders black-on-cobalt). Updates the bound value; an
+// explicit submit is left to a paired Button (no premature answer on scroll).
+
+private struct CennoDateTimeInputView: View {
+    let node: ComponentNode; let surface: SurfaceModel
+    private struct Props: Codable {
+        var label: String?; var value: DynamicString?
+        var enableDate: Bool?; var enableTime: Bool?
+    }
+    var body: some View {
+        let _ = node.instance
+        let p = (try? node.typedProperties(Props.self)) ?? Props()
+        let dc = DataContext(surface: surface, path: node.dataContextPath)
+        let date = p.enableDate ?? true, time = p.enableTime ?? false
+        let comps: DatePickerComponents = (date && time) ? [.date, .hourAndMinute]
+            : time ? [.hourAndMinute] : [.date]
+        let str = dc.stringBinding(for: p.value)
+        let selection = Binding<Date>(
+            get: { Self.parse(str.wrappedValue, date: date, time: time) ?? Date() },
+            set: { str.wrappedValue = Self.format($0, date: date, time: time) }
+        )
+        HStack {
+            if let label = p.label, !label.isEmpty {
+                Text(label).font(CennoTheme.body).foregroundStyle(CennoTheme.ink)
+            }
+            Spacer()
+            DatePicker("", selection: selection, displayedComponents: comps)
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(CennoTheme.ink)
+                .environment(\.colorScheme, .dark)   // light numerals on the pill
+        }
+        .frame(maxWidth: .infinity)
+    }
+    private static func fmt(_ date: Bool, _ time: Bool) -> DateFormatter {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = (date && time) ? "yyyy-MM-dd'T'HH:mm" : time ? "HH:mm" : "yyyy-MM-dd"
+        return f
+    }
+    private static func parse(_ s: String, date: Bool, time: Bool) -> Date? { fmt(date, time).date(from: s) }
+    private static func format(_ d: Date, date: Bool, time: Bool) -> String { fmt(date, time).string(from: d) }
+}
+
+// MARK: - Unsupported control fallback. Some desktop controls (e.g. ScoreMatrix,
+// a composite multi-value scorer) aren't yet implemented on the companion.
+// Render a visible notice rather than a silent blank panel so the user knows to
+// answer on the Mac instead of staring at an empty surface.
+
+private struct CennoUnsupportedView: View {
+    let control: String
+    var body: some View {
+        HStack(spacing: CennoTheme.space1) {
+            Image(systemName: "desktopcomputer")
+            Text("“\(control)” isn't supported here yet — answer on your Mac.")
+                .font(CennoTheme.caption)
+        }
+        .foregroundStyle(CennoTheme.inkDim)
+        .padding(CennoTheme.space2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(CennoTheme.line, lineWidth: 1))
     }
 }

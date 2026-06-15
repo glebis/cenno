@@ -5,7 +5,7 @@ import Foundation
 /// Button/Image) stay basic — a2ui-swift's Button dispatches actions and its
 /// containers render custom children natively.
 public enum CennoComponentRemap {
-    static let leaves: Set<String> = ["Text", "TextField", "ChoicePicker", "Slider", "Scale", "Dots"]
+    static let leaves: Set<String> = ["Text", "TextField", "ChoicePicker", "Slider", "Scale", "Dots", "DateTimeInput", "ScoreMatrix"]
 
     public static func apply(_ messages: [JSONValue]) -> [JSONValue] {
         messages.map { msg in
