@@ -6,17 +6,23 @@ struct PhonePromptQueueView: View {
     @ObservedObject var secondScreen: SecondScreenSettings
     @State private var showingSettings = false
 
+    /// Only prompts routed to this device (off classes never appear here).
+    /// Unrouted/legacy records (empty targets) still show, as before.
+    private var prompts: [PromptRecord] {
+        relay.pendingPrompts.filter { $0.isTargeted(at: .current) }
+    }
+
     var body: some View {
         NavigationStack {
             // Always a List so pull-to-refresh works even when empty (an
             // overlaid ContentUnavailableView isn't scrollable on its own).
-            List(relay.pendingPrompts) { prompt in
+            List(prompts) { prompt in
                 NavigationLink(value: prompt) {
                     PromptRowView(prompt: prompt)
                 }
             }
             .overlay {
-                if relay.pendingPrompts.isEmpty {
+                if prompts.isEmpty {
                     ContentUnavailableView(
                         "Nothing pending",
                         systemImage: "checkmark.circle",

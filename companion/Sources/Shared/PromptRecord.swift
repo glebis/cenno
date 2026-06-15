@@ -37,6 +37,15 @@ public struct PromptRecord: Identifiable, Sendable {
         self.graceS = graceS
     }
 
+    /// Whether this prompt is routed to `deviceClass` at all (any non-off mode).
+    /// An empty `targets` means "unrouted" — legacy/desugar records (and demo
+    /// seeds) show everywhere, preserving pre-routing behavior. Used by the
+    /// manual pull-to-refresh queues, which show every *targeted* prompt
+    /// regardless of fallback grace (the user opened the inbox deliberately).
+    public func isTargeted(at deviceClass: DeviceClass) -> Bool {
+        targets.modes.isEmpty || targets.mode(for: deviceClass) != .off
+    }
+
     /// Whether this prompt should surface on `deviceClass` right now, per its
     /// resolved route. Pure (takes `now`) for testability.
     /// - mirror: surface immediately.

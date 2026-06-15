@@ -7,7 +7,9 @@ struct PromptQueueView: View {
 
     var body: some View {
         Group {
-            if let prompt = relay.pendingPrompts.first {
+            // Only prompts routed to the Watch (watch:off never appears here);
+            // unrouted/legacy records still show, as before.
+            if let prompt = relay.pendingPrompts.first(where: { $0.isTargeted(at: .current) }) {
                 PromptView(prompt: prompt)
             } else {
                 IdleView()
