@@ -10,11 +10,13 @@
 		036EAE42A7244E019F38DF24 /* A2UIDesugar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D8FD3FCE1A21990FA815F56 /* A2UIDesugar.swift */; };
 		105572D9E3C1A7419266CF61 /* iPhoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F2CB5326FC0247530DE3F5 /* iPhoneApp.swift */; };
 		174B44154CE6092CF2CA289E /* A2UIAnswerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A279B3497CD93A40DFACB4F8 /* A2UIAnswerBridge.swift */; };
+		1C2B9D897A517BE042C10BF7 /* AmbientAnnouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87793F76F2313FE42BC3D05B /* AmbientAnnouncer.swift */; };
 		1D5EE0446F033ED0D79170F8 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D0CAD497984CEFD84F35D0 /* JSONValue.swift */; };
 		1D86C6AD36D66BC09FCAE2DB /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D0F5967C6775045E6AE57061 /* CloudKit.framework */; };
 		1DF3B76404DB96570E1490CC /* DemoHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */; };
 		21783E87B0742965B599EE9B /* A2UIMessageBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE02A405496F3D899D9978B4 /* A2UIMessageBuilderTests.swift */; };
 		23E94083740397192F5316D7 /* A2UISwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 2199C3497A4CBC6CAF71E50F /* A2UISwiftUI */; };
+		2D7CDC76BB1EB150A511B20E /* SecondScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24BC29DD304B93763B12580F /* SecondScreenView.swift */; };
 		2FE6BB7FDAB12B01BC7D3FBF /* PromptRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A79829A1E821488844DE1A /* PromptRecord.swift */; };
 		31036D7B66374ECF6FA4D626 /* CennoShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		3ACCD0A640DE5EA22042D5AE /* PromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDDE64B70A9012CE0AD8FC0A /* PromptView.swift */; };
@@ -38,6 +40,7 @@
 		A447C1428251A23A3BB2B74D /* SmokeTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E292BDE18D530B7C5C849E1 /* SmokeTest.swift */; };
 		AAE322EADB9207EE87A07524 /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D0F5967C6775045E6AE57061 /* CloudKit.framework */; };
 		B89C53BE0D119B8AA845E32D /* CennoSharedWatch.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = EFDF8E521B6DF64FDC86156C /* CennoSharedWatch.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C670C6AF056317A8E06973E2 /* SecondScreenSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C51D56ACDC955A6CCA166FE /* SecondScreenSettings.swift */; };
 		C688087EA8C4B7CE2E485869 /* PromptRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A79829A1E821488844DE1A /* PromptRecord.swift */; };
 		C8FDAF1405A44E8C193A5A5D /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D0CAD497984CEFD84F35D0 /* JSONValue.swift */; };
 		CD3E6EB0E95350E05AE442D3 /* CloudKitRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */; };
@@ -150,6 +153,7 @@
 		0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoHarness.swift; sourceTree = "<group>"; };
 		0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIRouter.swift; sourceTree = "<group>"; };
 		18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRelay.swift; sourceTree = "<group>"; };
+		24BC29DD304B93763B12580F /* SecondScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecondScreenView.swift; sourceTree = "<group>"; };
 		2621C61D27898FAB6AE2CFD6 /* PromptRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRouting.swift; sourceTree = "<group>"; };
 		262BEEECA665777113FFE4EE /* PromptQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptQueueView.swift; sourceTree = "<group>"; };
 		2A093FDFC5DF7ED29D0808C0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -163,7 +167,9 @@
 		5D8FD3FCE1A21990FA815F56 /* A2UIDesugar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIDesugar.swift; sourceTree = "<group>"; };
 		613E0C8FEB420B690D64A767 /* CennoTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CennoTheme.swift; sourceTree = "<group>"; };
 		643920CA01F24FA300D9FA61 /* CennoWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CennoWatch.entitlements; sourceTree = "<group>"; };
+		6C51D56ACDC955A6CCA166FE /* SecondScreenSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecondScreenSettings.swift; sourceTree = "<group>"; };
 		74777BFF11FF55DD933A1523 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		87793F76F2313FE42BC3D05B /* AmbientAnnouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientAnnouncer.swift; sourceTree = "<group>"; };
 		87A79829A1E821488844DE1A /* PromptRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRecord.swift; sourceTree = "<group>"; };
 		8B840F580BA57DA9F5BC9E75 /* A2UIMessageBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIMessageBuilder.swift; sourceTree = "<group>"; };
 		9330B37DAC5CAAEEB0196C06 /* CennoRelayTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CennoRelayTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -277,6 +283,7 @@
 			isa = PBXGroup;
 			children = (
 				C052550FFC24F59FAC6C30F7 /* A2UIPromptView.swift */,
+				87793F76F2313FE42BC3D05B /* AmbientAnnouncer.swift */,
 				CE889FCEC37D60DB8EC81C90 /* Assets.xcassets */,
 				A8781FDF15168BB658C4F728 /* CennoComponentCatalog.swift */,
 				5A190FA828572F0F5AA2C82C /* CennoiPhone.entitlements */,
@@ -287,6 +294,8 @@
 				57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */,
 				9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */,
 				CF0D19C8B88F0454907A540F /* PromptLayout.swift */,
+				6C51D56ACDC955A6CCA166FE /* SecondScreenSettings.swift */,
+				24BC29DD304B93763B12580F /* SecondScreenView.swift */,
 			);
 			name = iPhone;
 			path = Sources/iPhone;
@@ -647,12 +656,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				3B657FA282853B3FE81C62A4 /* A2UIPromptView.swift in Sources */,
+				1C2B9D897A517BE042C10BF7 /* AmbientAnnouncer.swift in Sources */,
 				E876EE201D51D53CDC3DC838 /* CennoComponentCatalog.swift in Sources */,
 				D0E894BDE93B5BFCDC6DB27A /* CennoTheme.swift in Sources */,
 				1DF3B76404DB96570E1490CC /* DemoHarness.swift in Sources */,
 				46247F774C94420553524BD9 /* PhonePromptDetailView.swift in Sources */,
 				E87BB3F57B45A0C23DD3C3EE /* PhonePromptQueueView.swift in Sources */,
 				4FFA05575F81870787E1ABF1 /* PromptLayout.swift in Sources */,
+				C670C6AF056317A8E06973E2 /* SecondScreenSettings.swift in Sources */,
+				2D7CDC76BB1EB150A511B20E /* SecondScreenView.swift in Sources */,
 				105572D9E3C1A7419266CF61 /* iPhoneApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

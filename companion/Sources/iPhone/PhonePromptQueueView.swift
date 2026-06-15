@@ -3,6 +3,8 @@ import CennoShared
 
 struct PhonePromptQueueView: View {
     @EnvironmentObject var relay: CloudKitRelay
+    @ObservedObject var secondScreen: SecondScreenSettings
+    @State private var showingSettings = false
 
     var body: some View {
         NavigationStack {
@@ -24,10 +26,21 @@ struct PhonePromptQueueView: View {
                 }
             }
             .navigationTitle("cenno")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showingSettings = true } label: {
+                        Image(systemName: "rectangle.on.rectangle.angled")
+                    }
+                    .accessibilityLabel("Second screen settings")
+                }
+            }
             .navigationDestination(for: PromptRecord.self) { prompt in
                 PhonePromptDetailView(prompt: prompt)
             }
             .refreshable { await relay.fetchPending() }
+            .sheet(isPresented: $showingSettings) {
+                SecondScreenSettingsView(settings: secondScreen)
+            }
         }
     }
 }

@@ -46,7 +46,8 @@ struct A2UIPromptView: View {
         }
         .font(CennoTheme.body)
         .padding(.horizontal, CennoTheme.space3)
-        .padding(.vertical, CennoTheme.space1)
+        .padding(.top, CennoTheme.space1)
+        .padding(.bottom, CennoTheme.space3)   // breathing room before the title
     }
 
     @ViewBuilder private var content: some View {

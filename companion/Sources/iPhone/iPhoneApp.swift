@@ -7,6 +7,7 @@ import UserNotifications
 struct CennoiPhoneApp: App {
     @UIApplicationDelegateAdaptor private var delegate: PhoneAppDelegate
     @StateObject private var relay = CloudKitRelay()
+    @StateObject private var secondScreen = SecondScreenSettings()
 
     var body: some Scene {
         WindowGroup {
@@ -21,17 +22,35 @@ struct CennoiPhoneApp: App {
     @ViewBuilder
     private var rootView: some View {
         #if DEBUG
-        if let kind = DemoHarness.requestedKind {
+        if let mode = DemoHarness.secondScreen {
+            // Ambient second-screen screenshots (no CloudKit; polling disabled).
+            SecondScreenView(settings: secondScreen, poll: false)
+                .task {
+                    relay.pendingPrompts = (mode == "prompt") ? [DemoHarness.secondScreenPrompt()] : []
+                }
+        } else if let kind = DemoHarness.requestedKind {
             DemoRootView(kind: kind)   // headless renderer verification; skips CloudKit
         } else if DemoHarness.queueDemo {
             // Exercise the real queue → tap → detail path with seeded prompts.
-            PhonePromptQueueView().task { relay.pendingPrompts = DemoHarness.queuePrompts() }
+            PhonePromptQueueView(secondScreen: secondScreen)
+                .task { relay.pendingPrompts = DemoHarness.queuePrompts() }
         } else {
-            PhonePromptQueueView().task { await relay.start() }
+            appRoot.task { await relay.start() }
         }
         #else
-        PhonePromptQueueView().task { await relay.start() }
+        appRoot.task { await relay.start() }
         #endif
+    }
+
+    /// When the user has flipped this device into second-screen mode, the
+    /// ambient display IS the app; otherwise the normal pull-to-refresh queue.
+    @ViewBuilder
+    private var appRoot: some View {
+        if secondScreen.enabled {
+            SecondScreenView(settings: secondScreen)
+        } else {
+            PhonePromptQueueView(secondScreen: secondScreen)
+        }
     }
 }
 

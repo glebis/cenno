@@ -29,10 +29,20 @@ enum PromptLayout {
             else { return message }
 
             comps = comps.map { comp in
-                guard case .object(var c) = comp,
-                      c["id"]?.stringValue == "col",
+                guard case .object(var c) = comp else { return comp }
+
+                // The action group (confirm Yes/No) is wrapped in a Row that
+                // defaults to align:stretch — that makes its buttons vertically
+                // greedy and they compete with the spacer for slack, floating
+                // up instead of pinning. Pin them by neutralising the stretch.
+                if c["component"]?.stringValue == "Row" {
+                    c["align"] = .string("center")
+                    return .object(c)
+                }
+
+                guard c["id"]?.stringValue == "col",
                       case .array(var children)? = c["children"]
-                else { return comp }
+                else { return .object(c) }
                 // Insert after the body (or after the title when there's no
                 // body) so the text block stays grouped at the top.
                 let anchor = children.firstIndex { $0.stringValue == "body" }
