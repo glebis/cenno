@@ -105,11 +105,14 @@ public final class CloudKitRelay: ObservableObject {
     private func ensureSubscription() async {
         let sub = CKQuerySubscription(
             recordType: PromptRecord.recordType,
-            predicate: NSPredicate(format: "state == %@", "pending"),
+            // Match ALL Prompt records, not just `state == pending`. A state
+            // change to answered/timed_out moves a record OUT of a
+            // `pending`-only predicate, and CloudKit does NOT fire an update
+            // notification for a record that no longer matches (QA1917). With a
+            // true predicate, both creation and the answered/timed_out update
+            // wake us; `fetchPending()` then drops the non-pending rows.
+            predicate: NSPredicate(value: true),
             subscriptionID: subscriptionID,
-            // Creation wakes us for new prompts; update wakes us when the Mac
-            // flips state to answered/timed_out so companions drop stale entries
-            // instead of waiting for the next manual fetch / ambient poll.
             options: [.firesOnRecordCreation, .firesOnRecordUpdate]
         )
         let info = CKSubscription.NotificationInfo()
