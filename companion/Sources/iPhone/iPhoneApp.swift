@@ -28,6 +28,9 @@ struct CennoiPhoneApp: App {
                 .task {
                     relay.pendingPrompts = (mode == "prompt") ? [DemoHarness.secondScreenPrompt()] : []
                 }
+        } else if let comp = DemoHarness.a2uiComponent {
+            // Single a2ui catalog component via the passthrough path.
+            NavigationStack { A2UIPromptView(prompt: DemoHarness.a2uiPrompt(component: comp)) }
         } else if let kind = DemoHarness.requestedKind {
             DemoRootView(kind: kind)   // headless renderer verification; skips CloudKit
         } else if DemoHarness.queueDemo {

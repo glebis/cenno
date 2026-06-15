@@ -33,6 +33,58 @@ enum DemoHarness {
         return args[i + 1]
     }
 
+    /// `-cennoA2UI <component>` — render a single a2ui catalog component
+    /// (slider|datetime|dots|image|scorematrix) via the passthrough path, to
+    /// screenshot controls the simple input-kind shortcuts can't reach.
+    static var a2uiComponent: String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-cennoA2UI"), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
+    /// Build a passthrough prompt wrapping a single control component.
+    static func a2uiPrompt(component: String) -> PromptRecord {
+        let (title, ctl): (String, String)
+        switch component {
+        case "slider":
+            title = "How loud should alerts be?"
+            ctl = #"{"id":"ctl","component":"Slider","label":"Volume","min":0,"max":10,"value":4,"minLabel":"quiet","maxLabel":"loud","selectAction":{"event":{"name":"submit-slider","context":{"value":{"path":"/v"},"via":"choice"}}}}"#
+        case "datetime":
+            title = "When should I follow up?"
+            ctl = #"{"id":"ctl","component":"DateTimeInput","label":"Follow-up date","enableDate":true,"enableTime":false,"value":"2026-06-20","submitAction":{"event":{"name":"submit-date","context":{"value":{"path":"/v"},"via":"text"}}}}"#
+        case "dots":
+            title = "Step 2 of 5"
+            ctl = #"{"id":"ctl","component":"Dots","step":2,"total":5}"#
+        case "image":
+            title = "Does this crop look right?"
+            // Inline SVG data URI — a teal square with a check, no network needed.
+            ctl = #"{"id":"ctl","component":"Image","fit":"contain","description":"preview","url":"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='160'><rect width='240' height='160' rx='16' fill='%230E7C6B'/><path d='M90 80 l24 24 l44 -52' stroke='white' stroke-width='12' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>"}"#
+        case "scorematrix":
+            title = "Score the bottleneck"
+            ctl = #"{"id":"ctl","component":"ScoreMatrix","legend":"0 none · 3 high","steps":["Intake review","Triage","Build"],"submitAction":{"event":{"name":"submit-matrix","context":{"value":{"path":"/v"},"via":"text"}}}}"#
+        default:
+            title = "Unknown component"
+            ctl = #"{"id":"ctl","component":"Text","text":"unknown: \#(component)"}"#
+        }
+        let json = """
+        {"title":"\(title)","input":{"kind":"none"},
+         "a2ui":[
+           {"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"cenno:catalog/v1"}},
+           {"version":"v0.9","updateComponents":{"surfaceId":"main","components":[
+             {"id":"root","component":"Column","children":["col"]},
+             {"id":"col","component":"Column","children":["title","ctl"]},
+             {"id":"title","component":"Text","variant":"h2","text":"\(title)"},
+             \(ctl)
+           ]}},
+           {"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/","value":{"v":null}}}
+         ]}
+        """
+        let payload = try! JSONDecoder().decode(PromptPayload.self, from: Data(json.utf8))
+        return PromptRecord(id: "demo-a2ui-\(component)", payload: payload, deviceHint: .any,
+                            state: .pending, answer: nil,
+                            createdAt: Date(), expiresAt: Date().addingTimeInterval(600))
+    }
+
     /// A prompt explicitly routed to mirror on this device — demos the
     /// "surfaced on the second screen" state.
     static func secondScreenPrompt() -> PromptRecord {
