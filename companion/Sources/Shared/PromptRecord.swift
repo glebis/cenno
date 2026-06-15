@@ -13,13 +13,19 @@ public struct PromptRecord: Identifiable, Sendable {
     public var answer: PromptAnswer?
     public let createdAt: Date
     public let expiresAt: Date
+    /// Per-class routing modes resolved by the Mac (`crate::routing`).
+    public let targets: RoutingTargets
+    /// Fallback grace delay (seconds) before a `fallback`-mode device surfaces.
+    public let graceS: Int
 
     public var isExpired: Bool { Date() >= expiresAt }
 
     /// Memberwise initializer (the struct's only other init is the failable
-    /// `init?(record:)`). Used by SwiftUI previews and tests.
+    /// `init?(record:)`). Used by SwiftUI previews and tests. `targets`/`graceS`
+    /// default so existing call sites compile unchanged.
     public init(id: String, payload: PromptPayload, deviceHint: DeviceHint, state: State,
-                answer: PromptAnswer?, createdAt: Date, expiresAt: Date) {
+                answer: PromptAnswer?, createdAt: Date, expiresAt: Date,
+                targets: RoutingTargets = RoutingTargets([:]), graceS: Int = 20) {
         self.id = id
         self.payload = payload
         self.deviceHint = deviceHint
@@ -27,6 +33,26 @@ public struct PromptRecord: Identifiable, Sendable {
         self.answer = answer
         self.createdAt = createdAt
         self.expiresAt = expiresAt
+        self.targets = targets
+        self.graceS = graceS
+    }
+
+    /// Whether this prompt should surface on `deviceClass` right now, per its
+    /// resolved route. Pure (takes `now`) for testability.
+    /// - mirror: surface immediately.
+    /// - fallback: surface only once `createdAt + graceS` has passed.
+    /// - off / absent: never.
+    /// Always false once answered/timed-out or expired.
+    public func shouldSurface(on deviceClass: DeviceClass, now: Date = Date()) -> Bool {
+        guard state == .pending, now < expiresAt else { return false }
+        switch targets.mode(for: deviceClass) {
+        case .off:
+            return false
+        case .mirror:
+            return true
+        case .fallback:
+            return now >= createdAt.addingTimeInterval(TimeInterval(graceS))
+        }
     }
 }
 
@@ -110,6 +136,8 @@ extension PromptRecord {
         self.state = state
         self.createdAt = createdAt
         self.expiresAt = expiresAt
+        self.targets = RoutingTargets(parsing: record["targets"] as? String ?? "")
+        self.graceS = (record["grace_s"] as? Int64).map(Int.init) ?? (record["grace_s"] as? Int) ?? 20
 
         if let answerJSON = record["answer"] as? String,
            let answerData = answerJSON.data(using: .utf8),
@@ -126,6 +154,8 @@ extension PromptRecord {
         }
         record["prompt_id"] = id
         record["device_hint"] = deviceHint.rawValue
+        record["targets"] = targets.encoded
+        record["grace_s"] = Int64(graceS)
         record["state"] = state.rawValue
         record["created_at"] = createdAt
         record["expires_at"] = expiresAt
