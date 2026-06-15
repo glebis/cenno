@@ -53,9 +53,18 @@ struct A2UIPromptView: View {
         if let vm {
             // `catalog:` IS the custom component catalog; the core registry lives
             // on the SurfaceViewModel via `init(catalog:)`.
-            A2UISurfaceView(viewModel: vm, catalog: CennoComponentCatalog(), scrolls: true) { action in
+            // scrolls:false so the surface fills the viewport (a ScrollView
+            // gives content intrinsic height pinned to the top — the source of
+            // the stranded-at-top look). The pinned envelope's weighted column
+            // then spans the screen and pushes the action group to the bottom.
+            // scrolls:false also drops the built-in .padding(), so re-apply
+            // cenno's gutters here.
+            A2UISurfaceView(viewModel: vm, catalog: CennoComponentCatalog(), scrolls: false) { action in
                 handle(action)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, CennoTheme.space3)
+            .padding(.bottom, CennoTheme.space3)
         } else if let buildError {
             ContentUnavailableView("Couldn't render", systemImage: "exclamationmark.triangle",
                                    description: Text(buildError))
@@ -66,16 +75,26 @@ struct A2UIPromptView: View {
 
     private func buildSurface() {
         guard vm == nil else { return }
-        // Primary path (passthrough if present, else desugar); on passthrough
-        // failure fall back to the desugared prompt (PromptPanel.tsx parity).
-        if let model = makeSurface(try? A2UIMessageBuilder.messages(for: prompt.payload)) {
+        // Rich `a2ui` passthrough surfaces own their own layout — render as-is.
+        if prompt.payload.a2ui != nil,
+           let model = makeSurface(try? A2UIMessageBuilder.messages(for: prompt.payload)) {
             vm = model; return
         }
-        if prompt.payload.a2ui != nil,
-           let model = makeSurface(try? A2UIMessageBuilder.desugarMessages(for: prompt.payload)) {
+        // Desugared prompts: pin the action group to the bottom (phone layout;
+        // desktop does the equivalent in catalog.css). Also the passthrough
+        // fallback (PromptPanel.tsx parity).
+        if let model = makeSurface(pinnedDesugarMessages(for: prompt.payload)) {
             vm = model; return
         }
         buildError = "This prompt couldn't be rendered."
+    }
+
+    /// Desugar → cenno remap → pin-to-bottom (phone layout) → typed messages.
+    private func pinnedDesugarMessages(for payload: PromptPayload) -> [A2uiMessage]? {
+        let env = PromptLayout.pinActionsToBottom(
+            CennoComponentRemap.apply(A2UIDesugar.messages(for: payload)))
+        guard let data = try? JSONEncoder().encode(env) else { return nil }
+        return try? JSONDecoder().decode([A2uiMessage].self, from: data)
     }
 
     private func makeSurface(_ messages: [A2uiMessage]?) -> SurfaceViewModel? {
