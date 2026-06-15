@@ -107,7 +107,10 @@ public final class CloudKitRelay: ObservableObject {
             recordType: PromptRecord.recordType,
             predicate: NSPredicate(format: "state == %@", "pending"),
             subscriptionID: subscriptionID,
-            options: [.firesOnRecordCreation]
+            // Creation wakes us for new prompts; update wakes us when the Mac
+            // flips state to answered/timed_out so companions drop stale entries
+            // instead of waiting for the next manual fetch / ambient poll.
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate]
         )
         let info = CKSubscription.NotificationInfo()
         info.shouldSendContentAvailable = true  // silent push — app wakes, fetches

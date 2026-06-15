@@ -78,6 +78,34 @@ final class PromptRoutingTests: XCTestCase {
         XCTAssertFalse(r.shouldSurface(on: .ipad, now: now))
     }
 
+    // MARK: - isTargeted (manual-queue membership filter)
+
+    func testIsTargetedRespectsOffAndMembership() {
+        let now = Date()
+        let r = record(targets: RoutingTargets([.iphone: .fallback, .ipad: .mirror]),
+                       createdAt: now, expiresAt: now.addingTimeInterval(600))
+        XCTAssertTrue(r.isTargeted(at: .iphone))
+        XCTAssertTrue(r.isTargeted(at: .ipad))
+        XCTAssertFalse(r.isTargeted(at: .watch)) // off → never in the watch queue
+    }
+
+    func testIsTargetedShowsUnroutedEverywhere() {
+        // Empty targets (legacy/desugar/demo) shows on every device's queue.
+        let now = Date()
+        let r = record(targets: RoutingTargets([:]),
+                       createdAt: now, expiresAt: now.addingTimeInterval(600))
+        for c in DeviceClass.allCases { XCTAssertTrue(r.isTargeted(at: c)) }
+    }
+
+    // isTargeted ignores grace (manual inbox shows targeted fallback prompts now)
+    func testIsTargetedIgnoresFallbackGrace() {
+        let now = Date()
+        let r = record(targets: RoutingTargets([.iphone: .fallback]), graceS: 99,
+                       createdAt: now, expiresAt: now.addingTimeInterval(600))
+        XCTAssertFalse(r.shouldSurface(on: .iphone, now: now)) // ambient waits for grace
+        XCTAssertTrue(r.isTargeted(at: .iphone))               // manual queue shows now
+    }
+
     func testExpiredNeverSurfaces() {
         let now = Date()
         let r = record(targets: RoutingTargets([.ipad: .mirror]),
