@@ -81,6 +81,9 @@ pub struct DefaultsConfig {
 pub struct Config {
     pub panel: PanelConfig,
     pub defaults: DefaultsConfig,
+    /// Cross-device prompt routing policy (which companion devices receive
+    /// prompts and how). See `crate::routing`.
+    pub routing: crate::routing::RoutingConfig,
     /// Declarative custom widget templates, keyed by name. Each value is an
     /// A2UI component-tree template the desugar layer expands (validated at the
     /// boundary like any agent payload — no code execution).

@@ -66,6 +66,8 @@ pub struct CennoServer {
     /// Default prompt timeout (from `~/.cenno` config, else the built-in 120)
     /// applied when an agent omits `timeout_s`.
     default_timeout_s: u64,
+    /// Cross-device routing policy (which companion devices a prompt reaches).
+    routing: crate::routing::RoutingConfig,
     tool_router: ToolRouter<Self>,
 }
 
@@ -75,14 +77,23 @@ impl CennoServer {
         notify: NotifyFn,
         db: Option<Db>,
         default_timeout_s: u64,
+        routing: crate::routing::RoutingConfig,
     ) -> Self {
         Self {
             registry,
             notify,
             db,
             default_timeout_s,
+            routing,
             tool_router: Self::tool_router(),
         }
+    }
+
+    /// Resolve the routing targets+grace for a prompt from this server's policy
+    /// and the agent's optional `device_hint`.
+    fn resolve_routing(&self, device_hint: Option<&str>) -> crate::routing::Routed {
+        let hint = device_hint.and_then(crate::routing::DeviceClass::parse_hint);
+        self.routing.resolve(hint)
     }
 }
 
@@ -122,14 +133,23 @@ impl CennoServer {
         // Serialise the params once for the CloudKit payload (fire-and-forget).
         let payload_for_relay = serde_json::to_string(&params).unwrap_or_default();
         let timeout_for_relay = params.timeout_secs(Some(self.default_timeout_s));
+        // Resolve cross-device routing from policy + the agent's hint.
+        let routed = self.resolve_routing(params.device_hint.as_deref());
 
         let resp = self
             .registry
             .ask(params.clone(), |id, req| {
                 *captured_id2.lock() = id.to_string();
                 (self.notify)(id, req, None);
-                // Publish to CloudKit so the Watch/iPhone companion can pick it up.
-                crate::relay::write_prompt(id, &payload_for_relay, timeout_for_relay);
+                // Publish to CloudKit so the eligible companion devices can pick
+                // it up (no-op when no device is an eligible target).
+                crate::relay::write_prompt(
+                    id,
+                    &payload_for_relay,
+                    &routed.targets,
+                    routed.grace_s,
+                    timeout_for_relay,
+                );
             })
             .await;
 
@@ -144,15 +164,18 @@ impl CennoServer {
                     eprintln!("cenno db: failed to record prompt {prompt_id}: {e}");
                 }
             }
-            // Update CloudKit state so the companion hides the prompt.
-            let (state, answer_json) = match &resp {
-                crate::protocol::AskResponse::Answered { .. } => {
-                    let j = serde_json::to_string(&resp).unwrap_or_default();
-                    ("answered", Some(j))
-                }
-                crate::protocol::AskResponse::TimedOut { .. } => ("timed_out", None),
-            };
-            crate::relay::update_state(&prompt_id, state, answer_json.as_deref());
+            // Update CloudKit state so the companion hides the prompt — only if
+            // the prompt was actually published (a companion device was eligible).
+            if !routed.targets.is_empty() {
+                let (state, answer_json) = match &resp {
+                    crate::protocol::AskResponse::Answered { .. } => {
+                        let j = serde_json::to_string(&resp).unwrap_or_default();
+                        ("answered", Some(j))
+                    }
+                    crate::protocol::AskResponse::TimedOut { .. } => ("timed_out", None),
+                };
+                crate::relay::update_state(&prompt_id, state, answer_json.as_deref());
+            }
         }
 
         Ok(serde_json::to_string(&resp).expect("AskResponse is always serializable"))
@@ -281,6 +304,7 @@ pub async fn start_socket_server(
     notify: impl Fn(&str, &AskRequest, Option<SeqMeta>) + Send + Sync + 'static,
     db: Option<Db>,
     default_timeout_s: u64,
+    routing: crate::routing::RoutingConfig,
 ) -> anyhow::Result<()> {
     // TODO(plan4): two concurrent launches can unlink each other's live socket —
     // enforce single instance (tauri-plugin-single-instance) instead of smarter
@@ -318,8 +342,13 @@ pub async fn start_socket_server(
                     continue;
                 }
             };
-            let server =
-                CennoServer::new(registry.clone(), notify.clone(), db.clone(), default_timeout_s);
+            let server = CennoServer::new(
+                registry.clone(),
+                notify.clone(),
+                db.clone(),
+                default_timeout_s,
+                routing.clone(),
+            );
             tokio::spawn(async move {
                 let (read, write) = tokio::io::split(stream);
                 match server.serve((read, write)).await {

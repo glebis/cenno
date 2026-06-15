@@ -7,6 +7,7 @@ pub mod mcp;
 pub mod protocol;
 pub mod registry;
 pub mod relay;
+pub mod routing;
 pub mod suppress;
 pub mod tray;
 pub mod updater;
@@ -473,6 +474,9 @@ pub fn run() {
                 .defaults
                 .timeout_s
                 .unwrap_or(crate::protocol::DEFAULT_TIMEOUT_S);
+            // Cross-device routing policy — cloned out before the config is moved
+            // into managed state, so the MCP server can own its own copy.
+            let routing = user_config.routing.clone();
             app.manage(geometry);
             app.manage(user_config);
 
@@ -622,6 +626,7 @@ pub fn run() {
                     },
                     db,
                     default_timeout_s,
+                    routing,
                 )
                 .await;
                 if let Err(e) = result {
