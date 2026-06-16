@@ -55,9 +55,13 @@ private struct CennoTextView: View {
         if p.variant == "caption" {
             Text(p.text ?? "").font(CennoTheme.caption).foregroundStyle(CennoTheme.inkDim)
                 .textCase(.uppercase).tracking(1)
+                // Keep full intrinsic height: never let a short (landscape)
+                // viewport compress + truncate the text — overflow scrolls instead.
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             Text(markdown(p.text ?? "")).font(font(for: p.variant))
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

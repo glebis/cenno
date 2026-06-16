@@ -52,20 +52,30 @@ struct A2UIPromptView: View {
 
     @ViewBuilder private var content: some View {
         if let vm {
-            // `catalog:` IS the custom component catalog; the core registry lives
-            // on the SurfaceViewModel via `init(catalog:)`.
-            // scrolls:false so the surface fills the viewport (a ScrollView
-            // gives content intrinsic height pinned to the top — the source of
-            // the stranded-at-top look). The pinned envelope's weighted column
-            // then spans the screen and pushes the action group to the bottom.
-            // scrolls:false also drops the built-in .padding(), so re-apply
-            // cenno's gutters here.
-            A2UISurfaceView(viewModel: vm, catalog: CennoComponentCatalog(), scrolls: false) { action in
-                handle(action)
+            // Pin-or-scroll: the surface renders with its OWN scrolling off
+            // (`scrolls:false` → raw component tree), wrapped here in a
+            // ScrollView whose content is floored at the viewport height.
+            //   • Short content  → floor = viewport, the pinned envelope's
+            //     weighted column fills it and pushes the action group to the
+            //     bottom (no scroll, identical to before).
+            //   • Tall content (long body, or a short landscape viewport) →
+            //     content grows past the floor and the ScrollView scrolls,
+            //     instead of clipping the last lines.
+            // `catalog:` IS the custom component catalog; the core registry
+            // lives on the SurfaceViewModel via `init(catalog:)`. scrolls:false
+            // also drops the built-in .padding(), so re-apply cenno's gutters.
+            GeometryReader { geo in
+                ScrollView {
+                    A2UISurfaceView(viewModel: vm, catalog: CennoComponentCatalog(), scrolls: false) { action in
+                        handle(action)
+                    }
+                    .frame(maxWidth: .infinity,
+                           minHeight: max(0, geo.size.height - CennoTheme.space3),
+                           alignment: .top)
+                    .padding(.horizontal, CennoTheme.space3)
+                    .padding(.bottom, CennoTheme.space3)
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.horizontal, CennoTheme.space3)
-            .padding(.bottom, CennoTheme.space3)
         } else if let buildError {
             ContentUnavailableView("Couldn't render", systemImage: "exclamationmark.triangle",
                                    description: Text(buildError))
