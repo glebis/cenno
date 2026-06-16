@@ -33,6 +33,12 @@ enum DemoHarness {
         return args[i + 1]
     }
 
+    /// `-cennoReplyOpen` — auto-open the free-text reply sheet on appear, for
+    /// screenshotting the composer.
+    static var replyOpen: Bool {
+        ProcessInfo.processInfo.arguments.contains("-cennoReplyOpen")
+    }
+
     /// `-cennoA2UI <component>` — render a single a2ui catalog component
     /// (slider|datetime|dots|image|scorematrix) via the passthrough path, to
     /// screenshot controls the simple input-kind shortcuts can't reach.

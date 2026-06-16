@@ -16,6 +16,7 @@ struct A2UIPromptView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var vm: SurfaceViewModel?
     @State private var buildError: String?
+    @State private var showReply = false
     private let shownAt = Date()
 
     private var surfaceColor: Color { CennoTheme.surface(for: prompt.payload.flow) }
@@ -34,15 +35,31 @@ struct A2UIPromptView: View {
         // cenno draws its own chrome — hide the glassy iOS toolbar.
         .toolbar(.hidden, for: .navigationBar)
         .onAppear(perform: buildSurface)
+        #if DEBUG
+        .onAppear { if DemoHarness.replyOpen { showReply = true } }
+        #endif
+        // Reply-in-words is available on EVERY prompt — so a display-only or
+        // unsupported control is never a dead end, and the user can always add
+        // their own answer/context for the agent.
+        .sheet(isPresented: $showReply) {
+            ReplySheet(surfaceColor: surfaceColor, onSend: submitReply)
+        }
     }
 
-    /// Plain top bar: a text-only Skip, no capsule background.
+    /// Plain top bar: a text-only Skip, plus a reply affordance on the right.
     private var header: some View {
         HStack {
             Button("Skip") { skip() }
                 .buttonStyle(.plain)
                 .foregroundStyle(CennoTheme.inkDim)
             Spacer()
+            Button { showReply = true } label: {
+                Image(systemName: "bubble.and.pencil")
+                    .font(.system(size: 18, weight: .regular))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(CennoTheme.ink)
+            .accessibilityLabel("Reply in your own words")
         }
         .font(CennoTheme.body)
         .padding(.horizontal, CennoTheme.space3)
@@ -142,8 +159,72 @@ struct A2UIPromptView: View {
         Task { await relay.submit(answer: answer, for: prompt.id); dismiss() }
     }
 
+    /// Free-text/dictated reply from the header bubble — submitted as the answer
+    /// (via `text`), through the same path as a control answer.
+    private func submitReply(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let answer = PromptAnswer(answer: trimmed, via: "text",
+                                  elapsedS: Date().timeIntervalSince(shownAt), device: "iphone")
+        if let onAnswer { onAnswer(answer); return }
+        Task { await relay.submit(answer: answer, for: prompt.id); dismiss() }
+    }
+
     private func skip() {
         if onAnswer != nil { dismiss(); return }
         Task { await relay.markTimedOut(promptID: prompt.id); dismiss() }
+    }
+}
+
+/// Compact reply composer: type or dictate (the system keyboard's mic key — no
+/// speech framework or mic permission needed) a free-text answer for the agent.
+private struct ReplySheet: View {
+    let surfaceColor: Color
+    let onSend: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    private var canSend: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                surfaceColor.ignoresSafeArea()
+                VStack(alignment: .leading, spacing: CennoTheme.space2) {
+                    Text("Reply in your own words")
+                        .font(CennoTheme.questionM)
+                        .foregroundStyle(CennoTheme.ink)
+                    VStack(spacing: 4) {
+                        TextField("Type, or tap the mic to dictate…", text: $text, axis: .vertical)
+                            .font(CennoTheme.body)
+                            .foregroundStyle(CennoTheme.ink)
+                            .tint(CennoTheme.ink)
+                            .lineLimit(3...8)
+                            .focused($focused)
+                        Rectangle().fill(focused ? CennoTheme.ink : CennoTheme.line).frame(height: 1)
+                    }
+                    Spacer()
+                }
+                .padding(CennoTheme.space3)
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.foregroundStyle(CennoTheme.inkDim)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Send") { onSend(text); dismiss() }
+                        .foregroundStyle(CennoTheme.ink)
+                        .disabled(!canSend)
+                }
+            }
+            .toolbarBackground(surfaceColor, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .onAppear { focused = true }
+        }
+        .presentationDetents([.medium])
+        .tint(CennoTheme.ink)
     }
 }
