@@ -41,18 +41,20 @@ Goal Contract (human-approved)         ← source of truth
 ```
 
 ### Goal Contract (`goal.md` — the human source of truth)
-A short markdown doc the human writes/approves. Agents may propose **Goal Amendments** but never silently rewrite it.
+A **short** markdown doc the human writes/approves — capped so it stays a goal, not waterfall-in-markdown. Agents may propose **Goal Amendments** but never silently rewrite it.
 ```
 # Goal Contract
-## Current state            ## Desired future state
-## Current constraint (ToC) ## Target user / job (JTBD)
-## Non-negotiable constraints
-## Desired outcomes (solution-independent, measurable)
-## Success evidence         ## Visual checkpoints (if UI)
-## Risk classification (below)
-## Risks  ## Non-goals  ## Release constraints
+## Current state (≤3)        ## Desired future state (≤3)
+## Current constraint (ToC)  ## Target user / job (JTBD)
+## Non-negotiable constraints (≤5)
+## Desired outcomes (solution-independent, measurable; ≤5)
+## Smallest shippable slice   ← what ships first without the whole cathedral
+## Stop condition             ← "if X, stop and ask for plan approval"
+## Success evidence (≤5)     ## Visual checkpoints (only if user-visible UI changes)
+## Risk classification (below) ## Rollback note (revert / flag / toggle / N-A)
+## Risks (≤5)  ## Non-goals (≤5)  ## Release constraints
 ```
-**Fail rule:** *if a goal can't produce evidence, it's a wish with better formatting* — it doesn't pass.
+**Fail rule:** *if a goal can't produce evidence, it's a wish with better formatting* — it doesn't pass. **Smallest shippable slice** and **Stop condition** are required — they're the main guard against process outrunning the feature.
 
 ### Risk classification (ethics folded in, not a separate gate)
 Inside the Goal Contract, classify and apply rules:
@@ -77,12 +79,12 @@ factory evidence →  Playwright screenshots/visual-diff (UI goals) · property 
 ```
 Plus **fitness functions**: no unauthorized deps; no public API without a contract; no migration without a rollback note; no new AI behavior without a transparency note; visual snapshots approved.
 
-### Visual QA (first-class, risk-tier-triggered)
-Triggered whenever the Goal Contract has **visual checkpoints**. A green unit suite says nothing about layout — the pilot session's own margin/pin/landscape bugs were invisible to tests and only caught by eye.
-- **Capture deterministically** across the relevant **matrix** (device sizes, orientation, light/dark, the 5 flow surfaces): macOS panel via `scripts/visual-qa.sh`; iOS via `simctl` per prompt-kind; web/Tauri webview via Playwright `toHaveScreenshot()`.
-- **Diff** baseline vs new with a visual-diff threshold; a new/updated baseline requires explicit human approval (catches unintended pixel drift).
-- **Human visual checkpoint in Cull** (never Preview/`open`): before/after imported into Cull, reviewer signs off in `evidence/visual-review.md`.
-- **Gate by risk tier:** **R2+ (user-facing) UI goals → required + blocking** (evidence in Cull, visual-diff pass, human sign-off before merge); **R0–R1 internal tools → evidence still captured, advisory** (informs review, not blocking).
+### Visual QA (evidence for real UI changes — right-sized)
+Unit tests miss layout (the pilot's own margin/pin/landscape bugs were only caught by eye), so capture visual evidence — but only when it earns its keep, and minimally. (Round-2 audit: the matrix-by-default version was "a small bureaucracy wearing Playwright cosplay.")
+- **Trigger by change, not by tier:** **blocking** only when the change touches user-visible **layout, styling, onboarding, or auth/safety flows**; otherwise **advisory** (informs review, doesn't block); pure backend/logic → none.
+- **Smallest representative evidence:** the *changed flow* at **one primary viewport** by default. Widen to the device/orientation/theme matrix only when the Goal Contract says those surfaces matter, or the bug is known to vary by them.
+- **Capture:** `scripts/visual-qa.sh` (macOS panel) · `simctl` (iOS) · Playwright `toHaveScreenshot()` (web/Tauri). Baseline-snapshot updates are approved **in the diff/PR review**, not as a separate gate.
+- **Cull is escalated, not default:** use it for substantial UI/design changes worth real review; for routine changes a screenshot in `evidence/` + the diff review is enough.
 
 ### Side-effect-aware manifest (`run.json`)
 Resume is **not** `if status != completed` — it's a side-effect ledger. Per phase: `status`, `input_hash`, `output_paths`, `external_ids` (beads epic/issue ids), `git.{start_sha,end_sha}`, `approved_by/at`. Prevents duplicate epics / stale stacking on resume.
@@ -100,21 +102,32 @@ Resume is **not** `if status != completed` — it's a side-effect ledger. Per ph
 - **Evidence is an artifact, not a claim:** `verify.log` + codex verdict + screenshots + Goal-Traceability persisted under `evidence/` so "done" is auditable.
 
 ## Baseline rules (the constitution)
-The rules each stage must observe — checked, not assumed.
+**A compiler target, not a second job.** These are mostly **machine-enforced defaults inside `factory verify`** — not a scroll the solo dev recites before fixing a bug. Push as much as detectable into the one command; leave only judgment to the human.
 
-**Testing layers** (which tier proves what):
-- **Logic/unit** — TDD red-first (failing test shown before impl); **deterministic** (no timing); writer ≠ grader.
-- **Integration** — exercises real wiring (e.g. `mcp_socket`), not mocks-of-mocks.
-- **Visual/UI** — required for any UI goal (see Visual QA); screenshot evidence in Cull + visual diff.
-- **Property/contract** — where invariants/APIs exist (fast-check/Hypothesis); no public API change without a contract test.
+**Always automated (`factory verify`):** fmt · lint/clippy · typecheck · test · build · secrets-scan · dependency-policy · no-timing/sleep-based-tests (where detectable) · migration ⇒ rollback-note (if migrations) · public-API change ⇒ contract test (if API changed) · AI-behavior change ⇒ transparency note (if prompts/model changed). One command, identical local & CI.
 
-**Validation layers** (escalating independence):
-- **Static** — `factory verify`: fmt + lint/clippy + typecheck + build + secrets-scan, one command, identical local & CI.
-- **Self-review** — placeholder / consistency / scope scan of spec & plan.
-- **Independent/adversarial** — codex or a fresh-context subagent for non-trivial diffs; anchored on objective signals (tests/compiler/linter/screenshots), never agent opinion; under timeout + fallback.
-- **Human gates** — Goal+Risk approval; review/merge; visual checkpoint for R2+ UI.
+**Sometimes automated (generated, used when relevant):** visual screenshots · Goal-Traceability draft · contract/property tests (only for a clear invariant/API) · drift-check · generated review summary.
 
-**Cross-cutting fitness functions (fail the gate):** green suite ≠ sufficient (human at review + visual for UI) · every Goal outcome maps to evidence (UI ⇒ visual evidence) · contract change ⇒ all call-sites verified · no migration without rollback · no new AI behavior without a transparency note · no flaky/timing-based tests · no new secrets in prompts/logs/commits.
+**Human only:** approve the Goal Contract wording · risk-classification sanity/override · judge whether a plan is too invasive (risky work) · approve baseline-screenshot changes · review the final diff · decide whether the shipped slice is enough.
+
+**Independent/adversarial validation** (codex or fresh-context subagent) is **not default** — invoke it only for **non-trivial diffs, shared contracts, or auth/data/risk areas**; anchored on objective signals, never agent opinion; under timeout + fallback.
+
+**Cross-cutting fitness functions (fail the gate):** green suite ≠ sufficient (human at merge) · every Goal outcome maps to evidence (UI ⇒ visual evidence) · contract change ⇒ all call-sites verified · no migration without rollback · no new AI behavior without a transparency note · no flaky/timing-based tests · no new secrets in prompts/logs/commits.
+
+### Feature-size tiers + process budget (the tripwire)
+Process scales to **size**, not just risk. When the process exceeds the feature, stop feeding the beast.
+- **S** (<½ day, low-risk, no public API/migration): Goal Contract + TDD + `factory verify` + merge. No plan, no beads, no adversarial review, no bake-off paperwork.
+- **M** (1–2 days, some UI/integration): + plan if it grows · beads if 2+ real tasks · visual evidence if UI changes · adversarial review if non-trivial.
+- **L** (multi-day; shared contracts, migrations, auth/billing/permissions, AI behavior, data retention): full gates, plan approval, adversarial review, rollback, visual matrix if UI.
+- **XL**: do **not** run through v0 — split first.
+
+**v0 budget (tripwire, not sacred):** Goal Contract ≈15–30 min · ≤3 core generated docs · visual ≤1 changed flow / 1 viewport by default · external validator **once**, timeout-bound · human gates = goal approval + final merge (plan approval only if a risk/size trigger fires).
+
+### Flake policy
+A flaked test is a **failure**, not a retry-until-green. No quarantine; require a deterministic fix before merge. (Otherwise "deterministic verify" is aspirational poetry.)
+
+### Post-ship retro (tiny, mandatory)
+After each feature, 4 lines: what slowed shipping? · what caught a real bug? · which artifact was never used? · **what gets deleted before the next feature?** The deletion question is the point — process accumulates like dust.
 
 ### Artifacts / persistence
 ```
@@ -131,14 +144,15 @@ Reuses cenno's existing `docs/superpowers/` trail + `plans/backlog.md` ledger.
 ### Pilot feature (confirmed)
 **Concurrent-prompt queueing per policy** (from `plans/backlog.md`): today the UI replaces the visible prompt and the first becomes unanswerable until timeout. Real, bounded, logic-heavy with light UI — exercises the full loop.
 
-### Candidate stacks (same feature, same Goal Contract, same model, same timebox)
-- **A — Superpowers** (current baseline you already run).
-- **B — GSD Core** (`open-gsd/gsd-core`) — closest off-the-shelf phased loop.
-- **C — Goal Contract → OpenSpec** (primary) / **Spec Kit** (comparison) as the compiler, + Superpowers TDD + Playwright evidence.
+### Candidate stacks — baseline vs ONE challenger (not a 4-way fashion show)
+Round-2 audit: running 3–4 stacks costs more than the feature and biases toward the nicest paperwork. So:
+- **Baseline — Superpowers** (what you already run).
+- **One challenger — Goal Contract → OpenSpec** (or GSD Core), as the compiler + Superpowers TDD + visual evidence.
+- Add a **third only if** the challenger clearly fails or leaves a question open.
 Run on a disposable branch / worktree per stack.
 
-### Scoring rubric (per stack)
-time-to-usable-plan · clarification loops · # generated artifacts · first verification pass-rate · human corrections needed (babysitting tax) · goal-deviation count · tests-written-before-impl · diff quality (minimal/idiomatic) · context stability · evidence completeness · token/cost · cross-agent portability · **"would I reuse this?"**. Process scorecard: **DORA** (lead time, deploy freq, change-fail, recovery, rework) + **SPACE-lite** (satisfaction/flow) so we don't optimize into "faster but exhausted."
+### Scoring rubric (brutally short)
+Did it: clarify the goal? · reduce rework? · produce better tests *before* impl? · keep the diff smaller/safer? · **slow me down?** · **would I use it again next week?** The last one is the most honest metric — everything else is supporting evidence. (DORA/SPACE-lite are optional context, not the decision.)
 
 ### Decision criteria (what we adopt after)
 - OpenSpec gives enough structure at low friction → adopt as compiler backend.
