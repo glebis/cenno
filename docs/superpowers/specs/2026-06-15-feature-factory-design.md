@@ -77,6 +77,13 @@ factory evidence →  Playwright screenshots/visual-diff (UI goals) · property 
 ```
 Plus **fitness functions**: no unauthorized deps; no public API without a contract; no migration without a rollback note; no new AI behavior without a transparency note; visual snapshots approved.
 
+### Visual QA (first-class, risk-tier-triggered)
+Triggered whenever the Goal Contract has **visual checkpoints**. A green unit suite says nothing about layout — the pilot session's own margin/pin/landscape bugs were invisible to tests and only caught by eye.
+- **Capture deterministically** across the relevant **matrix** (device sizes, orientation, light/dark, the 5 flow surfaces): macOS panel via `scripts/visual-qa.sh`; iOS via `simctl` per prompt-kind; web/Tauri webview via Playwright `toHaveScreenshot()`.
+- **Diff** baseline vs new with a visual-diff threshold; a new/updated baseline requires explicit human approval (catches unintended pixel drift).
+- **Human visual checkpoint in Cull** (never Preview/`open`): before/after imported into Cull, reviewer signs off in `evidence/visual-review.md`.
+- **Gate by risk tier:** **R2+ (user-facing) UI goals → required + blocking** (evidence in Cull, visual-diff pass, human sign-off before merge); **R0–R1 internal tools → evidence still captured, advisory** (informs review, not blocking).
+
 ### Side-effect-aware manifest (`run.json`)
 Resume is **not** `if status != completed` — it's a side-effect ledger. Per phase: `status`, `input_hash`, `output_paths`, `external_ids` (beads epic/issue ids), `git.{start_sha,end_sha}`, `approved_by/at`. Prevents duplicate epics / stale stacking on resume.
 
@@ -87,13 +94,34 @@ Resume is **not** `if status != completed` — it's a side-effect ledger. Per ph
 - **Secrets:** none in prompts/logs/commits/artifacts; no `.env`/prod creds in agent context.
 - **Prompt-injection boundary:** for any untrusted text the feature ingests, separate tool calls from content, quote/sandbox, validate outputs before actions.
 - **Drift:** CLAUDE.md holds only durable behavior; review runs a drift-check (diff vs goal, acceptance criteria changed?, tasks reflect actual work?).
+- **External validators get a hard timeout + fallback:** codex/any external tool runs under a wall-clock cap with a self-validation fallback — never silently block on it (pilot #1: codex hung 12 h overnight, then 28 min).
+- **Contract change ⇒ all call-sites verified:** changing a shared function's contract requires enumerating every caller / parallel path and proving each honors it (pilot #1: codex caught `pick_replay` bypassing the new `pending()` policy).
+- **Determinism:** no wall-clock-dependent test assertions — use synchronous barriers/callbacks (pilot #1: codex flagged a `20ms`-sleep ordering test).
+- **Evidence is an artifact, not a claim:** `verify.log` + codex verdict + screenshots + Goal-Traceability persisted under `evidence/` so "done" is auditable.
+
+## Baseline rules (the constitution)
+The rules each stage must observe — checked, not assumed.
+
+**Testing layers** (which tier proves what):
+- **Logic/unit** — TDD red-first (failing test shown before impl); **deterministic** (no timing); writer ≠ grader.
+- **Integration** — exercises real wiring (e.g. `mcp_socket`), not mocks-of-mocks.
+- **Visual/UI** — required for any UI goal (see Visual QA); screenshot evidence in Cull + visual diff.
+- **Property/contract** — where invariants/APIs exist (fast-check/Hypothesis); no public API change without a contract test.
+
+**Validation layers** (escalating independence):
+- **Static** — `factory verify`: fmt + lint/clippy + typecheck + build + secrets-scan, one command, identical local & CI.
+- **Self-review** — placeholder / consistency / scope scan of spec & plan.
+- **Independent/adversarial** — codex or a fresh-context subagent for non-trivial diffs; anchored on objective signals (tests/compiler/linter/screenshots), never agent opinion; under timeout + fallback.
+- **Human gates** — Goal+Risk approval; review/merge; visual checkpoint for R2+ UI.
+
+**Cross-cutting fitness functions (fail the gate):** green suite ≠ sufficient (human at review + visual for UI) · every Goal outcome maps to evidence (UI ⇒ visual evidence) · contract change ⇒ all call-sites verified · no migration without rollback · no new AI behavior without a transparency note · no flaky/timing-based tests · no new secrets in prompts/logs/commits.
 
 ### Artifacts / persistence
 ```
 docs/superpowers/factory/<date>-<slug>/
   goal.md                              # human source of truth
   generated/{spec,plan,tasks}.md       # compiled views (tool output)
-  evidence/{verify.log, screenshots/, goal-traceability.md, review.md}
+  evidence/{verify.log, screenshots/, visual-review.md, codex-verdict.md, goal-traceability.md, review.md}
   run.json                             # side-effect ledger
 ```
 Reuses cenno's existing `docs/superpowers/` trail + `plans/backlog.md` ledger.
