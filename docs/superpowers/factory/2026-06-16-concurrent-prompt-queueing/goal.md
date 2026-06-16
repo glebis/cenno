@@ -2,7 +2,7 @@
 
 > Source of truth. Agents may propose **Goal Amendments**; they may not silently rewrite this. Generated spec/plan/tasks under `generated/` are compiled views.
 
-**Date:** 2026-06-16 · **Feature factory pilot #1** · See `../../specs/2026-06-15-feature-factory-design.md`
+**Date:** 2026-06-16 · **Feature factory pilot #1** · Factory spec now lives in its own project: `~/ai_projects/feature-factory` (`docs/spec.md`; this pilot's case study at `pilots/concurrent-prompt-queueing/`).
 
 ## Current state
 When a second prompt arrives while one is already visible, the panel **replaces** the visible prompt. The first prompt becomes **unanswerable until it times out** — its answer is effectively lost and the requesting agent is left hanging. (`backlog.md`: "Concurrent-prompt queueing per policy — UI currently replaces the visible prompt; first prompt becomes unanswerable until timeout.")
