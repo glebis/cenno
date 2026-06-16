@@ -43,7 +43,7 @@ struct PromptEvent {
 /// Cold-start race recovery: the agent's first ask can arrive (and emit the
 /// `prompt` event) before the webview has mounted its listener. The webview
 /// calls this right after registering `listen("prompt")` to pull anything
-/// still answerable. Ordered oldest→newest.
+/// still answerable. Ordered by queue policy (urgency, then arrival).
 #[tauri::command]
 fn pending_prompts(state: tauri::State<PromptRegistry>) -> Vec<PromptEvent> {
     state
@@ -269,16 +269,17 @@ fn fullscreen_on_panel_display(handle: &tauri::AppHandle) -> bool {
     crate::suppress::fullscreen_on_display(panel_display_target(handle))
 }
 
-/// Newest answerable prompt = highest numeric id suffix ("p_10" > "p_9").
+/// Front of the queue to replay. `pending()` is already ordered by the queue
+/// policy (urgency High→Normal→Low, then arrival), so replay simply takes the
+/// first entry — the same prompt the frontend's `advanceOrHide` would surface.
 /// Generic over the request payload so the test needs no AskRequest fixture.
 fn pick_replay<T>(pending: Vec<(String, T, u64)>) -> Option<(String, T, u64)> {
-    pending.into_iter().max_by_key(|(id, _, _)| {
-        id.strip_prefix("p_").and_then(|n| n.parse::<u64>().ok()).unwrap_or(0)
-    })
+    pending.into_iter().next()
 }
 
-/// Re-show the newest still-answerable prompt after suppression lifts
+/// Re-show the front-of-queue still-answerable prompt after suppression lifts
 /// (tray "Resume now", fullscreen checkbox toggled off, pause-expiry timer).
+/// "Front" = the queue policy (urgency, then arrival) via `pick_replay`.
 ///
 /// Re-checks suppression first: "Resume now" clicked while another app is
 /// fullscreen (with hide-in-fullscreen on) must stay quiet — the pending
@@ -679,9 +680,9 @@ mod tests {
     }
 
     #[test]
-    fn pick_replay_picks_newest_by_numeric_id() {
-        // Numeric, not lexicographic: p_10 beats p_9.
-        let pending = vec![("p_2".to_string(), (), 5), ("p_10".to_string(), (), 9), ("p_9".to_string(), (), 1)];
+    fn pick_replay_takes_front_of_policy_ordered_queue() {
+        // pending() is pre-sorted by policy; replay takes the front entry.
+        let pending = vec![("p_10".to_string(), (), 9), ("p_2".to_string(), (), 5), ("p_9".to_string(), (), 1)];
         assert_eq!(pick_replay(pending).unwrap().0, "p_10");
         assert!(pick_replay::<()>(vec![]).is_none());
     }

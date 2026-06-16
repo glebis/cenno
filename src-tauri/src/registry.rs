@@ -147,7 +147,8 @@ impl PromptRegistry {
     /// Prompts whose ask() is still awaiting an answer — i.e. replayable to a
     /// webview that mounted after the `prompt` event was emitted (cold-start
     /// race). Excludes resolved (tx consumed) and timed-out (deadline passed)
-    /// entries. Sorted oldest→newest by the monotonic id counter.
+    /// entries. Sorted by queue policy: urgency (High→Normal→Low), then arrival
+    /// id (FIFO within an urgency level).
     ///
     /// The third tuple element is the seconds REMAINING until this prompt's
     /// deadline (ceiled, so a prompt with 0.3s left reports 1, never 0): a
@@ -231,6 +232,28 @@ mod tests {
             .next()
             .map(|(_, r, _)| format!("{:?}", r.urgency));
         assert_eq!(first, Some("High".to_string()));
+    }
+
+    /// Within one urgency level, order is FIFO by arrival. Arrival order is
+    /// captured synchronously via the notify callback (fires before ask()
+    /// parks), so the assertion doesn't depend on scheduler timing.
+    #[tokio::test]
+    async fn pending_keeps_fifo_within_same_urgency() {
+        let reg = PromptRegistry::new();
+        let arrival = Arc::new(Mutex::new(Vec::<String>::new()));
+        for _ in 0..3 {
+            let reg2 = reg.clone();
+            let arr = arrival.clone();
+            tokio::spawn(async move {
+                reg2.ask(req(), move |id, _req| arr.lock().push(id.to_string()))
+                    .await
+            });
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let recorded = arrival.lock().clone();
+        let pending: Vec<String> = reg.pending().into_iter().map(|(id, _, _)| id).collect();
+        assert_eq!(pending, recorded, "same-urgency prompts stay in arrival order");
     }
 
     #[tokio::test]
