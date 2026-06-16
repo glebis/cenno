@@ -196,6 +196,7 @@
 		E3D17AD1CF2A9D6BC2437AF9 /* CennoSharedTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CennoSharedTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E60668160A6279D96D391D7F /* JSONValueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValueTests.swift; sourceTree = "<group>"; };
 		E9A08FECE7042822089952A0 /* PromptRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRoutingTests.swift; sourceTree = "<group>"; };
+		E9D27F4E3815D7F8524F0F59 /* CennoiPhone.Release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CennoiPhone.Release.entitlements; sourceTree = "<group>"; };
 		EC94B9D904E9B43A229FB470 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EFDF8E521B6DF64FDC86156C /* CennoSharedWatch.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = CennoSharedWatch.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7CEA0C7EC0CF4FEE89C7CC3 /* CennoComponentRemap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CennoComponentRemap.swift; sourceTree = "<group>"; };
@@ -287,6 +288,7 @@
 				CE889FCEC37D60DB8EC81C90 /* Assets.xcassets */,
 				A8781FDF15168BB658C4F728 /* CennoComponentCatalog.swift */,
 				5A190FA828572F0F5AA2C82C /* CennoiPhone.entitlements */,
+				E9D27F4E3815D7F8524F0F59 /* CennoiPhone.Release.entitlements */,
 				613E0C8FEB420B690D64A767 /* CennoTheme.swift */,
 				0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */,
 				EC94B9D904E9B43A229FB470 /* Info.plist */,
@@ -1034,7 +1036,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = Sources/iPhone/CennoiPhone.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Sources/iPhone/CennoiPhone.Release.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = Sources/iPhone/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

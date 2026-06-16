@@ -76,6 +76,8 @@ targets:
     info:
       path: Sources/iPhone/Info.plist
       properties:
+        CFBundleDisplayName: Cenno
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         NSRemoteNotificationUsageDescription: "cenno needs notifications to deliver agent prompts."
         UISupportedInterfaceOrientations:
@@ -83,17 +85,17 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion
-      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
-      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    entitlements:
-      path: Sources/iPhone/CennoiPhone.entitlements
-      properties:
-        com.apple.developer.icloud-container-identifiers:
-          - iCloud.app.cenno
-        com.apple.developer.icloud-services:
-          - CloudKit
-        aps-environment: development
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        # Debug → development APNs / Development CloudKit (proven local loop).
+        # Release/archive → production APNs for TestFlight + App Store.
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Sources/iPhone/CennoiPhone.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Sources/iPhone/CennoiPhone.Release.entitlements
 
   # ── iPhone UI tests (render → tap → submit) ──────────────────────────────────
   CennoiPhoneUITests:
@@ -120,6 +122,7 @@ targets:
     info:
       path: Sources/Watch/Info.plist
       properties:
+        CFBundleDisplayName: Cenno
         WKApplication: true
         WKCompanionAppBundleIdentifier: app.cenno.companion
         UIBackgroundModes:
