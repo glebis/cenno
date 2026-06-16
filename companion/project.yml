@@ -80,6 +80,11 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         NSRemoteNotificationUsageDescription: "cenno needs notifications to deliver agent prompts."
+        # The phone is the primary silent-push target: its didReceiveRemoteNotification
+        # fetches when the CKQuerySubscription fires. Background content-available
+        # pushes are only delivered to a backgrounded app with this mode set.
+        UIBackgroundModes:
+          - remote-notification
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
