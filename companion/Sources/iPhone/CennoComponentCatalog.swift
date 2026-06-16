@@ -161,6 +161,9 @@ private struct CennoSliderView: View {
             .tint(CennoTheme.ink)
             labels(p.minLabel, p.maxLabel)
         }
+        // Passthrough controls sit directly under the title (A2UIColumn spacing
+        // is 0) — give them breathing room so they don't crowd the text.
+        .padding(.top, CennoTheme.space4)
     }
     @ViewBuilder private func labels(_ lo: String?, _ hi: String?) -> some View {
         if lo != nil || hi != nil {
@@ -231,6 +234,7 @@ private struct CennoDotsView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .padding(.top, CennoTheme.space4)   // breathing room from the text above
     }
 }
 
@@ -269,6 +273,7 @@ private struct CennoDateTimeInputView: View {
                 .environment(\.colorScheme, .dark)   // light numerals on the pill
         }
         .frame(maxWidth: .infinity)
+        .padding(.top, CennoTheme.space4)   // breathing room from the text above
     }
     private static func fmt(_ date: Bool, _ time: Bool) -> DateFormatter {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")

@@ -31,6 +31,7 @@ enum CennoTheme {
     static let space2: CGFloat = 16
     static let space3: CGFloat = 24
     static let space4: CGFloat = 40
+    static let space5: CGFloat = 56
 }
 
 /// The active flow surface color, injected by A2UIPromptView so leaf views can
