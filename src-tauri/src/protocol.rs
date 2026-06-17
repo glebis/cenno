@@ -10,8 +10,25 @@ use serde::{Deserialize, Serialize};
 pub enum Flow { Mood, Question, Ema, Reminder, Ambient }
 
 /// Multi-step progress (drives dot pagination in EMA-style flows).
+///
+/// Deserialization clamps agent-supplied values to a sane range so the dot
+/// pagination can never render nonsense: `total` is forced to ≥1 and `step`
+/// into `1..=total` (e.g. `{step:5,total:3}` → `{3,3}`, `{step:0,...}` → `1`).
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(from = "ProgressWire")]
 pub struct Progress { pub step: u32, pub total: u32 }
+
+/// Raw wire shape for [`Progress`] before clamping (see the `From` impl).
+#[derive(Deserialize, schemars::JsonSchema)]
+struct ProgressWire { step: u32, total: u32 }
+
+impl From<ProgressWire> for Progress {
+    fn from(w: ProgressWire) -> Self {
+        let total = w.total.max(1);
+        let step = w.step.clamp(1, total);
+        Progress { step, total }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -241,5 +258,29 @@ mod tests {
         let back = serde_json::to_string(&req).unwrap();
         assert!(!back.contains("flow"));
         assert!(!back.contains("progress"));
+    }
+
+    #[test]
+    fn progress_clamps_step_over_total() {
+        let json = r#"{"title":"t","progress":{"step":5,"total":3}}"#;
+        let req: AskRequest = serde_json::from_str(json).unwrap();
+        let p = req.progress.unwrap();
+        assert_eq!((p.step, p.total), (3, 3));
+    }
+
+    #[test]
+    fn progress_clamps_step_below_one() {
+        let json = r#"{"title":"t","progress":{"step":0,"total":5}}"#;
+        let req: AskRequest = serde_json::from_str(json).unwrap();
+        let p = req.progress.unwrap();
+        assert_eq!((p.step, p.total), (1, 5));
+    }
+
+    #[test]
+    fn progress_clamps_zero_total() {
+        let json = r#"{"title":"t","progress":{"step":0,"total":0}}"#;
+        let req: AskRequest = serde_json::from_str(json).unwrap();
+        let p = req.progress.unwrap();
+        assert_eq!((p.step, p.total), (1, 1));
     }
 }
