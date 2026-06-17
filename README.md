@@ -48,7 +48,12 @@ Note for contributors: a plain `cargo build` binary loads the Vite dev server (p
 
 ## Quickstart (60 seconds)
 
-1. Install cenno (above).
+1. Install cenno (or [download the DMG](https://github.com/glebis/cenno/releases/latest)):
+
+```bash
+brew install --cask glebis/tap/cenno
+```
+
 2. Add it to any project's `.mcp.json`:
 
 ```json
