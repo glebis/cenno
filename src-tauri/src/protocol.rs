@@ -65,6 +65,11 @@ pub struct AskRequest {
     pub timeout_s: Option<u64>,
     #[serde(default)]
     pub a2ui: Option<serde_json::Value>,
+    /// Optional cross-device routing proposal: `"phone"`, `"ipad"`, `"watch"`.
+    /// A *hint* only — the user's `~/.cenno` routing policy is authoritative and
+    /// can ignore it (see `crate::routing`). Unknown/absent → no preference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow: Option<Flow>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

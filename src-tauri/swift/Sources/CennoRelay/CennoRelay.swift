@@ -5,8 +5,11 @@
 // out), the record state is updated so the companion stays in sync.
 //
 // FFI:
-//   cenno_relay_write_prompt(prompt_id, payload_json, device_hint, timeout_secs)
+//   cenno_relay_write_prompt(prompt_id, payload_json, targets, grace_secs, timeout_secs)
 //   cenno_relay_update_state(prompt_id, state_cstr, answer_json)   -- nullable answer_json
+//
+// `targets` is the resolved routing string ("iphone:fallback,ipad:mirror");
+// `grace_secs` is the fallback delay companion devices apply before surfacing.
 //
 // Both functions are fire-and-forget: they spawn a Swift Task and return
 // immediately. CloudKit errors are printed to stderr but are not fatal.
@@ -64,16 +67,17 @@ private func string(_ ptr: UnsafePointer<CChar>?) -> String? {
 public func cenno_relay_write_prompt(
     prompt_id:    UnsafePointer<CChar>?,
     payload_json: UnsafePointer<CChar>?,
-    device_hint:  UnsafePointer<CChar>?,
+    targets:      UnsafePointer<CChar>?,
+    grace_secs:   Int64,
     timeout_secs: Int64
 ) {
     guard let pid = string(prompt_id), let payload = string(payload_json) else {
         print("[CennoRelay] write_prompt: missing required args")
         return
     }
-    let hint    = string(device_hint) ?? "any"
-    let now     = Date()
-    let expires = now.addingTimeInterval(TimeInterval(timeout_secs) + 30)
+    let targetsStr = string(targets) ?? ""
+    let now        = Date()
+    let expires    = now.addingTimeInterval(TimeInterval(timeout_secs) + 30)
 
     Task {
         let db = makeDB()
@@ -81,12 +85,13 @@ public func cenno_relay_write_prompt(
 
         let recordID = CKRecord.ID(recordName: pid, zoneID: _zoneID)
         let record   = CKRecord(recordType: recordType, recordID: recordID)
-        record["prompt_id"]   = pid
-        record["payload"]     = payload
-        record["device_hint"] = hint
-        record["state"]       = "pending"
-        record["created_at"]  = now
-        record["expires_at"]  = expires
+        record["prompt_id"]  = pid
+        record["payload"]    = payload
+        record["targets"]    = targetsStr
+        record["grace_s"]    = grace_secs
+        record["state"]      = "pending"
+        record["created_at"] = now
+        record["expires_at"] = expires
 
         do {
             _ = try await db.modifyRecords(saving: [record], deleting: [])

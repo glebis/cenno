@@ -8,6 +8,14 @@
 	<true/>
 	<!-- CloudKit relay: write Prompt records so Watch/iPhone companion can
 	     display agent prompts when the user is away from the Mac. -->
+	<!-- application-identifier + team-identifier are REQUIRED for CloudKit to
+	     authorize the app against the container. Without them, modifyRecords
+	     fails per-record with "Invalid bundle ID for container" (and the relay
+	     swallows it, so it looks like nothing happened). -->
+	<key>com.apple.application-identifier</key>
+	<string>79SP7TM5PH.app.cenno</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>79SP7TM5PH</string>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>iCloud.app.cenno</string>

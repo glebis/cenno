@@ -1,5 +1,5 @@
 import SwiftUI
-import CennoShared
+import CennoSharedWatch
 
 /// Renders a single pending prompt on Watch, routing to the right input control.
 struct PromptView: View {
@@ -89,14 +89,20 @@ private struct ChoiceInput: View {
     @EnvironmentObject var relay: CloudKitRelay
 
     var body: some View {
+        // A VStack of buttons, not a List: a List/.carousel nested inside the
+        // parent ScrollView collapses to zero height (scrollable-in-scrollable),
+        // hiding the choices.
         let choices = prompt.payload.choices ?? []
-        List(choices, id: \.self) { choice in
-            Button(choice) {
-                Task { await relay.submit(answer: .make(choice, via: "choice", device: "watch"),
-                                          for: prompt.id) }
+        VStack(spacing: 6) {
+            ForEach(choices, id: \.self) { choice in
+                Button(choice) {
+                    Task { await relay.submit(answer: .make(choice, via: "choice", device: "watch"),
+                                              for: prompt.id) }
+                }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
             }
         }
-        .listStyle(.carousel)
     }
 }
 
@@ -135,7 +141,12 @@ private struct TextInput: View {
     var body: some View {
         VStack(spacing: 8) {
             // TextFieldLink opens system input screen (keyboard + dictation)
-            TextFieldLink(prompt: Text(voice ? "Dictate or type…" : "Type your answer…")) { result in
+            TextFieldLink(
+                prompt: Text(voice ? "Dictate or type…" : "Type your answer…")
+            ) {
+                Text(voice ? "Dictate" : "Type")
+                    .frame(maxWidth: .infinity)
+            } onSubmit: { result in
                 Task { await relay.submit(answer: .make(result, via: voice ? "voice_text" : "text",
                                                         device: "watch"),
                                           for: prompt.id) }

@@ -7,23 +7,71 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0A9C3DDCBFC25F67C654CBDF /* CennoShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		036EAE42A7244E019F38DF24 /* A2UIDesugar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D8FD3FCE1A21990FA815F56 /* A2UIDesugar.swift */; };
 		105572D9E3C1A7419266CF61 /* iPhoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99F2CB5326FC0247530DE3F5 /* iPhoneApp.swift */; };
+		174B44154CE6092CF2CA289E /* A2UIAnswerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A279B3497CD93A40DFACB4F8 /* A2UIAnswerBridge.swift */; };
+		1C2B9D897A517BE042C10BF7 /* AmbientAnnouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87793F76F2313FE42BC3D05B /* AmbientAnnouncer.swift */; };
+		1D5EE0446F033ED0D79170F8 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D0CAD497984CEFD84F35D0 /* JSONValue.swift */; };
 		1D86C6AD36D66BC09FCAE2DB /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D0F5967C6775045E6AE57061 /* CloudKit.framework */; };
+		1DF3B76404DB96570E1490CC /* DemoHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */; };
+		21783E87B0742965B599EE9B /* A2UIMessageBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE02A405496F3D899D9978B4 /* A2UIMessageBuilderTests.swift */; };
+		23E94083740397192F5316D7 /* A2UISwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 2199C3497A4CBC6CAF71E50F /* A2UISwiftUI */; };
+		2D7CDC76BB1EB150A511B20E /* SecondScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24BC29DD304B93763B12580F /* SecondScreenView.swift */; };
+		2FE6BB7FDAB12B01BC7D3FBF /* PromptRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A79829A1E821488844DE1A /* PromptRecord.swift */; };
 		31036D7B66374ECF6FA4D626 /* CennoShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		3ACCD0A640DE5EA22042D5AE /* PromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDDE64B70A9012CE0AD8FC0A /* PromptView.swift */; };
 		3B35C5C6B98052EC06AD1522 /* PromptQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 262BEEECA665777113FFE4EE /* PromptQueueView.swift */; };
+		3B657FA282853B3FE81C62A4 /* A2UIPromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C052550FFC24F59FAC6C30F7 /* A2UIPromptView.swift */; };
+		4427A07A773D284E29739E2B /* CennoShared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		46247F774C94420553524BD9 /* PhonePromptDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */; };
+		4AC242903245E53AA4953BF0 /* JSONValueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60668160A6279D96D391D7F /* JSONValueTests.swift */; };
+		4FFA05575F81870787E1ABF1 /* PromptLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF0D19C8B88F0454907A540F /* PromptLayout.swift */; };
+		59846EA0070683C548FA8521 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1968C7188F9ADC319CD6D2E /* main.swift */; };
+		59E23D939FC73449B68259CE /* CennoComponentRemapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B90B2170E40B7479F6F86CD /* CennoComponentRemapTests.swift */; };
+		59EAD102E5EE745B28509B2F /* CennoSharedWatch.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EFDF8E521B6DF64FDC86156C /* CennoSharedWatch.framework */; };
+		5F2730B8B0ABE9C900E27849 /* A2UIDesugarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF36FE5E492E42FAD77E9BCB /* A2UIDesugarTests.swift */; };
+		65559B4F58826CF094E68703 /* CennoShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; };
+		6AAFEDD20E6EB55A28425C57 /* PromptRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9A08FECE7042822089952A0 /* PromptRoutingTests.swift */; };
+		79F31704604E73642167D7C0 /* PromptRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2621C61D27898FAB6AE2CFD6 /* PromptRouting.swift */; };
+		81DF66AD7BD8D737844F8FD0 /* A2UISwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = F35B71FD28CED289574F7996 /* A2UISwiftUI */; };
+		94C11D72383C37FDF925B0AC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CE889FCEC37D60DB8EC81C90 /* Assets.xcassets */; };
+		991392B1E9BE3FAEAB191664 /* A2UIMessageBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B840F580BA57DA9F5BC9E75 /* A2UIMessageBuilder.swift */; };
+		A0AE9047015275F4B31CACFF /* PromptRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2621C61D27898FAB6AE2CFD6 /* PromptRouting.swift */; };
+		A447C1428251A23A3BB2B74D /* SmokeTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E292BDE18D530B7C5C849E1 /* SmokeTest.swift */; };
+		AAE322EADB9207EE87A07524 /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D0F5967C6775045E6AE57061 /* CloudKit.framework */; };
+		B89C53BE0D119B8AA845E32D /* CennoSharedWatch.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = EFDF8E521B6DF64FDC86156C /* CennoSharedWatch.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C670C6AF056317A8E06973E2 /* SecondScreenSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C51D56ACDC955A6CCA166FE /* SecondScreenSettings.swift */; };
 		C688087EA8C4B7CE2E485869 /* PromptRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A79829A1E821488844DE1A /* PromptRecord.swift */; };
-		D1DDFFA9D6D840DD3C231F14 /* CennoShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; };
+		C8FDAF1405A44E8C193A5A5D /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D0CAD497984CEFD84F35D0 /* JSONValue.swift */; };
+		CD3E6EB0E95350E05AE442D3 /* CloudKitRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */; };
+		CDBAE42F92C4A7E3D3F957FC /* CennoRenderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A450C6544541DA1EB94EA359 /* CennoRenderUITests.swift */; };
+		D0E894BDE93B5BFCDC6DB27A /* CennoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613E0C8FEB420B690D64A767 /* CennoTheme.swift */; };
+		D140F5134FB994DC1B9EFE04 /* CennoComponentRemap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7CEA0C7EC0CF4FEE89C7CC3 /* CennoComponentRemap.swift */; };
+		D24F933AD04EDEEAF045448B /* PromptPayloadDecodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98FEB886452ACFBEA392FBB2 /* PromptPayloadDecodeTests.swift */; };
+		D7494652F8B0179729345E56 /* A2UISwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 9EAA7185A23416A734534A41 /* A2UISwiftUI */; };
+		DB8B5A16C48CBB0B8BB0342B /* A2UIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */; };
+		E1ED69273A89DFE319E30D51 /* A2UIDesugar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D8FD3FCE1A21990FA815F56 /* A2UIDesugar.swift */; };
+		E360F77FFC39CFCD726D3C52 /* A2UIAnswerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A279B3497CD93A40DFACB4F8 /* A2UIAnswerBridge.swift */; };
 		E39B7002CBEED5A4A95EC7B8 /* A2UIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */; };
 		E430EAB1F9DE12ACD90214B6 /* WatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FE964B1EE155939E74083F /* WatchApp.swift */; };
+		E876EE201D51D53CDC3DC838 /* CennoComponentCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8781FDF15168BB658C4F728 /* CennoComponentCatalog.swift */; };
 		E87BB3F57B45A0C23DD3C3EE /* PhonePromptQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */; };
+		EDA9A849BB478A6EEDFC5EBB /* A2UIAnswerBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADE59B232F97670FB9E5E4E /* A2UIAnswerBridgeTests.swift */; };
+		EEF96FD256663436823D8EE4 /* CennoComponentRemap.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7CEA0C7EC0CF4FEE89C7CC3 /* CennoComponentRemap.swift */; };
 		F205B47236BA31FC86394A7D /* CloudKitRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */; };
 		F24C0DDDE01BBC04F945D532 /* CennoShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B07CAB34C1E39709D207949B /* CennoShared.framework */; };
+		FC4D38EEBF4D81DBA1CF082A /* CennoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B11E463B157D0E0741D3EF4B /* CennoWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		FD40C67B0DD43497FC12F067 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 74777BFF11FF55DD933A1523 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		14057385457F52A4A8A4EAF9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 313EB8996C0C0C3F1089C1C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 49F61B84300B07ACBF367F09;
+			remoteInfo = CennoSharedWatch;
+		};
 		2FE2BFC482711397B18F2F89 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 313EB8996C0C0C3F1089C1C1 /* Project object */;
@@ -31,23 +79,48 @@
 			remoteGlobalIDString = 442EF29E5473EA8AD6388F37;
 			remoteInfo = CennoShared;
 		};
-		EA3F50D224400D6861B3783E /* PBXContainerItemProxy */ = {
+		4BFA511BA0371C90CF6BEEA6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 313EB8996C0C0C3F1089C1C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0DDD721A75A6906CE70F27B3;
+			remoteInfo = CennoiPhone;
+		};
+		BBE298E871563AA3705E60E3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 313EB8996C0C0C3F1089C1C1 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 442EF29E5473EA8AD6388F37;
 			remoteInfo = CennoShared;
 		};
+		F3FB2020F8C1857380ECD537 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 313EB8996C0C0C3F1089C1C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BD4C3B9B29CF1DB429558400;
+			remoteInfo = CennoWatch;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		0F9B9F6C1179A6DACD7FCDBF /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				4427A07A773D284E29739E2B /* CennoShared.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		340DCD197447DAC0E55F79D8 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				0A9C3DDCBFC25F67C654CBDF /* CennoShared.framework in Embed Frameworks */,
+				B89C53BE0D119B8AA845E32D /* CennoSharedWatch.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -63,26 +136,70 @@
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		97A254DB23252EC69D8A4040 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				FC4D38EEBF4D81DBA1CF082A /* CennoWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoHarness.swift; sourceTree = "<group>"; };
 		0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIRouter.swift; sourceTree = "<group>"; };
 		18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRelay.swift; sourceTree = "<group>"; };
+		24BC29DD304B93763B12580F /* SecondScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecondScreenView.swift; sourceTree = "<group>"; };
+		2621C61D27898FAB6AE2CFD6 /* PromptRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRouting.swift; sourceTree = "<group>"; };
 		262BEEECA665777113FFE4EE /* PromptQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptQueueView.swift; sourceTree = "<group>"; };
 		2A093FDFC5DF7ED29D0808C0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2ADE59B232F97670FB9E5E4E /* A2UIAnswerBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIAnswerBridgeTests.swift; sourceTree = "<group>"; };
+		2E292BDE18D530B7C5C849E1 /* SmokeTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTest.swift; sourceTree = "<group>"; };
+		49E17A1743466DA9153FFC0E /* a2ui-swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "a2ui-swift"; path = "Vendor/a2ui-swift"; sourceTree = SOURCE_ROOT; };
 		49FE964B1EE155939E74083F /* WatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchApp.swift; sourceTree = "<group>"; };
+		4B90B2170E40B7479F6F86CD /* CennoComponentRemapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CennoComponentRemapTests.swift; sourceTree = "<group>"; };
 		57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhonePromptDetailView.swift; sourceTree = "<group>"; };
 		5A190FA828572F0F5AA2C82C /* CennoiPhone.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CennoiPhone.entitlements; sourceTree = "<group>"; };
+		5D8FD3FCE1A21990FA815F56 /* A2UIDesugar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIDesugar.swift; sourceTree = "<group>"; };
+		613E0C8FEB420B690D64A767 /* CennoTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CennoTheme.swift; sourceTree = "<group>"; };
 		643920CA01F24FA300D9FA61 /* CennoWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CennoWatch.entitlements; sourceTree = "<group>"; };
+		6C51D56ACDC955A6CCA166FE /* SecondScreenSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecondScreenSettings.swift; sourceTree = "<group>"; };
+		74777BFF11FF55DD933A1523 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		87793F76F2313FE42BC3D05B /* AmbientAnnouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientAnnouncer.swift; sourceTree = "<group>"; };
 		87A79829A1E821488844DE1A /* PromptRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRecord.swift; sourceTree = "<group>"; };
+		8B840F580BA57DA9F5BC9E75 /* A2UIMessageBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIMessageBuilder.swift; sourceTree = "<group>"; };
+		9330B37DAC5CAAEEB0196C06 /* CennoRelayTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CennoRelayTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		98FEB886452ACFBEA392FBB2 /* PromptPayloadDecodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptPayloadDecodeTests.swift; sourceTree = "<group>"; };
 		99F2CB5326FC0247530DE3F5 /* iPhoneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPhoneApp.swift; sourceTree = "<group>"; };
 		9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhonePromptQueueView.swift; sourceTree = "<group>"; };
+		A279B3497CD93A40DFACB4F8 /* A2UIAnswerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIAnswerBridge.swift; sourceTree = "<group>"; };
+		A4404091171E49BF3B8999D4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A450C6544541DA1EB94EA359 /* CennoRenderUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CennoRenderUITests.swift; sourceTree = "<group>"; };
+		A8781FDF15168BB658C4F728 /* CennoComponentCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CennoComponentCatalog.swift; sourceTree = "<group>"; };
+		AF36FE5E492E42FAD77E9BCB /* A2UIDesugarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIDesugarTests.swift; sourceTree = "<group>"; };
 		B07CAB34C1E39709D207949B /* CennoShared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = CennoShared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		B11E463B157D0E0741D3EF4B /* CennoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CennoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1968C7188F9ADC319CD6D2E /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		B1A86B0CE5F875555F27DC28 /* CennoiPhoneUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CennoiPhoneUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C052550FFC24F59FAC6C30F7 /* A2UIPromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIPromptView.swift; sourceTree = "<group>"; };
+		CE889FCEC37D60DB8EC81C90 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		CF0D19C8B88F0454907A540F /* PromptLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptLayout.swift; sourceTree = "<group>"; };
 		CF87DB1281A8CA63B8B301B4 /* CennoiPhone.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CennoiPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D0F5967C6775045E6AE57061 /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
+		D3D0CAD497984CEFD84F35D0 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
+		DD4E309A2570D23DD49414F5 /* RelayTest.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RelayTest.entitlements; sourceTree = "<group>"; };
 		DDDE64B70A9012CE0AD8FC0A /* PromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptView.swift; sourceTree = "<group>"; };
+		E3D17AD1CF2A9D6BC2437AF9 /* CennoSharedTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CennoSharedTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E60668160A6279D96D391D7F /* JSONValueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValueTests.swift; sourceTree = "<group>"; };
+		E9A08FECE7042822089952A0 /* PromptRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptRoutingTests.swift; sourceTree = "<group>"; };
 		EC94B9D904E9B43A229FB470 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EFDF8E521B6DF64FDC86156C /* CennoSharedWatch.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = CennoSharedWatch.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		F7CEA0C7EC0CF4FEE89C7CC3 /* CennoComponentRemap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CennoComponentRemap.swift; sourceTree = "<group>"; };
+		FE02A405496F3D899D9978B4 /* A2UIMessageBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = A2UIMessageBuilderTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,7 +207,16 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D1DDFFA9D6D840DD3C231F14 /* CennoShared.framework in Frameworks */,
+				59EAD102E5EE745B28509B2F /* CennoSharedWatch.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6F47E2B00BEB0A2EE85C2203 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				65559B4F58826CF094E68703 /* CennoShared.framework in Frameworks */,
+				23E94083740397192F5316D7 /* A2UISwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,6 +225,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				1D86C6AD36D66BC09FCAE2DB /* CloudKit.framework in Frameworks */,
+				81DF66AD7BD8D737844F8FD0 /* A2UISwiftUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BFB97C68678AE0464563BE21 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAE322EADB9207EE87A07524 /* CloudKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -107,17 +242,38 @@
 			buildActionMask = 2147483647;
 			files = (
 				F24C0DDDE01BBC04F945D532 /* CennoShared.framework in Frameworks */,
+				D7494652F8B0179729345E56 /* A2UISwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		190FBDF0978E6A60A9EE30CD /* CennoSharedTests */ = {
+			isa = PBXGroup;
+			children = (
+				2ADE59B232F97670FB9E5E4E /* A2UIAnswerBridgeTests.swift */,
+				AF36FE5E492E42FAD77E9BCB /* A2UIDesugarTests.swift */,
+				FE02A405496F3D899D9978B4 /* A2UIMessageBuilderTests.swift */,
+				4B90B2170E40B7479F6F86CD /* CennoComponentRemapTests.swift */,
+				E60668160A6279D96D391D7F /* JSONValueTests.swift */,
+				98FEB886452ACFBEA392FBB2 /* PromptPayloadDecodeTests.swift */,
+				E9A08FECE7042822089952A0 /* PromptRoutingTests.swift */,
+				2E292BDE18D530B7C5C849E1 /* SmokeTest.swift */,
+			);
+			name = CennoSharedTests;
+			path = Tests/CennoSharedTests;
+			sourceTree = "<group>";
+		};
 		235E5BA8A29A1D76CC6451F5 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				CF87DB1281A8CA63B8B301B4 /* CennoiPhone.app */,
+				B1A86B0CE5F875555F27DC28 /* CennoiPhoneUITests.xctest */,
+				9330B37DAC5CAAEEB0196C06 /* CennoRelayTest.app */,
 				B07CAB34C1E39709D207949B /* CennoShared.framework */,
+				E3D17AD1CF2A9D6BC2437AF9 /* CennoSharedTests.xctest */,
+				EFDF8E521B6DF64FDC86156C /* CennoSharedWatch.framework */,
 				B11E463B157D0E0741D3EF4B /* CennoWatch.app */,
 			);
 			name = Products;
@@ -126,11 +282,20 @@
 		57D9B427D2D33974C05DC7A7 /* iPhone */ = {
 			isa = PBXGroup;
 			children = (
+				C052550FFC24F59FAC6C30F7 /* A2UIPromptView.swift */,
+				87793F76F2313FE42BC3D05B /* AmbientAnnouncer.swift */,
+				CE889FCEC37D60DB8EC81C90 /* Assets.xcassets */,
+				A8781FDF15168BB658C4F728 /* CennoComponentCatalog.swift */,
 				5A190FA828572F0F5AA2C82C /* CennoiPhone.entitlements */,
+				613E0C8FEB420B690D64A767 /* CennoTheme.swift */,
+				0833FC91F4D0C4EDAF8298A6 /* DemoHarness.swift */,
 				EC94B9D904E9B43A229FB470 /* Info.plist */,
 				99F2CB5326FC0247530DE3F5 /* iPhoneApp.swift */,
 				57BC4669F80C6C1397BAA009 /* PhonePromptDetailView.swift */,
 				9BD9F3F2AA8C7D9D95CB5B43 /* PhonePromptQueueView.swift */,
+				CF0D19C8B88F0454907A540F /* PromptLayout.swift */,
+				6C51D56ACDC955A6CCA166FE /* SecondScreenSettings.swift */,
+				24BC29DD304B93763B12580F /* SecondScreenView.swift */,
 			);
 			name = iPhone;
 			path = Sources/iPhone;
@@ -139,6 +304,7 @@
 		60ECFD501DABDDD2CC1A405C /* Watch */ = {
 			isa = PBXGroup;
 			children = (
+				74777BFF11FF55DD933A1523 /* Assets.xcassets */,
 				643920CA01F24FA300D9FA61 /* CennoWatch.entitlements */,
 				2A093FDFC5DF7ED29D0808C0 /* Info.plist */,
 				262BEEECA665777113FFE4EE /* PromptQueueView.swift */,
@@ -149,21 +315,48 @@
 			path = Sources/Watch;
 			sourceTree = "<group>";
 		};
+		7AA6D5376B551FA75C23700B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				49E17A1743466DA9153FFC0E /* a2ui-swift */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
 		8A56ED5BF8DC5B3CBA44F2A3 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				A279B3497CD93A40DFACB4F8 /* A2UIAnswerBridge.swift */,
+				5D8FD3FCE1A21990FA815F56 /* A2UIDesugar.swift */,
+				8B840F580BA57DA9F5BC9E75 /* A2UIMessageBuilder.swift */,
 				0BF75ED4F391A587FC351A0E /* A2UIRouter.swift */,
+				F7CEA0C7EC0CF4FEE89C7CC3 /* CennoComponentRemap.swift */,
 				18A9B89176E95CB1217F1DE3 /* CloudKitRelay.swift */,
+				D3D0CAD497984CEFD84F35D0 /* JSONValue.swift */,
 				87A79829A1E821488844DE1A /* PromptRecord.swift */,
+				2621C61D27898FAB6AE2CFD6 /* PromptRouting.swift */,
 			);
 			name = Shared;
 			path = Sources/Shared;
 			sourceTree = "<group>";
 		};
+		A08C2CBF99271F788D80BEA6 /* CennoiPhoneUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A450C6544541DA1EB94EA359 /* CennoRenderUITests.swift */,
+			);
+			name = CennoiPhoneUITests;
+			path = Tests/CennoiPhoneUITests;
+			sourceTree = "<group>";
+		};
 		ADDDAD80258261473EF7077B = {
 			isa = PBXGroup;
 			children = (
+				A08C2CBF99271F788D80BEA6 /* CennoiPhoneUITests */,
+				190FBDF0978E6A60A9EE30CD /* CennoSharedTests */,
 				57D9B427D2D33974C05DC7A7 /* iPhone */,
+				7AA6D5376B551FA75C23700B /* Packages */,
+				FA4E702977A5C9B4D36FF752 /* RelayTest */,
 				8A56ED5BF8DC5B3CBA44F2A3 /* Shared */,
 				60ECFD501DABDDD2CC1A405C /* Watch */,
 				EECD30A54127E290A0E6D14D /* Frameworks */,
@@ -179,6 +372,17 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		FA4E702977A5C9B4D36FF752 /* RelayTest */ = {
+			isa = PBXGroup;
+			children = (
+				A4404091171E49BF3B8999D4 /* Info.plist */,
+				B1968C7188F9ADC319CD6D2E /* main.swift */,
+				DD4E309A2570D23DD49414F5 /* RelayTest.entitlements */,
+			);
+			name = RelayTest;
+			path = Sources/RelayTest;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -187,15 +391,21 @@
 			buildConfigurationList = 5A38DB93B93FF61E030A8F49 /* Build configuration list for PBXNativeTarget "CennoiPhone" */;
 			buildPhases = (
 				8F0492971BBA7D95D261C3E2 /* Sources */,
+				916484293473171350A4B8E0 /* Resources */,
 				FE6412E292FA2B2D2702A329 /* Frameworks */,
 				62FF3AEC9933B8FDCAE370B8 /* Embed Frameworks */,
+				97A254DB23252EC69D8A4040 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				FD7D9B961EEE92B5BCCC6BE4 /* PBXTargetDependency */,
+				4193C2E2FF2B67B679891CC5 /* PBXTargetDependency */,
 			);
 			name = CennoiPhone;
+			packageProductDependencies = (
+				9EAA7185A23416A734534A41 /* A2UISwiftUI */,
+			);
 			productName = CennoiPhone;
 			productReference = CF87DB1281A8CA63B8B301B4 /* CennoiPhone.app */;
 			productType = "com.apple.product-type.application";
@@ -212,27 +422,99 @@
 			dependencies = (
 			);
 			name = CennoShared;
+			packageProductDependencies = (
+				F35B71FD28CED289574F7996 /* A2UISwiftUI */,
+			);
 			productName = CennoShared;
 			productReference = B07CAB34C1E39709D207949B /* CennoShared.framework */;
 			productType = "com.apple.product-type.framework";
+		};
+		49F61B84300B07ACBF367F09 /* CennoSharedWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B49679865FDF3DF763D4C5A3 /* Build configuration list for PBXNativeTarget "CennoSharedWatch" */;
+			buildPhases = (
+				D8ADA6F88211CF02CDB2B884 /* Sources */,
+				BFB97C68678AE0464563BE21 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CennoSharedWatch;
+			productName = CennoSharedWatch;
+			productReference = EFDF8E521B6DF64FDC86156C /* CennoSharedWatch.framework */;
+			productType = "com.apple.product-type.framework";
+		};
+		5CFDECB363F98FD68C35061A /* CennoRelayTest */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 31B6CB9413D009A0BDCA9628 /* Build configuration list for PBXNativeTarget "CennoRelayTest" */;
+			buildPhases = (
+				B1A3C870D72B9E76C5A8880E /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CennoRelayTest;
+			productName = CennoRelayTest;
+			productReference = 9330B37DAC5CAAEEB0196C06 /* CennoRelayTest.app */;
+			productType = "com.apple.product-type.application";
+		};
+		67FB64FCF505696D6DE2A896 /* CennoSharedTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 73CF129E2B65049B241F6AF6 /* Build configuration list for PBXNativeTarget "CennoSharedTests" */;
+			buildPhases = (
+				753F62AF0C96909398F480D9 /* Sources */,
+				6F47E2B00BEB0A2EE85C2203 /* Frameworks */,
+				0F9B9F6C1179A6DACD7FCDBF /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				82097586390811AF4AF39E0C /* PBXTargetDependency */,
+			);
+			name = CennoSharedTests;
+			packageProductDependencies = (
+				2199C3497A4CBC6CAF71E50F /* A2UISwiftUI */,
+			);
+			productName = CennoSharedTests;
+			productReference = E3D17AD1CF2A9D6BC2437AF9 /* CennoSharedTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		BD4C3B9B29CF1DB429558400 /* CennoWatch */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FD3D51318B19A3D368EAC54A /* Build configuration list for PBXNativeTarget "CennoWatch" */;
 			buildPhases = (
 				60E23B40A775E0C2B7102AAF /* Sources */,
+				9EF4CBDECF02B4E11CF0FB26 /* Resources */,
 				09E2A79F146623600D4D0D73 /* Frameworks */,
 				340DCD197447DAC0E55F79D8 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				67BA644BFC994A6F7AEA7226 /* PBXTargetDependency */,
+				D8E151BE497A1F988539F7C4 /* PBXTargetDependency */,
 			);
 			name = CennoWatch;
 			productName = CennoWatch;
 			productReference = B11E463B157D0E0741D3EF4B /* CennoWatch.app */;
 			productType = "com.apple.product-type.application";
+		};
+		E00FE12DD1EC5768CE90754E /* CennoiPhoneUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 69764022A5B83B4A4AC01038 /* Build configuration list for PBXNativeTarget "CennoiPhoneUITests" */;
+			buildPhases = (
+				198AF5312047A9D140314E01 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C0423C1EED6ABEDABEED0FE6 /* PBXTargetDependency */,
+			);
+			name = CennoiPhoneUITests;
+			productName = CennoiPhoneUITests;
+			productReference = B1A86B0CE5F875555F27DC28 /* CennoiPhoneUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -244,13 +526,33 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					0DDD721A75A6906CE70F27B3 = {
-						DevelopmentTeam = B9CBCK2CJY;
+						DevelopmentTeam = 79SP7TM5PH;
+						ProvisioningStyle = Automatic;
 					};
 					442EF29E5473EA8AD6388F37 = {
-						DevelopmentTeam = B9CBCK2CJY;
+						DevelopmentTeam = 79SP7TM5PH;
+						ProvisioningStyle = Automatic;
+					};
+					49F61B84300B07ACBF367F09 = {
+						DevelopmentTeam = 79SP7TM5PH;
+						ProvisioningStyle = Automatic;
+					};
+					5CFDECB363F98FD68C35061A = {
+						DevelopmentTeam = 79SP7TM5PH;
+						ProvisioningStyle = Automatic;
+					};
+					67FB64FCF505696D6DE2A896 = {
+						DevelopmentTeam = 79SP7TM5PH;
+						ProvisioningStyle = Automatic;
 					};
 					BD4C3B9B29CF1DB429558400 = {
-						DevelopmentTeam = B9CBCK2CJY;
+						DevelopmentTeam = 79SP7TM5PH;
+						ProvisioningStyle = Automatic;
+					};
+					E00FE12DD1EC5768CE90754E = {
+						DevelopmentTeam = 79SP7TM5PH;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 0DDD721A75A6906CE70F27B3;
 					};
 				};
 			};
@@ -263,24 +565,64 @@
 				en,
 			);
 			mainGroup = ADDDAD80258261473EF7077B;
+			packageReferences = (
+				CCFC4EE9A4052536351F1E31 /* XCLocalSwiftPackageReference "Vendor/a2ui-swift" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				5CFDECB363F98FD68C35061A /* CennoRelayTest */,
 				442EF29E5473EA8AD6388F37 /* CennoShared */,
+				67FB64FCF505696D6DE2A896 /* CennoSharedTests */,
+				49F61B84300B07ACBF367F09 /* CennoSharedWatch */,
 				BD4C3B9B29CF1DB429558400 /* CennoWatch */,
 				0DDD721A75A6906CE70F27B3 /* CennoiPhone */,
+				E00FE12DD1EC5768CE90754E /* CennoiPhoneUITests */,
 			);
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		916484293473171350A4B8E0 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				94C11D72383C37FDF925B0AC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9EF4CBDECF02B4E11CF0FB26 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FD40C67B0DD43497FC12F067 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
+		198AF5312047A9D140314E01 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDBAE42F92C4A7E3D3F957FC /* CennoRenderUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		291B252FE7591A9AF1610E47 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				174B44154CE6092CF2CA289E /* A2UIAnswerBridge.swift in Sources */,
+				036EAE42A7244E019F38DF24 /* A2UIDesugar.swift in Sources */,
+				991392B1E9BE3FAEAB191664 /* A2UIMessageBuilder.swift in Sources */,
 				E39B7002CBEED5A4A95EC7B8 /* A2UIRouter.swift in Sources */,
+				EEF96FD256663436823D8EE4 /* CennoComponentRemap.swift in Sources */,
 				F205B47236BA31FC86394A7D /* CloudKitRelay.swift in Sources */,
+				C8FDAF1405A44E8C193A5A5D /* JSONValue.swift in Sources */,
 				C688087EA8C4B7CE2E485869 /* PromptRecord.swift in Sources */,
+				79F31704604E73642167D7C0 /* PromptRouting.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -294,23 +636,84 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		753F62AF0C96909398F480D9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EDA9A849BB478A6EEDFC5EBB /* A2UIAnswerBridgeTests.swift in Sources */,
+				5F2730B8B0ABE9C900E27849 /* A2UIDesugarTests.swift in Sources */,
+				21783E87B0742965B599EE9B /* A2UIMessageBuilderTests.swift in Sources */,
+				59E23D939FC73449B68259CE /* CennoComponentRemapTests.swift in Sources */,
+				4AC242903245E53AA4953BF0 /* JSONValueTests.swift in Sources */,
+				D24F933AD04EDEEAF045448B /* PromptPayloadDecodeTests.swift in Sources */,
+				6AAFEDD20E6EB55A28425C57 /* PromptRoutingTests.swift in Sources */,
+				A447C1428251A23A3BB2B74D /* SmokeTest.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		8F0492971BBA7D95D261C3E2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3B657FA282853B3FE81C62A4 /* A2UIPromptView.swift in Sources */,
+				1C2B9D897A517BE042C10BF7 /* AmbientAnnouncer.swift in Sources */,
+				E876EE201D51D53CDC3DC838 /* CennoComponentCatalog.swift in Sources */,
+				D0E894BDE93B5BFCDC6DB27A /* CennoTheme.swift in Sources */,
+				1DF3B76404DB96570E1490CC /* DemoHarness.swift in Sources */,
 				46247F774C94420553524BD9 /* PhonePromptDetailView.swift in Sources */,
 				E87BB3F57B45A0C23DD3C3EE /* PhonePromptQueueView.swift in Sources */,
+				4FFA05575F81870787E1ABF1 /* PromptLayout.swift in Sources */,
+				C670C6AF056317A8E06973E2 /* SecondScreenSettings.swift in Sources */,
+				2D7CDC76BB1EB150A511B20E /* SecondScreenView.swift in Sources */,
 				105572D9E3C1A7419266CF61 /* iPhoneApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1A3C870D72B9E76C5A8880E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				59846EA0070683C548FA8521 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D8ADA6F88211CF02CDB2B884 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E360F77FFC39CFCD726D3C52 /* A2UIAnswerBridge.swift in Sources */,
+				E1ED69273A89DFE319E30D51 /* A2UIDesugar.swift in Sources */,
+				DB8B5A16C48CBB0B8BB0342B /* A2UIRouter.swift in Sources */,
+				D140F5134FB994DC1B9EFE04 /* CennoComponentRemap.swift in Sources */,
+				CD3E6EB0E95350E05AE442D3 /* CloudKitRelay.swift in Sources */,
+				1D5EE0446F033ED0D79170F8 /* JSONValue.swift in Sources */,
+				2FE6BB7FDAB12B01BC7D3FBF /* PromptRecord.swift in Sources */,
+				A0AE9047015275F4B31CACFF /* PromptRouting.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		67BA644BFC994A6F7AEA7226 /* PBXTargetDependency */ = {
+		4193C2E2FF2B67B679891CC5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BD4C3B9B29CF1DB429558400 /* CennoWatch */;
+			targetProxy = F3FB2020F8C1857380ECD537 /* PBXContainerItemProxy */;
+		};
+		82097586390811AF4AF39E0C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 442EF29E5473EA8AD6388F37 /* CennoShared */;
-			targetProxy = EA3F50D224400D6861B3783E /* PBXContainerItemProxy */;
+			targetProxy = BBE298E871563AA3705E60E3 /* PBXContainerItemProxy */;
+		};
+		C0423C1EED6ABEDABEED0FE6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0DDD721A75A6906CE70F27B3 /* CennoiPhone */;
+			targetProxy = 4BFA511BA0371C90CF6BEEA6 /* PBXContainerItemProxy */;
+		};
+		D8E151BE497A1F988539F7C4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 49F61B84300B07ACBF367F09 /* CennoSharedWatch */;
+			targetProxy = 14057385457F52A4A8A4EAF9 /* PBXContainerItemProxy */;
 		};
 		FD7D9B961EEE92B5BCCC6BE4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -320,13 +723,68 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		0120816BBA9DF365F53D2CB2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.shared.watch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		1D5A3D20B411FBE9C2008A61 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/RelayTest/RelayTest.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Sources/RelayTest/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		268D42C9084184B56A54074A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.sharedtests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		299DD79D15EEB30605A66687 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/Watch/CennoWatch.entitlements;
 				INFOPLIST_FILE = Sources/Watch/Info.plist;
-				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.watch;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.watch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
@@ -366,9 +824,10 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = B9CBCK2CJY;
+				DEVELOPMENT_TEAM = 79SP7TM5PH;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -386,6 +845,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -430,9 +890,10 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = B9CBCK2CJY;
+				DEVELOPMENT_TEAM = 79SP7TM5PH;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -444,6 +905,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -472,12 +934,43 @@
 				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.shared;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator watchos watchsimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
-				TARGETED_DEVICE_FAMILY = "1,2,4";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		5A67FD145025997456299CCD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.shared.watch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		785CE33F468A04F819F1A6AF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.sharedtests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -499,11 +992,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.shared;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator watchos watchsimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = YES;
-				TARGETED_DEVICE_FAMILY = "1,2,4";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
@@ -514,10 +1003,30 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sources/Watch/CennoWatch.entitlements;
 				INFOPLIST_FILE = Sources/Watch/Info.plist;
-				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.watch;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.watch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Release;
+		};
+		9251F518CF3FFCC704BC7B72 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/RelayTest/RelayTest.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = Sources/RelayTest/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno;
+				SDKROOT = macosx;
 			};
 			name = Release;
 		};
@@ -538,6 +1047,40 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		C500449E578C51C1553F81C0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CennoiPhone;
+			};
+			name = Release;
+		};
+		CB84DB81DC3322BD6B6F3D02 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.cenno.companion.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CennoiPhone;
+			};
+			name = Debug;
 		};
 		F47602633DE722F35F128E97 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -560,11 +1103,38 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		31B6CB9413D009A0BDCA9628 /* Build configuration list for PBXNativeTarget "CennoRelayTest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1D5A3D20B411FBE9C2008A61 /* Debug */,
+				9251F518CF3FFCC704BC7B72 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		5A38DB93B93FF61E030A8F49 /* Build configuration list for PBXNativeTarget "CennoiPhone" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				F47602633DE722F35F128E97 /* Debug */,
 				AA49BD01299D38CE57732376 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		69764022A5B83B4A4AC01038 /* Build configuration list for PBXNativeTarget "CennoiPhoneUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB84DB81DC3322BD6B6F3D02 /* Debug */,
+				C500449E578C51C1553F81C0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		73CF129E2B65049B241F6AF6 /* Build configuration list for PBXNativeTarget "CennoSharedTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				785CE33F468A04F819F1A6AF /* Debug */,
+				268D42C9084184B56A54074A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -587,6 +1157,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		B49679865FDF3DF763D4C5A3 /* Build configuration list for PBXNativeTarget "CennoSharedWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A67FD145025997456299CCD /* Debug */,
+				0120816BBA9DF365F53D2CB2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		FD3D51318B19A3D368EAC54A /* Build configuration list for PBXNativeTarget "CennoWatch" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -597,6 +1176,28 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		CCFC4EE9A4052536351F1E31 /* XCLocalSwiftPackageReference "Vendor/a2ui-swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "Vendor/a2ui-swift";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2199C3497A4CBC6CAF71E50F /* A2UISwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = A2UISwiftUI;
+		};
+		9EAA7185A23416A734534A41 /* A2UISwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = A2UISwiftUI;
+		};
+		F35B71FD28CED289574F7996 /* A2UISwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = A2UISwiftUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 313EB8996C0C0C3F1089C1C1 /* Project object */;
 }

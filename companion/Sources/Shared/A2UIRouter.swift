@@ -1,10 +1,10 @@
 import Foundation
 
 /// Decides which device should handle a given prompt.
-enum A2UIRouter {
-    enum Target { case watch, iphone }
+public enum A2UIRouter {
+    public enum Target { case watch, iphone }
 
-    static func target(for prompt: PromptRecord) -> Target {
+    public static func target(for prompt: PromptRecord) -> Target {
         // Explicit hint takes priority
         switch prompt.deviceHint {
         case .watch:   return .watch
@@ -14,7 +14,7 @@ enum A2UIRouter {
         return watchCanHandle(prompt) ? .watch : .iphone
     }
 
-    static func watchCanHandle(_ prompt: PromptRecord) -> Bool {
+    public static func watchCanHandle(_ prompt: PromptRecord) -> Bool {
         guard let kind = prompt.payload.input?.kind else {
             // no input spec → info panel (kind: none) — Watch can show it
             return true

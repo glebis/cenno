@@ -13,7 +13,8 @@ extern "C" {
     fn cenno_relay_write_prompt(
         prompt_id: *const std::os::raw::c_char,
         payload_json: *const std::os::raw::c_char,
-        device_hint: *const std::os::raw::c_char,
+        targets: *const std::os::raw::c_char,
+        grace_secs: i64,
         timeout_secs: i64,
     );
 
@@ -25,16 +26,23 @@ extern "C" {
 }
 
 /// Publish a newly-registered prompt to CloudKit so the companion can pick it up.
-/// `payload_json` is the full `AskRequest` serialised as JSON.
-pub fn write_prompt(prompt_id: &str, payload_json: &str, timeout_secs: u64) {
+/// `payload_json` is the full `AskRequest` serialised as JSON. `targets` is the
+/// resolved routing string (`"iphone:fallback,ipad:mirror"`, empty = no
+/// companion device eligible); `grace_secs` is the fallback delay devices apply.
+pub fn write_prompt(prompt_id: &str, payload_json: &str, targets: &str, grace_secs: u64, timeout_secs: u64) {
+    // No eligible companion device → nothing to publish.
+    if targets.is_empty() {
+        return;
+    }
     let Ok(id) = CString::new(prompt_id) else { return };
     let Ok(payload) = CString::new(payload_json) else { return };
-    let hint = CString::new("any").unwrap();
+    let Ok(targets_c) = CString::new(targets) else { return };
     unsafe {
         cenno_relay_write_prompt(
             id.as_ptr(),
             payload.as_ptr(),
-            hint.as_ptr(),
+            targets_c.as_ptr(),
+            grace_secs as i64,
             timeout_secs as i64,
         );
     }

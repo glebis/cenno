@@ -2,55 +2,132 @@ import CloudKit
 import Foundation
 
 /// Mirrors the CKRecord schema. All mutation goes through CloudKitRelay.
-struct PromptRecord: Identifiable, Sendable {
-    enum State: String { case pending, answered, timedOut = "timed_out" }
-    enum DeviceHint: String { case watch, iphone, any }
+public struct PromptRecord: Identifiable, Sendable {
+    public enum State: String, Sendable { case pending, answered, timedOut = "timed_out" }
+    public enum DeviceHint: String, Sendable { case watch, iphone, any }
 
-    let id: String            // prompt_id — matches cenno's local history
-    let payload: PromptPayload
-    let deviceHint: DeviceHint
-    var state: State
-    var answer: PromptAnswer?
-    let createdAt: Date
-    let expiresAt: Date
+    public let id: String            // prompt_id — matches cenno's local history
+    public let payload: PromptPayload
+    public let deviceHint: DeviceHint
+    public var state: State
+    public var answer: PromptAnswer?
+    public let createdAt: Date
+    public let expiresAt: Date
+    /// Per-class routing modes resolved by the Mac (`crate::routing`).
+    public let targets: RoutingTargets
+    /// Fallback grace delay (seconds) before a `fallback`-mode device surfaces.
+    public let graceS: Int
 
-    var isExpired: Bool { Date() >= expiresAt }
-}
+    public var isExpired: Bool { Date() >= expiresAt }
 
-struct PromptPayload: Codable, Sendable {
-    let title: String
-    let bodyMd: String?
-    let input: InputSpec?
-    let choices: [String]?
-    let flow: String?
-    let timeoutS: Int?
+    /// Memberwise initializer (the struct's only other init is the failable
+    /// `init?(record:)`). Used by SwiftUI previews and tests. `targets`/`graceS`
+    /// default so existing call sites compile unchanged.
+    public init(id: String, payload: PromptPayload, deviceHint: DeviceHint, state: State,
+                answer: PromptAnswer?, createdAt: Date, expiresAt: Date,
+                targets: RoutingTargets = RoutingTargets([:]), graceS: Int = 20) {
+        self.id = id
+        self.payload = payload
+        self.deviceHint = deviceHint
+        self.state = state
+        self.answer = answer
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+        self.targets = targets
+        self.graceS = graceS
+    }
 
-    enum CodingKeys: String, CodingKey {
-        case title, bodyMd = "body_md", input, choices, flow, timeoutS = "timeout_s"
+    /// Whether this prompt is routed to `deviceClass` at all (any non-off mode).
+    /// An empty `targets` means "unrouted" — legacy/desugar records (and demo
+    /// seeds) show everywhere, preserving pre-routing behavior. Used by the
+    /// manual pull-to-refresh queues, which show every *targeted* prompt
+    /// regardless of fallback grace (the user opened the inbox deliberately).
+    public func isTargeted(at deviceClass: DeviceClass) -> Bool {
+        targets.modes.isEmpty || targets.mode(for: deviceClass) != .off
+    }
+
+    /// Whether this prompt should surface on `deviceClass` right now, per its
+    /// resolved route. Pure (takes `now`) for testability.
+    /// - mirror: surface immediately.
+    /// - fallback: surface only once `createdAt + graceS` has passed.
+    /// - off / absent: never.
+    /// Always false once answered/timed-out or expired.
+    public func shouldSurface(on deviceClass: DeviceClass, now: Date = Date()) -> Bool {
+        guard state == .pending, now < expiresAt else { return false }
+        switch targets.mode(for: deviceClass) {
+        case .off:
+            return false
+        case .mirror:
+            return true
+        case .fallback:
+            return now >= createdAt.addingTimeInterval(TimeInterval(graceS))
+        }
     }
 }
 
-struct InputSpec: Codable, Sendable {
-    let kind: String  // text | voice_text | choice | scale | confirm | none
+public struct PromptPayload: Codable, Sendable {
+    public let title: String
+    public let bodyMd: String?
+    public let input: InputSpec?
+    public let choices: [String]?
+    public let flow: String?
+    public let timeoutS: Int?
+    public let urgency: String?
+    public let progress: PromptProgress?
+    public let a2ui: JSONValue?
+
+    enum CodingKeys: String, CodingKey {
+        case title, bodyMd = "body_md", input, choices, flow
+        case timeoutS = "timeout_s", urgency, progress, a2ui
+    }
 }
 
-struct PromptAnswer: Codable, Sendable {
-    let answer: String
-    let via: String
-    let elapsedS: Double
-    let device: String        // "watch" | "iphone"
+/// Named `PromptProgress` (not `Progress`) to avoid clashing with Foundation.Progress.
+public struct PromptProgress: Codable, Sendable {
+    public let step: Int
+    public let total: Int
+
+    public init(step: Int, total: Int) {
+        self.step = step
+        self.total = total
+    }
+}
+
+public struct InputSpec: Codable, Sendable {
+    public let kind: String  // text | voice_text | choice | scale | confirm | none
+}
+
+public struct PromptAnswer: Codable, Sendable {
+    public let answer: String
+    public let via: String
+    public let elapsedS: Double
+    public let device: String        // "watch" | "iphone"
+
+    public init(answer: String, via: String, elapsedS: Double, device: String) {
+        self.answer = answer
+        self.via = via
+        self.elapsedS = elapsedS
+        self.device = device
+    }
 
     enum CodingKeys: String, CodingKey {
         case answer, via, elapsedS = "elapsed_s", device
     }
 }
 
+// MARK: - Hashable (identity based on prompt id)
+
+extension PromptRecord: Hashable {
+    public static func == (lhs: PromptRecord, rhs: PromptRecord) -> Bool { lhs.id == rhs.id }
+    public func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
 // MARK: - CKRecord ↔ PromptRecord
 
 extension PromptRecord {
-    static let recordType = "Prompt"
+    public static let recordType = "Prompt"
 
-    init?(record: CKRecord) {
+    public init?(record: CKRecord) {
         guard
             let id = record["prompt_id"] as? String,
             let payloadJSON = record["payload"] as? String,
@@ -68,6 +145,8 @@ extension PromptRecord {
         self.state = state
         self.createdAt = createdAt
         self.expiresAt = expiresAt
+        self.targets = RoutingTargets(parsing: record["targets"] as? String ?? "")
+        self.graceS = (record["grace_s"] as? Int64).map(Int.init) ?? (record["grace_s"] as? Int) ?? 20
 
         if let answerJSON = record["answer"] as? String,
            let answerData = answerJSON.data(using: .utf8),
@@ -76,7 +155,7 @@ extension PromptRecord {
         }
     }
 
-    func applyTo(_ record: CKRecord) {
+    public func applyTo(_ record: CKRecord) {
         let encoder = JSONEncoder()
         if let data = try? encoder.encode(payload),
            let json = String(data: data, encoding: .utf8) {
@@ -84,6 +163,8 @@ extension PromptRecord {
         }
         record["prompt_id"] = id
         record["device_hint"] = deviceHint.rawValue
+        record["targets"] = targets.encoded
+        record["grace_s"] = Int64(graceS)
         record["state"] = state.rawValue
         record["created_at"] = createdAt
         record["expires_at"] = expiresAt

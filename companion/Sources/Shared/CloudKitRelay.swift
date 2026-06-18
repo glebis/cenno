@@ -4,25 +4,25 @@ import Foundation
 /// The single source of truth for reading and writing Prompt records.
 /// Both the iPhone and Watch targets share this via the Shared framework.
 @MainActor
-final class CloudKitRelay: ObservableObject {
+public final class CloudKitRelay: ObservableObject {
     static let containerID = "iCloud.app.cenno"
     static let zoneID = CKRecordZone.ID(zoneName: "Prompts", ownerName: CKCurrentUserDefaultName)
 
-    @Published var pendingPrompts: [PromptRecord] = []
-    @Published var error: String?
+    @Published public var pendingPrompts: [PromptRecord] = []
+    @Published public var error: String?
 
     private let container: CKContainer
     private let db: CKDatabase
     private var subscriptionID = "pending-prompts"
 
-    init() {
+    public init() {
         container = CKContainer(identifier: Self.containerID)
         db = container.privateCloudDatabase
     }
 
     // MARK: - Bootstrap
 
-    func start() async {
+    public func start() async {
         await ensureZone()
         await ensureSubscription()
         await fetchPending()
@@ -30,7 +30,7 @@ final class CloudKitRelay: ObservableObject {
 
     // MARK: - Fetch
 
-    func fetchPending() async {
+    public func fetchPending() async {
         let pred = NSPredicate(format: "state == %@ AND expires_at > %@",
                                "pending", Date() as CVarArg)
         let query = CKQuery(recordType: PromptRecord.recordType, predicate: pred)
@@ -49,14 +49,14 @@ final class CloudKitRelay: ObservableObject {
 
     // MARK: - Answer
 
-    func submit(answer: PromptAnswer, for promptID: String) async {
+    public func submit(answer: PromptAnswer, for promptID: String) async {
         // Find the CKRecord by querying for the prompt_id
         let pred = NSPredicate(format: "prompt_id == %@", promptID)
         let query = CKQuery(recordType: PromptRecord.recordType, predicate: pred)
 
         do {
             let (results, _) = try await db.records(matching: query, inZoneWith: Self.zoneID)
-            guard let (recordID, result) = results.first,
+            guard let (_, result) = results.first,
                   case .success(let record) = result else { return }
 
             let encoder = JSONEncoder()
@@ -73,7 +73,7 @@ final class CloudKitRelay: ObservableObject {
         }
     }
 
-    func markTimedOut(promptID: String) async {
+    public func markTimedOut(promptID: String) async {
         let pred = NSPredicate(format: "prompt_id == %@", promptID)
         let query = CKQuery(recordType: PromptRecord.recordType, predicate: pred)
 
@@ -91,7 +91,7 @@ final class CloudKitRelay: ObservableObject {
 
     // MARK: - Push notification → refresh
 
-    func handleRemoteNotification() async {
+    public func handleRemoteNotification() async {
         await fetchPending()
     }
 
@@ -105,9 +105,15 @@ final class CloudKitRelay: ObservableObject {
     private func ensureSubscription() async {
         let sub = CKQuerySubscription(
             recordType: PromptRecord.recordType,
-            predicate: NSPredicate(format: "state == %@", "pending"),
+            // Match ALL Prompt records, not just `state == pending`. A state
+            // change to answered/timed_out moves a record OUT of a
+            // `pending`-only predicate, and CloudKit does NOT fire an update
+            // notification for a record that no longer matches (QA1917). With a
+            // true predicate, both creation and the answered/timed_out update
+            // wake us; `fetchPending()` then drops the non-pending rows.
+            predicate: NSPredicate(value: true),
             subscriptionID: subscriptionID,
-            options: [.firesOnRecordCreation]
+            options: [.firesOnRecordCreation, .firesOnRecordUpdate]
         )
         let info = CKSubscription.NotificationInfo()
         info.shouldSendContentAvailable = true  // silent push — app wakes, fetches
