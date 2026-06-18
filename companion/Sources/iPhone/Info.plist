@@ -24,6 +24,10 @@
 	<false/>
 	<key>NSRemoteNotificationUsageDescription</key>
 	<string>cenno needs notifications to deliver agent prompts.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

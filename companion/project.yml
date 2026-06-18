@@ -9,6 +9,10 @@ options:
 settings:
   DEVELOPMENT_TEAM: "79SP7TM5PH"
   CODE_SIGN_STYLE: Automatic
+  # Version applies to every target — frameworks use GENERATE_INFOPLIST_FILE,
+  # which reads these build settings for CFBundle{ShortVersionString,Version}.
+  MARKETING_VERSION: "1.0"
+  CURRENT_PROJECT_VERSION: "1"
 
 packages:
   A2UISwift:
@@ -94,6 +98,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # iPhone-only companion (no iPad UI) — avoids the iPad-multitasking
+        # "all four orientations" App Store validation requirement.
+        TARGETED_DEVICE_FAMILY: "1"
       configs:
         # Debug → development APNs / Development CloudKit (proven local loop).
         # Release/archive → production APNs for TestFlight + App Store.
