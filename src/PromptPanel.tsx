@@ -237,7 +237,17 @@ export default function PromptPanel({
             title="Stop reading aloud"
             onClick={onStopReading}
           >
-            🔇
+            {/* Monochrome speaker-off glyph; inherits chrome color like the ✕. */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M4 9v6h4l5 4V5L8 9H4z"
+                fill="currentColor"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path d="M17 9l5 5M22 9l-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
           </button>
         )}
         <button
