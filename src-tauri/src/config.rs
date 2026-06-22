@@ -87,10 +87,18 @@ pub struct TtsConfig {
     /// (built-in: "high" — only High-urgency prompts speak until lowered).
     /// Reuses AskRequest.urgency rather than a parallel priority field.
     pub min_urgency: Option<String>,
-    /// On-device voice identifier (AVSpeechSynthesisVoice). Absent → auto-pick
-    /// the best-quality installed English voice (premium/enhanced) over the
-    /// plain default.
+    /// On-device voice identifier. For the `system` engine: an
+    /// AVSpeechSynthesisVoice id (absent → auto-pick best installed). For the
+    /// `supertonic` engine: a voice-style name like "F3".
     pub voice: Option<String>,
+    /// TTS engine: "system" (AVSpeechSynthesizer, default) or "supertonic"
+    /// (on-device neural). Supertonic falls back to system if assets are
+    /// missing or synthesis fails.
+    pub engine: Option<String>,
+    /// Custom path to a Supertonic model directory (containing `onnx/` +
+    /// `voice_styles/`). Absent → the default `~/.cenno/models/supertonic-3`
+    /// cache. An invalid path falls back to AVSpeech, never crashes.
+    pub model_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -244,6 +252,22 @@ mod tests {
         assert_eq!(cfg.tts.enabled, Some(true));
         assert_eq!(cfg.tts.min_urgency.as_deref(), Some("normal"));
         assert_eq!(cfg.tts.voice.as_deref(), Some("com.apple.voice.premium.en-US.Zoe"));
+    }
+
+    #[test]
+    fn tts_full_settings_round_trip_under_deny_unknown_fields() {
+        // The settings UI writes engine + voice + model_path; all must parse
+        // under deny_unknown_fields (audit BLOCKER: a field the struct doesn't
+        // model would make Config::load fall back to defaults).
+        let src = r#"{"tts":{"enabled":true,"min_urgency":"low","engine":"supertonic","voice":"F3","model_path":"/Users/x/models/supertonic-3"}}"#;
+        let cfg: Config = serde_json::from_str(src).expect("must parse");
+        assert_eq!(cfg.tts.engine.as_deref(), Some("supertonic"));
+        assert_eq!(cfg.tts.voice.as_deref(), Some("F3"));
+        assert_eq!(cfg.tts.model_path.as_deref(), Some("/Users/x/models/supertonic-3"));
+        // Re-serialize → re-deserialize must round-trip (no field drops the file).
+        let json = serde_json::to_string(&cfg).unwrap();
+        let cfg2: Config = serde_json::from_str(&json).expect("re-deserialize must parse");
+        assert_eq!(cfg2.tts.model_path.as_deref(), Some("/Users/x/models/supertonic-3"));
     }
 
     #[test]

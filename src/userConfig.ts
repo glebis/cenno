@@ -27,6 +27,8 @@ export interface RawTtsConfig {
   enabled?: boolean;
   min_urgency?: string;
   voice?: string;
+  engine?: string;
+  model_path?: string;
 }
 
 export interface UserConfig {
@@ -40,14 +42,18 @@ export interface UserConfig {
 export interface ResolvedTtsConfig {
   enabled: boolean;
   minUrgency: "low" | "normal" | "high";
-  /** Optional on-device voice id; undefined → Swift auto-picks the best. */
+  /** Optional on-device voice id / Supertonic style; undefined → engine default. */
   voice?: string;
+  /** "system" (AVSpeech, default) or "supertonic". */
+  engine: "system" | "supertonic";
+  /** Optional custom Supertonic model dir; undefined → default cache. */
+  modelPath?: string;
 }
 
 let cachedWidgets: Record<string, WidgetTemplate> = {};
 let cachedDefaults: UserConfig["defaults"] = {};
 // Opt-in, default off; default threshold "high" so only High-urgency speaks.
-let cachedTts: ResolvedTtsConfig = { enabled: false, minUrgency: "high" };
+let cachedTts: ResolvedTtsConfig = { enabled: false, minUrgency: "high", engine: "system" };
 
 export function getWidgets(): Record<string, WidgetTemplate> {
   return cachedWidgets;
@@ -63,7 +69,9 @@ function resolveTts(raw: RawTtsConfig | undefined): ResolvedTtsConfig {
   const min = (raw?.min_urgency ?? "high").toLowerCase();
   const minUrgency = min === "low" || min === "normal" ? min : "high";
   const voice = raw?.voice && raw.voice.trim() ? raw.voice : undefined;
-  return { enabled: raw?.enabled === true, minUrgency, voice };
+  const engine = raw?.engine === "supertonic" ? "supertonic" : "system";
+  const modelPath = raw?.model_path && raw.model_path.trim() ? raw.model_path : undefined;
+  return { enabled: raw?.enabled === true, minUrgency, voice, engine, modelPath };
 }
 
 /** Convert a kebab/camel segment list into a `--cenno-…` variable name. */
