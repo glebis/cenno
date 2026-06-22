@@ -22,20 +22,44 @@ export interface WidgetTemplate {
   dataModel?: Record<string, unknown>;
 }
 
+/** Raw `tts` block from `~/.cenno/config.json` (snake_case from Rust). */
+export interface RawTtsConfig {
+  enabled?: boolean;
+  min_urgency?: string;
+}
+
 export interface UserConfig {
   panel?: unknown;
   defaults?: { timeout_s?: number; flow?: string };
   widgets?: Record<string, WidgetTemplate>;
+  tts?: RawTtsConfig;
+}
+
+/** Resolved voice-out config the player consumes (camelCase, defaults applied). */
+export interface ResolvedTtsConfig {
+  enabled: boolean;
+  minUrgency: "low" | "normal" | "high";
 }
 
 let cachedWidgets: Record<string, WidgetTemplate> = {};
 let cachedDefaults: UserConfig["defaults"] = {};
+// Opt-in, default off; default threshold "high" so only High-urgency speaks.
+let cachedTts: ResolvedTtsConfig = { enabled: false, minUrgency: "high" };
 
 export function getWidgets(): Record<string, WidgetTemplate> {
   return cachedWidgets;
 }
 export function getDefaults(): UserConfig["defaults"] {
   return cachedDefaults;
+}
+export function getTts(): ResolvedTtsConfig {
+  return cachedTts;
+}
+
+function resolveTts(raw: RawTtsConfig | undefined): ResolvedTtsConfig {
+  const min = (raw?.min_urgency ?? "high").toLowerCase();
+  const minUrgency = min === "low" || min === "normal" ? min : "high";
+  return { enabled: raw?.enabled === true, minUrgency };
 }
 
 /** Convert a kebab/camel segment list into a `--cenno-…` variable name. */
@@ -97,6 +121,7 @@ export async function loadUserConfig(): Promise<void> {
     const config = await invoke<UserConfig>("get_user_config");
     cachedWidgets = config.widgets ?? {};
     cachedDefaults = config.defaults ?? {};
+    cachedTts = resolveTts(config.tts);
   } catch {
     /* not in Tauri, or command missing → built-in defaults */
   }

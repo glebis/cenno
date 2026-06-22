@@ -76,11 +76,26 @@ pub struct DefaultsConfig {
     pub flow: Option<String>,
 }
 
+/// Voice-out ("sound-out") settings. Opt-in: absent or `enabled:false` means
+/// no prompt is ever spoken and no audio backend is touched.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TtsConfig {
+    /// Master switch for speaking prompts aloud (built-in: false).
+    pub enabled: Option<bool>,
+    /// Minimum urgency that gets read aloud: "low" | "normal" | "high"
+    /// (built-in: "high" — only High-urgency prompts speak until lowered).
+    /// Reuses AskRequest.urgency rather than a parallel priority field.
+    pub min_urgency: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub panel: PanelConfig,
     pub defaults: DefaultsConfig,
+    /// Voice-out settings (sound-out). Defaults to disabled.
+    pub tts: TtsConfig,
     /// Cross-device prompt routing policy (which companion devices receive
     /// prompts and how). See `crate::routing`.
     pub routing: crate::routing::RoutingConfig,
@@ -212,6 +227,18 @@ mod tests {
             default_margin.position,
             Some(PanelPosition::Anchored { anchor: Anchor::Center, margin }) if margin == 16.0
         ));
+    }
+
+    #[test]
+    fn tts_defaults_to_disabled_and_parses_overrides() {
+        let cfg: Config = serde_json::from_str("{}").unwrap();
+        assert!(cfg.tts.enabled.is_none()); // absent → treated as off
+        assert!(cfg.tts.min_urgency.is_none());
+
+        let cfg: Config =
+            serde_json::from_str(r#"{"tts":{"enabled":true,"min_urgency":"normal"}}"#).unwrap();
+        assert_eq!(cfg.tts.enabled, Some(true));
+        assert_eq!(cfg.tts.min_urgency.as_deref(), Some("normal"));
     }
 
     #[test]

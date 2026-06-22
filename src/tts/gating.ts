@@ -8,7 +8,9 @@
  * the feature is on, and the default threshold of `high` keeps everything else
  * silent until the user lowers it.
  */
-export type Urgency = "Low" | "Normal" | "High";
+// On the wire, AskRequest.urgency serializes lowercase ("low"/"normal"/"high");
+// callers may also pass capitalized forms. Accept any string and fold case.
+export type Urgency = string;
 
 export interface TtsConfig {
   enabled: boolean;

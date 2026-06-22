@@ -116,6 +116,29 @@ body {
   color: var(--cenno-text);
 }
 
+/* Mute (stop reading aloud) — only shown while sound-out is speaking. Mirrors
+   the dismiss target; margin-left:auto groups it with ✕ on the right (chrome
+   uses space-between, which would otherwise center a third child). */
+.prompt-panel__mute {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  margin: 0 var(--cenno-space-2) 0 auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--cenno-text-dim);
+  font-size: var(--cenno-type-caption);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.prompt-panel__mute:hover {
+  color: var(--cenno-text);
+}
+
 /* Invisible always-grabbable drag handle over the panel's top edge (the
    data-tauri-drag-region attribute is on the element in PromptPanel.tsx).
    Sits above the title text — fine, the title is not interactive. */

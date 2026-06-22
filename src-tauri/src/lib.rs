@@ -10,6 +10,7 @@ pub mod relay;
 pub mod routing;
 pub mod suppress;
 pub mod tray;
+pub mod tts;
 pub mod updater;
 pub mod voice;
 
@@ -649,7 +650,9 @@ pub fn run() {
             get_user_config,
             get_user_tokens,
             voice::voice_start,
-            voice::voice_stop
+            voice::voice_stop,
+            tts::tts_speak,
+            tts::tts_stop
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
