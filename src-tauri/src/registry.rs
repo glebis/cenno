@@ -1,5 +1,14 @@
 use crate::protocol::*;
 use parking_lot::Mutex;
+
+/// Queue policy: lower rank surfaces first. High(0) → Normal(1) → Low(2).
+fn urgency_rank(u: &Urgency) -> u8 {
+    match u {
+        Urgency::High => 0,
+        Urgency::Normal => 1,
+        Urgency::Low => 2,
+    }
+}
 use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
 use tokio::sync::{oneshot, Notify};
 
@@ -138,7 +147,8 @@ impl PromptRegistry {
     /// Prompts whose ask() is still awaiting an answer — i.e. replayable to a
     /// webview that mounted after the `prompt` event was emitted (cold-start
     /// race). Excludes resolved (tx consumed) and timed-out (deadline passed)
-    /// entries. Sorted oldest→newest by the monotonic id counter.
+    /// entries. Sorted by queue policy: urgency (High→Normal→Low), then arrival
+    /// id (FIFO within an urgency level).
     ///
     /// The third tuple element is the seconds REMAINING until this prompt's
     /// deadline (ceiled, so a prompt with 0.3s left reports 1, never 0): a
@@ -162,7 +172,14 @@ impl PromptRegistry {
                 (id.clone(), p.request.clone(), remaining_s)
             })
             .collect();
-        v.sort_by_key(|(id, _, _)| id.strip_prefix("p_").and_then(|n| n.parse::<u64>().ok()));
+        // Policy: urgency first (High → Normal → Low), then arrival id (FIFO
+        // within an urgency level). The frontend shows pending()[0] next.
+        v.sort_by_key(|(id, req, _)| {
+            (
+                urgency_rank(&req.urgency),
+                id.strip_prefix("p_").and_then(|n| n.parse::<u64>().ok()),
+            )
+        });
         v
     }
 }
@@ -172,6 +189,72 @@ mod tests {
     use super::*;
 
     fn req() -> AskRequest { serde_json::from_str(r#"{"title":"t","timeout_s":1}"#).unwrap() }
+
+    fn req_urgency(u: &str) -> AskRequest {
+        serde_json::from_str(&format!(r#"{{"title":"t","timeout_s":1,"urgency":"{u}"}}"#)).unwrap()
+    }
+
+    /// Enqueue Normal, High, Low (in arrival order); pending() must return them
+    /// ordered by urgency (High → Normal → Low), not by arrival.
+    #[tokio::test]
+    async fn pending_orders_by_urgency_then_arrival() {
+        let reg = PromptRegistry::new();
+        for u in ["normal", "high", "low"] {
+            let reg2 = reg.clone();
+            let r = req_urgency(u);
+            tokio::spawn(async move { reg2.ask(r, |_id, _req| {}).await });
+            // small gap so ids are assigned in arrival order deterministically
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let order: Vec<String> = reg
+            .pending()
+            .into_iter()
+            .map(|(_, r, _)| format!("{:?}", r.urgency))
+            .collect();
+        assert_eq!(order, vec!["High", "Normal", "Low"]);
+    }
+
+    /// Two Normals already queued; a newly-arrived High must surface first.
+    #[tokio::test]
+    async fn high_urgency_surfaces_before_older_normals() {
+        let reg = PromptRegistry::new();
+        for u in ["normal", "normal", "high"] {
+            let reg2 = reg.clone();
+            let r = req_urgency(u);
+            tokio::spawn(async move { reg2.ask(r, |_id, _req| {}).await });
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let first = reg
+            .pending()
+            .into_iter()
+            .next()
+            .map(|(_, r, _)| format!("{:?}", r.urgency));
+        assert_eq!(first, Some("High".to_string()));
+    }
+
+    /// Within one urgency level, order is FIFO by arrival. Arrival order is
+    /// captured synchronously via the notify callback (fires before ask()
+    /// parks), so the assertion doesn't depend on scheduler timing.
+    #[tokio::test]
+    async fn pending_keeps_fifo_within_same_urgency() {
+        let reg = PromptRegistry::new();
+        let arrival = Arc::new(Mutex::new(Vec::<String>::new()));
+        for _ in 0..3 {
+            let reg2 = reg.clone();
+            let arr = arrival.clone();
+            tokio::spawn(async move {
+                reg2.ask(req(), move |id, _req| arr.lock().push(id.to_string()))
+                    .await
+            });
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let recorded = arrival.lock().clone();
+        let pending: Vec<String> = reg.pending().into_iter().map(|(id, _, _)| id).collect();
+        assert_eq!(pending, recorded, "same-urgency prompts stay in arrival order");
+    }
 
     #[tokio::test]
     async fn resolve_completes_ask() {

@@ -8,8 +8,8 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Command::Ask { title, body, timeout }) => {
-            run_ask(title, body, timeout);
+        Some(Command::Ask { title, body, say, timeout }) => {
+            run_ask(title, body, say, timeout);
         }
         Some(Command::Export { format, since }) => {
             run_export(format, since);
@@ -117,7 +117,7 @@ fn run_mcp_stdio() -> ! {
     }
 }
 
-fn run_ask(title: String, body: String, timeout: u64) {
+fn run_ask(title: String, body: String, say: String, timeout: u64) {
     let sock_path = cenno_lib::mcp::socket_path();
 
     if !sock_path.exists() {
@@ -130,14 +130,16 @@ fn run_ask(title: String, body: String, timeout: u64) {
         .build()
         .expect("failed to build tokio runtime");
 
-    let result = rt.block_on(cenno_lib::mcp::client::call_ask_user(
-        &sock_path,
-        serde_json::json!({
-            "title": title,
-            "body_md": body,
-            "timeout_s": timeout,
-        }),
-    ));
+    let mut payload = serde_json::json!({
+        "title": title,
+        "body_md": body,
+        "timeout_s": timeout,
+    });
+    if !say.is_empty() {
+        payload["say"] = serde_json::Value::String(say);
+    }
+
+    let result = rt.block_on(cenno_lib::mcp::client::call_ask_user(&sock_path, payload));
 
     match result {
         Ok(value) => {

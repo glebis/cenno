@@ -9,6 +9,10 @@ options:
 settings:
   DEVELOPMENT_TEAM: "79SP7TM5PH"
   CODE_SIGN_STYLE: Automatic
+  # Version applies to every target — frameworks use GENERATE_INFOPLIST_FILE,
+  # which reads these build settings for CFBundle{ShortVersionString,Version}.
+  MARKETING_VERSION: "1.0"
+  CURRENT_PROJECT_VERSION: "1"
 
 packages:
   A2UISwift:
@@ -76,24 +80,34 @@ targets:
     info:
       path: Sources/iPhone/Info.plist
       properties:
+        CFBundleDisplayName: Cenno
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         NSRemoteNotificationUsageDescription: "cenno needs notifications to deliver agent prompts."
+        # The phone is the primary silent-push target: its didReceiveRemoteNotification
+        # fetches when the CKQuerySubscription fires. Background content-available
+        # pushes are only delivered to a backgrounded app with this mode set.
+        UIBackgroundModes:
+          - remote-notification
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion
-      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
-      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    entitlements:
-      path: Sources/iPhone/CennoiPhone.entitlements
-      properties:
-        com.apple.developer.icloud-container-identifiers:
-          - iCloud.app.cenno
-        com.apple.developer.icloud-services:
-          - CloudKit
-        aps-environment: development
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.cenno.companion
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # iPhone-only companion (no iPad UI) — avoids the iPad-multitasking
+        # "all four orientations" App Store validation requirement.
+        TARGETED_DEVICE_FAMILY: "1"
+      configs:
+        # Debug → development APNs / Development CloudKit (proven local loop).
+        # Release/archive → production APNs for TestFlight + App Store.
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Sources/iPhone/CennoiPhone.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Sources/iPhone/CennoiPhone.Release.entitlements
 
   # ── iPhone UI tests (render → tap → submit) ──────────────────────────────────
   CennoiPhoneUITests:
@@ -120,6 +134,8 @@ targets:
     info:
       path: Sources/Watch/Info.plist
       properties:
+        CFBundleDisplayName: Cenno
+        ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: app.cenno.companion
         UIBackgroundModes:

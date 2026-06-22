@@ -5,7 +5,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import PromptPanel, { Prompt, Via } from "./PromptPanel";
 import { nextNotedWord } from "./notedWords";
 import { PANEL_MIN_HEIGHT } from "./panelResize";
-import { getDefaults } from "./userConfig";
+import { getDefaults, getTts } from "./userConfig";
+import { useTtsPlayer } from "./tts/useTtsPlayer";
 import "./App.css";
 
 // The Rust side emits the whole AskRequest as `request` (see PromptEvent in
@@ -19,6 +20,10 @@ interface PromptEvent {
     choices?: string[];
     flow?: Prompt["flow"];
     progress?: { step: number; total: number };
+    // Queue priority (low|normal|high). Reused by sound-out to gate voice-out.
+    urgency?: string;
+    // Optional short spoken summary for sound-out (spoken instead of the body).
+    say?: string;
     // Native A2UI payload (already vetted by src-tauri/src/a2ui_guard.rs).
     a2ui?: unknown;
   };
@@ -50,6 +55,8 @@ function toPrompt({ id, request, seq }: PromptEvent): Prompt {
     choices: request.choices,
     flow,
     progress: request.progress,
+    urgency: request.urgency,
+    say: request.say,
     a2ui: request.a2ui,
     seq,
   };
@@ -184,6 +191,24 @@ function App() {
     };
   }, []);
 
+  // External dismiss: the `dismiss_pending` MCP tool already unparked the
+  // prompt(s) server-side and emits this event so the panel comes down now,
+  // instead of lingering until its timeout. Used by agent-driven voice loops
+  // that speak the question via cenno but capture the answer elsewhere (an
+  // external STT) — the panel hides the moment that answer lands.
+  useEffect(() => {
+    const unlisten = listen("dismiss-panel", () => {
+      hideGenerationRef.current += 1;
+      awaitingSwapRef.current = false;
+      setAnswered(false);
+      setActive(null);
+      void hideWindow();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   // Whenever a prompt reaches the screen — fresh, replayed, or pulled off the
   // queue — tell Rust it's shown so its timeout starts now, not when it was
   // received. A prompt waiting its turn in the queue thus can't expire before
@@ -295,6 +320,22 @@ function App() {
     void advanceOrHide();
   }
 
+  // sound-out: speak the prompt aloud when it appears, gated by urgency +
+  // ~/.cenno config. Called before the early returns so hook order stays
+  // stable; with no active prompt it gets null and stays silent.
+  const tts = useTtsPlayer(
+    active
+      ? {
+          id: active.prompt.id,
+          title: active.prompt.title,
+          body_md: active.prompt.body_md,
+          say: active.prompt.say,
+          urgency: active.prompt.urgency,
+        }
+      : null,
+    getTts(),
+  );
+
   if (!active) return null;
 
   if (answered) {
@@ -321,6 +362,7 @@ function App() {
       prompt={active.prompt}
       onAnswer={handleAnswer}
       onDismiss={handleDismiss}
+      onStopReading={tts.speaking ? tts.stop : undefined}
     />
   );
 }

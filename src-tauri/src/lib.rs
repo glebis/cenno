@@ -9,7 +9,9 @@ pub mod registry;
 pub mod relay;
 pub mod routing;
 pub mod suppress;
+pub mod supertonic;
 pub mod tray;
+pub mod tts;
 pub mod updater;
 pub mod voice;
 
@@ -43,7 +45,7 @@ struct PromptEvent {
 /// Cold-start race recovery: the agent's first ask can arrive (and emit the
 /// `prompt` event) before the webview has mounted its listener. The webview
 /// calls this right after registering `listen("prompt")` to pull anything
-/// still answerable. Ordered oldest→newest.
+/// still answerable. Ordered by queue policy (urgency, then arrival).
 #[tauri::command]
 fn pending_prompts(state: tauri::State<PromptRegistry>) -> Vec<PromptEvent> {
     state
@@ -97,6 +99,59 @@ fn get_user_config(config: tauri::State<crate::config::Config>) -> crate::config
 #[tauri::command]
 fn get_user_tokens() -> Option<serde_json::Value> {
     crate::config::user_tokens()
+}
+
+/// Fresh read of `~/.cenno/config.json` from disk (unlike `get_user_config`,
+/// which returns the startup snapshot). The settings window uses this so it
+/// always reflects what's actually on disk, including its own last save.
+#[tauri::command]
+fn read_config_file() -> crate::config::Config {
+    crate::config::Config::load()
+}
+
+/// Persist the whole config back to `~/.cenno/config.json`. The settings
+/// window round-trips the full Config (read → edit → save) so nothing else in
+/// the file is lost. `tts_speak` reads config fresh per call, so Voice/TTS
+/// changes take effect on the very next spoken prompt — no restart needed.
+#[tauri::command]
+fn save_config_file(config: crate::config::Config) -> Result<(), String> {
+    config.save()
+}
+
+/// Current launch-at-login state (OS truth via the autostart plugin).
+#[tauri::command]
+fn get_launch_at_login(app: tauri::AppHandle) -> bool {
+    use tauri_plugin_autostart::ManagerExt as _;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+/// Enable/disable launch at login from the settings window (mirrors the tray
+/// checkbox). The autostart plugin persists the LaunchAgent plist itself.
+#[tauri::command]
+fn set_launch_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt as _;
+    let autolaunch = app.autolaunch();
+    let res = if enabled { autolaunch.enable() } else { autolaunch.disable() };
+    res.map_err(|e| format!("{e}"))
+}
+
+/// Show/hide the Dock icon. `false` → Accessory (menu-bar only, no Dock tile);
+/// `true` → Regular. Applies immediately; not yet persisted across restarts
+/// (cenno already runs Dock-less in `--tray` login launches).
+#[tauri::command]
+fn set_dock_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if visible {
+            tauri::ActivationPolicy::Regular
+        } else {
+            tauri::ActivationPolicy::Accessory
+        };
+        app.set_activation_policy(policy).map_err(|e| format!("{e}"))?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, visible);
+    Ok(())
 }
 
 /// Apply the configured panel width and default position at startup. Width is
@@ -269,16 +324,17 @@ fn fullscreen_on_panel_display(handle: &tauri::AppHandle) -> bool {
     crate::suppress::fullscreen_on_display(panel_display_target(handle))
 }
 
-/// Newest answerable prompt = highest numeric id suffix ("p_10" > "p_9").
+/// Front of the queue to replay. `pending()` is already ordered by the queue
+/// policy (urgency High→Normal→Low, then arrival), so replay simply takes the
+/// first entry — the same prompt the frontend's `advanceOrHide` would surface.
 /// Generic over the request payload so the test needs no AskRequest fixture.
 fn pick_replay<T>(pending: Vec<(String, T, u64)>) -> Option<(String, T, u64)> {
-    pending.into_iter().max_by_key(|(id, _, _)| {
-        id.strip_prefix("p_").and_then(|n| n.parse::<u64>().ok()).unwrap_or(0)
-    })
+    pending.into_iter().next()
 }
 
-/// Re-show the newest still-answerable prompt after suppression lifts
+/// Re-show the front-of-queue still-answerable prompt after suppression lifts
 /// (tray "Resume now", fullscreen checkbox toggled off, pause-expiry timer).
+/// "Front" = the queue policy (urgency, then arrival) via `pick_replay`.
 ///
 /// Re-checks suppression first: "Resume now" clicked while another app is
 /// fullscreen (with hide-in-fullscreen on) must stay quiet — the pending
@@ -407,6 +463,46 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
     if let Some(win) = handle.get_webview_window("main") {
         let _ = win.show();
         let _ = win.set_focus();
+    }
+}
+
+/// Open (or focus) the settings/about window. A normal decorated window —
+/// distinct from the `main` NSPanel — labeled `settings`. The frontend
+/// branches on the window label to render the settings UI instead of the
+/// prompt panel. Idempotent: re-focuses an already-open window.
+pub fn open_settings_window(app: &tauri::AppHandle) {
+    use tauri::Manager as _;
+    if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("cenno")
+    .inner_size(760.0, 620.0)
+    .min_inner_size(560.0, 460.0)
+    .resizable(true);
+
+    // macOS: float the traffic lights over the webview so our own black header
+    // bar runs full-width behind them (like the reference app). The frontend
+    // pads the header left to clear the lights. Title text stays hidden.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let built = builder.build();
+    match built {
+        Ok(win) => {
+            let _ = win.set_focus();
+        }
+        Err(e) => eprintln!("cenno: failed to open settings window: {e}"),
     }
 }
 
@@ -624,6 +720,17 @@ pub fn run() {
                         }
                         show_prompt_window(&handle);
                     },
+                    {
+                        // dismiss callback: tell the webview to take the panel
+                        // down now (the `dismiss_pending` MCP tool calls this
+                        // after unparking the prompt server-side).
+                        let handle = app_handle.clone();
+                        move || {
+                            if let Err(e) = handle.emit("dismiss-panel", ()) {
+                                eprintln!("cenno: failed to emit dismiss-panel: {e}");
+                            }
+                        }
+                    },
                     db,
                     default_timeout_s,
                     routing,
@@ -647,8 +754,19 @@ pub fn run() {
             resize_panel,
             get_user_config,
             get_user_tokens,
+            read_config_file,
+            save_config_file,
+            get_launch_at_login,
+            set_launch_at_login,
+            set_dock_visible,
             voice::voice_start,
-            voice::voice_stop
+            voice::voice_stop,
+            tts::tts_speak,
+            tts::tts_stop,
+            tts::tts_model_status,
+            tts::tts_download_model,
+            tts::list_audio_outputs,
+            tts::tts_delete_model
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -679,9 +797,9 @@ mod tests {
     }
 
     #[test]
-    fn pick_replay_picks_newest_by_numeric_id() {
-        // Numeric, not lexicographic: p_10 beats p_9.
-        let pending = vec![("p_2".to_string(), (), 5), ("p_10".to_string(), (), 9), ("p_9".to_string(), (), 1)];
+    fn pick_replay_takes_front_of_policy_ordered_queue() {
+        // pending() is pre-sorted by policy; replay takes the front entry.
+        let pending = vec![("p_10".to_string(), (), 9), ("p_2".to_string(), (), 5), ("p_9".to_string(), (), 1)];
         assert_eq!(pick_replay(pending).unwrap().0, "p_10");
         assert!(pick_replay::<()>(vec![]).is_none());
     }

@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "cenno",
+  "project_id": "9524b0d1-5baf-479f-aa9f-f688d57cec0e"
+}

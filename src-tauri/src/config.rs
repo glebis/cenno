@@ -76,11 +76,43 @@ pub struct DefaultsConfig {
     pub flow: Option<String>,
 }
 
+/// Voice-out ("sound-out") settings. Opt-in: absent or `enabled:false` means
+/// no prompt is ever spoken and no audio backend is touched.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TtsConfig {
+    /// Master switch for speaking prompts aloud (built-in: false).
+    pub enabled: Option<bool>,
+    /// Minimum urgency that gets read aloud: "low" | "normal" | "high"
+    /// (built-in: "high" — only High-urgency prompts speak until lowered).
+    /// Reuses AskRequest.urgency rather than a parallel priority field.
+    pub min_urgency: Option<String>,
+    /// On-device voice identifier. For the `system` engine: an
+    /// AVSpeechSynthesisVoice id (absent → auto-pick best installed). For the
+    /// `supertonic` engine: a voice-style name like "F3".
+    pub voice: Option<String>,
+    /// TTS engine: "system" (AVSpeechSynthesizer, default) or "supertonic"
+    /// (on-device neural). Supertonic falls back to system if assets are
+    /// missing or synthesis fails.
+    pub engine: Option<String>,
+    /// Custom path to a Supertonic model directory (containing `onnx/` +
+    /// `voice_styles/`). Absent → the default `~/.cenno/models/supertonic-3`
+    /// cache. An invalid path falls back to AVSpeech, never crashes.
+    pub model_path: Option<String>,
+    /// Audio output device (by name) the spoken prompt plays through. Absent →
+    /// the system default output. Applies to the Supertonic engine; the system
+    /// engine (AVSpeech) always follows the macOS default output. An unknown
+    /// name falls back to the default device.
+    pub output_device: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub panel: PanelConfig,
     pub defaults: DefaultsConfig,
+    /// Voice-out settings (sound-out). Defaults to disabled.
+    pub tts: TtsConfig,
     /// Cross-device prompt routing policy (which companion devices receive
     /// prompts and how). See `crate::routing`.
     pub routing: crate::routing::RoutingConfig,
@@ -108,6 +140,18 @@ impl Config {
                 Self::default()
             }
         }
+    }
+
+    /// Write the config back to `~/.cenno/config.json`, creating `~/.cenno`
+    /// if needed. Pretty-printed so a human can keep hand-editing it. Used by
+    /// the settings window to persist Voice/TTS and defaults choices.
+    pub fn save(&self) -> Result<(), String> {
+        let path = config_path().ok_or_else(|| "could not resolve ~/.cenno".to_string())?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
+        }
+        let json = serde_json::to_string_pretty(self).map_err(|e| format!("serializing config: {e}"))?;
+        std::fs::write(&path, json).map_err(|e| format!("writing {}: {e}", path.display()))
     }
 }
 
@@ -212,6 +256,35 @@ mod tests {
             default_margin.position,
             Some(PanelPosition::Anchored { anchor: Anchor::Center, margin }) if margin == 16.0
         ));
+    }
+
+    #[test]
+    fn tts_defaults_to_disabled_and_parses_overrides() {
+        let cfg: Config = serde_json::from_str("{}").unwrap();
+        assert!(cfg.tts.enabled.is_none()); // absent → treated as off
+        assert!(cfg.tts.min_urgency.is_none());
+
+        let cfg: Config =
+            serde_json::from_str(r#"{"tts":{"enabled":true,"min_urgency":"normal","voice":"com.apple.voice.premium.en-US.Zoe"}}"#).unwrap();
+        assert_eq!(cfg.tts.enabled, Some(true));
+        assert_eq!(cfg.tts.min_urgency.as_deref(), Some("normal"));
+        assert_eq!(cfg.tts.voice.as_deref(), Some("com.apple.voice.premium.en-US.Zoe"));
+    }
+
+    #[test]
+    fn tts_full_settings_round_trip_under_deny_unknown_fields() {
+        // The settings UI writes engine + voice + model_path; all must parse
+        // under deny_unknown_fields (audit BLOCKER: a field the struct doesn't
+        // model would make Config::load fall back to defaults).
+        let src = r#"{"tts":{"enabled":true,"min_urgency":"low","engine":"supertonic","voice":"F3","model_path":"/Users/x/models/supertonic-3"}}"#;
+        let cfg: Config = serde_json::from_str(src).expect("must parse");
+        assert_eq!(cfg.tts.engine.as_deref(), Some("supertonic"));
+        assert_eq!(cfg.tts.voice.as_deref(), Some("F3"));
+        assert_eq!(cfg.tts.model_path.as_deref(), Some("/Users/x/models/supertonic-3"));
+        // Re-serialize → re-deserialize must round-trip (no field drops the file).
+        let json = serde_json::to_string(&cfg).unwrap();
+        let cfg2: Config = serde_json::from_str(&json).expect("re-deserialize must parse");
+        assert_eq!(cfg2.tts.model_path.as_deref(), Some("/Users/x/models/supertonic-3"));
     }
 
     #[test]

@@ -46,6 +46,10 @@ export interface Prompt {
   choices?: string[];
   flow?: "mood" | "question" | "ema" | "reminder" | "ambient";
   progress?: { step: number; total: number };
+  /** Queue priority (low|normal|high); sound-out gates voice-out on it. */
+  urgency?: string;
+  /** Optional short spoken summary for sound-out (spoken instead of the body). */
+  say?: string;
   /**
    * Native A2UI v0.9 message array (the desugar envelope shape). When
    * present it REPLACES desugaring: the payload is fed to the processor
@@ -99,6 +103,7 @@ export default function PromptPanel({
   prompt,
   onAnswer,
   onDismiss,
+  onStopReading,
 }: {
   prompt: Prompt;
   onAnswer: (id: string, answer: string, via: Via) => void;
@@ -109,6 +114,12 @@ export default function PromptPanel({
    * that only answer keep working.
    */
   onDismiss?: (id: string) => void;
+  /**
+   * Present only while sound-out is reading this prompt aloud. Renders a mute
+   * control in the chrome that stops the speech without dismissing the prompt
+   * (the user can still read and answer). Absent → no control shown.
+   */
+  onStopReading?: () => void;
 }) {
   // Refs keep the action handler (created once per prompt.id) pointed at the
   // latest props without rebuilding the processor on every render.
@@ -220,6 +231,27 @@ export default function PromptPanel({
           z-index above the drag strip so the ✕ stays clickable. */}
       <div className="prompt-panel__chrome">
         <span className="prompt-panel__wordmark">cenno</span>
+        {onStopReading && (
+          <button
+            type="button"
+            className="prompt-panel__mute"
+            aria-label="Stop reading aloud"
+            title="Stop reading aloud"
+            onClick={onStopReading}
+          >
+            {/* Monochrome speaker-off glyph; inherits chrome color like the ✕. */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M4 9v6h4l5 4V5L8 9H4z"
+                fill="currentColor"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path d="M17 9l5 5M22 9l-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
         <button
           type="button"
           className="prompt-panel__dismiss"

@@ -89,6 +89,9 @@ pub fn setup_tray(
         None::<&str>,
     )?;
 
+    let settings =
+        MenuItem::with_id(app, "open_settings", "cenno settings…", true, None::<&str>)?;
+
     let check_updates =
         MenuItem::with_id(app, "check_updates", "Check for updates…", true, None::<&str>)?;
 
@@ -97,6 +100,8 @@ pub fn setup_tray(
     let menu = Menu::with_items(
         app,
         &[
+            &settings,
+            &PredefinedMenuItem::separator(app)?,
             &pause_menu,
             &resume,
             &PredefinedMenuItem::separator(app)?,
@@ -180,6 +185,9 @@ pub fn setup_tray(
                     // startup reconcile self-heals a failed plugin call.
                     persist(SETTING_LAUNCH_AT_LOGIN, if checked { "true" } else { "false" });
                     eprintln!("cenno: launch_at_login = {checked}");
+                }
+                "open_settings" => {
+                    crate::open_settings_window(app);
                 }
                 "check_updates" => {
                     // Off the menu-event (main) thread: the flow blocks on
