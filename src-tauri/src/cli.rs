@@ -25,6 +25,10 @@ pub enum Command {
         /// Markdown body shown under the title
         #[arg(long, default_value = "")]
         body: String,
+        /// Optional short spoken summary for sound-out (voice-out reads this
+        /// instead of the body when set)
+        #[arg(long, default_value = "")]
+        say: String,
         /// Seconds to wait for an answer
         #[arg(long, default_value = "120")]
         timeout: u64,

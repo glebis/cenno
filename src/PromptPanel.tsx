@@ -48,6 +48,8 @@ export interface Prompt {
   progress?: { step: number; total: number };
   /** Queue priority (low|normal|high); sound-out gates voice-out on it. */
   urgency?: string;
+  /** Optional short spoken summary for sound-out (spoken instead of the body). */
+  say?: string;
   /**
    * Native A2UI v0.9 message array (the desugar envelope shape). When
    * present it REPLACES desugaring: the payload is fed to the processor

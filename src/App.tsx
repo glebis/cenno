@@ -22,6 +22,8 @@ interface PromptEvent {
     progress?: { step: number; total: number };
     // Queue priority (low|normal|high). Reused by sound-out to gate voice-out.
     urgency?: string;
+    // Optional short spoken summary for sound-out (spoken instead of the body).
+    say?: string;
     // Native A2UI payload (already vetted by src-tauri/src/a2ui_guard.rs).
     a2ui?: unknown;
   };
@@ -54,6 +56,7 @@ function toPrompt({ id, request, seq }: PromptEvent): Prompt {
     flow,
     progress: request.progress,
     urgency: request.urgency,
+    say: request.say,
     a2ui: request.a2ui,
     seq,
   };
@@ -308,6 +311,7 @@ function App() {
           id: active.prompt.id,
           title: active.prompt.title,
           body_md: active.prompt.body_md,
+          say: active.prompt.say,
           urgency: active.prompt.urgency,
         }
       : null,

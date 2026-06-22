@@ -87,6 +87,10 @@ pub struct TtsConfig {
     /// (built-in: "high" — only High-urgency prompts speak until lowered).
     /// Reuses AskRequest.urgency rather than a parallel priority field.
     pub min_urgency: Option<String>,
+    /// On-device voice identifier (AVSpeechSynthesisVoice). Absent → auto-pick
+    /// the best-quality installed English voice (premium/enhanced) over the
+    /// plain default.
+    pub voice: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -236,9 +240,10 @@ mod tests {
         assert!(cfg.tts.min_urgency.is_none());
 
         let cfg: Config =
-            serde_json::from_str(r#"{"tts":{"enabled":true,"min_urgency":"normal"}}"#).unwrap();
+            serde_json::from_str(r#"{"tts":{"enabled":true,"min_urgency":"normal","voice":"com.apple.voice.premium.en-US.Zoe"}}"#).unwrap();
         assert_eq!(cfg.tts.enabled, Some(true));
         assert_eq!(cfg.tts.min_urgency.as_deref(), Some("normal"));
+        assert_eq!(cfg.tts.voice.as_deref(), Some("com.apple.voice.premium.en-US.Zoe"));
     }
 
     #[test]

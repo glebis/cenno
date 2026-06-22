@@ -78,5 +78,11 @@ Config toggle `tts.enabled=false` disables the feature entirely. Otherwise addit
 ## Tracker
 **bd** — decomposes into >1 task (normalizer, config schema, Swift TTS bridge + Rust command, prompt-shown hook + gating, stop control). Cloud providers / earcons / markup filed as separate follow-on issues, not v1.
 
+## Goal Amendments
+- **2026-06-22 (post-demo):** Live demo proved the loop but the full-body read was hard to listen to, and the default voice sounded poor. Two additions folded into v1 before merge (human-approved):
+  1. Optional `say` on AskRequest — a short, ear-friendly spoken summary the agent writes; spoken **instead of** the body when present (falls back to body). (cenno-jmm)
+  2. On-device voice selection — pick a high-quality installed voice (premium/enhanced/Siri) instead of the plain default; configurable via `tts.voice`. (cenno-x19)
+  Cloud providers (Groq/Cartesia/ElevenLabs) remain a post-merge follow-on (cenno-fx5).
+
 ---
 **Fail rule:** if a goal can't produce evidence, it's a wish with better formatting — it doesn't pass.

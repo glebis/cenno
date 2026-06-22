@@ -91,6 +91,11 @@ pub struct AskRequest {
     pub flow: Option<Flow>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<Progress>,
+    /// Optional short spoken summary for sound-out (voice-out). When set, the
+    /// webview speaks this instead of the title+body — agents write a concise,
+    /// ear-friendly line. Absent → fall back to reading the prompt itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub say: Option<String>,
 }
 fn default_urgency() -> Urgency {
     Urgency::Normal

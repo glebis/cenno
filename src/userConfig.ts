@@ -26,6 +26,7 @@ export interface WidgetTemplate {
 export interface RawTtsConfig {
   enabled?: boolean;
   min_urgency?: string;
+  voice?: string;
 }
 
 export interface UserConfig {
@@ -39,6 +40,8 @@ export interface UserConfig {
 export interface ResolvedTtsConfig {
   enabled: boolean;
   minUrgency: "low" | "normal" | "high";
+  /** Optional on-device voice id; undefined → Swift auto-picks the best. */
+  voice?: string;
 }
 
 let cachedWidgets: Record<string, WidgetTemplate> = {};
@@ -59,7 +62,8 @@ export function getTts(): ResolvedTtsConfig {
 function resolveTts(raw: RawTtsConfig | undefined): ResolvedTtsConfig {
   const min = (raw?.min_urgency ?? "high").toLowerCase();
   const minUrgency = min === "low" || min === "normal" ? min : "high";
-  return { enabled: raw?.enabled === true, minUrgency };
+  const voice = raw?.voice && raw.voice.trim() ? raw.voice : undefined;
+  return { enabled: raw?.enabled === true, minUrgency, voice };
 }
 
 /** Convert a kebab/camel segment list into a `--cenno-…` variable name. */
