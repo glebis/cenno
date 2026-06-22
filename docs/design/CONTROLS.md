@@ -70,6 +70,14 @@ views.tsx    — plain React, no A2UI imports; styled by catalog.css
 | `Image` | standard `ImageApi` | — (display-only) | `ImageView` |
 | `Scale` | custom (discrete targets; SliderApi is continuous) | — | `ScaleView` |
 | `Dots` | custom (no standard pagination API) | — | `DotsView` |
+| `ScoreMatrix` | custom (composite multi-value; no single-value API fits) | `steps`, `dimensions`, `flags`, `legend` | `ScoreMatrixView` |
+
+`ScoreMatrix` notes: stacked per-step cards for the-goal constraint diagnostic —
+each card scores one work-step on ordinal 0–N dimensions (reusing the `.cenno-scale`
+row) plus boolean flag chips; the decisive dimension is full-width, the rest reflow
+1-col (iPhone) → 2-col (Mac) at 360px. One Score button fires `submit-matrix` with
+the whole matrix written to the bound `value` path as a JSON string (the answer is
+the matrix; one-answer-per-panel still holds). Consumer: the-goal skill cenno mode.
 
 `Slider` vs `Scale`: Scale is the EMA 1..N numeral row — discrete tap
 targets, each a 44px circle. Slider is a continuous range for "how much"

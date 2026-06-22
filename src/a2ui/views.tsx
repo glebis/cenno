@@ -474,3 +474,163 @@ export function DotsView({ step, total }: { step: number; total: number }) {
     </ol>
   );
 }
+
+/**
+ * ScoreMatrix: stacked per-step cards for the-goal constraint diagnostic.
+ * Each card scores one work-step on ordinal dimensions (0..max, discrete
+ * targets reusing the .cenno-scale row) plus boolean flag chips. The decisive
+ * dimension renders full-width and prominent; the rest reflow 1-col (iPhone)
+ * to 2-col (Mac panel) via catalog.css. One Score button emits the whole
+ * matrix; the panel owns no per-cell submit (one answer per panel still holds —
+ * the answer is the matrix). Draft state seeds from `value` and re-syncs.
+ */
+export interface ScoreMatrixDimension {
+  id: string;
+  label: string;
+  max?: number;
+  decisive?: boolean;
+}
+export interface ScoreMatrixFlag {
+  id: string;
+  label: string;
+}
+export type StepScore = {
+  name: string;
+  [key: string]: number | string | boolean;
+};
+
+export const SCORE_MATRIX_DIMENSIONS: ScoreMatrixDimension[] = [
+  {
+    id: "sensitivity",
+    label: "Sensitivity · if 2× faster, would throughput rise?",
+    max: 3,
+    decisive: true,
+  },
+  { id: "wait", label: "wait", max: 3 },
+  { id: "starve", label: "starve", max: 3 },
+  { id: "cap", label: "capacity", max: 3 },
+  { id: "annoy", label: "annoyance", max: 3 },
+];
+export const SCORE_MATRIX_FLAGS: ScoreMatrixFlag[] = [
+  { id: "necessary", label: "necessary" },
+  { id: "policy_gate", label: "policy gate" },
+];
+
+export function ScoreMatrixView({
+  steps,
+  dimensions = SCORE_MATRIX_DIMENSIONS,
+  flags = SCORE_MATRIX_FLAGS,
+  legend = "0 none · 3 high",
+  value,
+  onSubmit,
+}: {
+  steps: string[];
+  dimensions?: ScoreMatrixDimension[];
+  flags?: ScoreMatrixFlag[];
+  legend?: string;
+  value?: StepScore[];
+  onSubmit: (matrix: StepScore[]) => void;
+}) {
+  const seed = (): StepScore[] =>
+    steps.map((name, i) => {
+      const prior = value?.[i];
+      const row: StepScore = { name };
+      for (const d of dimensions) {
+        const v = prior?.[d.id];
+        row[d.id] = typeof v === "number" ? v : 0;
+      }
+      for (const f of flags) row[f.id] = Boolean(prior?.[f.id]);
+      return row;
+    });
+  const [draft, setDraft] = useState<StepScore[]>(seed);
+  useEffect(() => {
+    setDraft(seed());
+    // re-sync when the bound value or step list changes (host echo)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(value), JSON.stringify(steps)]);
+
+  const setOrdinal = (i: number, id: string, n: number) =>
+    setDraft((d) => d.map((r, idx) => (idx === i ? { ...r, [id]: n } : r)));
+  const toggleFlag = (i: number, id: string) =>
+    setDraft((d) =>
+      d.map((r, idx) => (idx === i ? { ...r, [id]: !r[id] } : r)),
+    );
+
+  const renderDim = (i: number, d: ScoreMatrixDimension, stepName: string) => {
+    const max = typeof d.max === "number" ? d.max : 3;
+    const current = draft[i][d.id];
+    return (
+      <div
+        key={d.id}
+        className={`cenno-scorematrix__dim${d.decisive ? " is-decisive" : ""}`}
+        role="group"
+        aria-label={`${stepName} — ${d.label}`}
+      >
+        <span
+          className={`cenno-text cenno-text--${d.decisive ? "question-m" : "caption"}`}
+        >
+          {d.label}
+        </span>
+        <div className="cenno-scale__row">
+          {Array.from({ length: max + 1 }, (_, n) => (
+            <button
+              key={n}
+              type="button"
+              className={`cenno-scale__num${current === n ? " is-selected" : ""}`}
+              aria-pressed={current === n}
+              onClick={() => setOrdinal(i, d.id, n)}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const decisive = dimensions.filter((d) => d.decisive);
+  const secondary = dimensions.filter((d) => !d.decisive);
+
+  return (
+    <div className="cenno-scorematrix">
+      {legend && (
+        <div className="cenno-text cenno-text--caption">{legend}</div>
+      )}
+      {steps.map((name, i) => (
+        <div className="cenno-scorematrix__card" key={`${name}-${i}`}>
+          <div className="cenno-text cenno-text--question-m cenno-scorematrix__step">
+            {name}
+          </div>
+          {decisive.map((d) => renderDim(i, d, name))}
+          {secondary.length > 0 && (
+            <div className="cenno-scorematrix__secondary">
+              {secondary.map((d) => renderDim(i, d, name))}
+            </div>
+          )}
+          {flags.length > 0 && (
+            <div className="cenno-chips cenno-scorematrix__flags">
+              {flags.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className="cenno-chip"
+                  aria-pressed={Boolean(draft[i][f.id])}
+                  onClick={() => toggleFlag(i, f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        className="cenno-scorematrix__submit"
+        onClick={() => onSubmit(draft)}
+      >
+        Score
+      </button>
+    </div>
+  );
+}

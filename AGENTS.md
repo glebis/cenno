@@ -70,6 +70,16 @@ Also bump the Homebrew cask after each release: `version` and `sha256` in [`gleb
 - Validate everything that crosses the agent boundary (see `a2ui_guard.rs`, `protocol.rs`) — prompts are untrusted input.
 - [SECURITY.md](SECURITY.md) has the threat model; [AUTHORSHIP.md](AUTHORSHIP.md) records authorship.
 
+## feature-factory (shipping one feature)
+
+When asked to build/ship a single feature, or to "write a goal contract", read
+`~/ai_projects/claude-skills/feature-factory/SKILL.md` and follow it: short Goal
+Contract → size/risk triage → single-focus TDD → deterministic verify → evidence
+when it matters → human review → retro. For non-trivial features, copy
+`~/ai_projects/claude-skills/feature-factory/assets/goal-contract.md` to
+`docs/factory/<date>-<slug>/goal.md`. Use `bd` for tracking (this repo already
+has the beads integration below); keep the process sized to the feature.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
 

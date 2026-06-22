@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -11,6 +11,7 @@ import {
   SliderView,
   DateTimeView,
   ImageView,
+  ScoreMatrixView,
 } from "./views";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -265,6 +266,53 @@ describe("ButtonView", () => {
 
 // Adapters are covered by the Task 6 integration; this only proves the
 // catalog module loads and registers the full component set.
+describe("ScoreMatrixView", () => {
+  const steps = ["Audience", "Offer"];
+  const SENS = "Audience — Sensitivity · if 2× faster, would throughput rise?";
+
+  it("renders a card per step", () => {
+    render(<ScoreMatrixView steps={steps} onSubmit={() => {}} />);
+    expect(screen.getByText("Audience")).toBeTruthy();
+    expect(screen.getByText("Offer")).toBeTruthy();
+  });
+
+  it("submits a full matrix with defaults (zeros + false flags)", () => {
+    const onSubmit = vi.fn();
+    render(<ScoreMatrixView steps={steps} onSubmit={onSubmit} />);
+    fireEvent.click(screen.getByRole("button", { name: "Score" }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const m = onSubmit.mock.calls[0][0];
+    expect(m).toHaveLength(2);
+    expect(m[0]).toMatchObject({ name: "Audience", sensitivity: 0, necessary: false });
+  });
+
+  it("records an ordinal selection and a flag toggle", () => {
+    const onSubmit = vi.fn();
+    render(<ScoreMatrixView steps={steps} onSubmit={onSubmit} />);
+    const sens = screen.getByRole("group", { name: SENS });
+    fireEvent.click(within(sens).getByRole("button", { name: "3" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "necessary" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Score" }));
+    const m = onSubmit.mock.calls[0][0];
+    expect(m[0].sensitivity).toBe(3);
+    expect(m[0].necessary).toBe(true);
+  });
+
+  it("seeds the draft from the bound value", () => {
+    render(
+      <ScoreMatrixView
+        steps={steps}
+        value={[{ name: "Audience", sensitivity: 2 }]}
+        onSubmit={() => {}}
+      />,
+    );
+    const sens = screen.getByRole("group", { name: SENS });
+    expect(
+      within(sens).getByRole("button", { name: "2" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+});
+
 describe("cennoCatalog", () => {
   it("exposes the cenno component set under cenno:catalog/v1", async () => {
     const { cennoCatalog } = await import("./catalog");
@@ -278,6 +326,7 @@ describe("cennoCatalog", () => {
       "Image",
       "Row",
       "Scale",
+      "ScoreMatrix",
       "Slider",
       "Text",
       "TextField",

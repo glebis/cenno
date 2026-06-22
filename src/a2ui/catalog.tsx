@@ -50,6 +50,8 @@ import {
   SliderView,
   DateTimeView,
   ImageView,
+  ScoreMatrixView,
+  type StepScore,
   type TextRole,
 } from "./views";
 
@@ -444,6 +446,85 @@ export const CennoDots = createComponentImplementation(DotsApi, ({ props }) => (
 ));
 
 /* ------------------------------------------------------------------ */
+/* ScoreMatrix — custom: the-goal constraint-scoring matrix.           */
+/* Composite multi-value control (N steps × ordinals + flags); no      */
+/* standard single-value API fits. Emits the whole matrix as a JSON    */
+/* string on Score, written to the bound value path.                   */
+/* ------------------------------------------------------------------ */
+
+export const ScoreMatrixApi = {
+  name: "ScoreMatrix",
+  schema: z
+    .object({
+      ...CommonProps,
+      steps: z
+        .array(z.string())
+        .describe("Candidate work-steps to score, one card each."),
+      dimensions: z
+        .array(
+          z.object({
+            id: z.string(),
+            label: z.string(),
+            max: z.number().optional(),
+            decisive: z.boolean().optional(),
+          }),
+        )
+        .optional()
+        .describe(
+          "Ordinal columns; defaults to sensitivity (decisive) / wait / starve / cap / annoy at 0-3.",
+        ),
+      flags: z
+        .array(z.object({ id: z.string(), label: z.string() }))
+        .optional()
+        .describe(
+          "Per-step boolean toggles; defaults to necessary / policy_gate.",
+        ),
+      legend: DynamicStringSchema.optional().describe(
+        "Caption shown once above the cards (e.g. '0 none · 3 high').",
+      ),
+      value: DynamicStringSchema.optional().describe(
+        "Bound JSON string of the matrix; written on submit. Seed with prior scores or omit.",
+      ),
+      submitAction: ActionSchema.optional().describe(
+        "Fired by the Score button; pair its context value with this component's bound path to receive the matrix JSON.",
+      ),
+    })
+    .strict(),
+};
+
+export const CennoScoreMatrix = createComponentImplementation(
+  ScoreMatrixApi,
+  ({ props }) => {
+    let seeded: StepScore[] | undefined;
+    if (typeof props.value === "string" && props.value.trim()) {
+      try {
+        const parsed = JSON.parse(props.value);
+        if (Array.isArray(parsed)) seeded = parsed as StepScore[];
+      } catch {
+        seeded = undefined;
+      }
+    }
+    return (
+      <ScoreMatrixView
+        steps={
+          Array.isArray(props.steps)
+            ? (props.steps.filter((s) => typeof s === "string") as string[])
+            : []
+        }
+        dimensions={Array.isArray(props.dimensions) ? props.dimensions : undefined}
+        flags={Array.isArray(props.flags) ? props.flags : undefined}
+        legend={typeof props.legend === "string" ? props.legend : undefined}
+        value={seeded}
+        onSubmit={(matrix) => {
+          props.setValue(JSON.stringify(matrix));
+          props.submitAction?.();
+        }}
+      />
+    );
+  },
+);
+
+/* ------------------------------------------------------------------ */
 /* Catalog                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -461,6 +542,7 @@ export const cennoCatalog = new Catalog(
     CennoImage,
     CennoScale,
     CennoDots,
+    CennoScoreMatrix,
   ],
   BASIC_FUNCTIONS,
 );
