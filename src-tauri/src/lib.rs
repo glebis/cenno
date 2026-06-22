@@ -9,6 +9,7 @@ pub mod registry;
 pub mod relay;
 pub mod routing;
 pub mod suppress;
+pub mod supertonic;
 pub mod tray;
 pub mod tts;
 pub mod updater;
@@ -98,6 +99,59 @@ fn get_user_config(config: tauri::State<crate::config::Config>) -> crate::config
 #[tauri::command]
 fn get_user_tokens() -> Option<serde_json::Value> {
     crate::config::user_tokens()
+}
+
+/// Fresh read of `~/.cenno/config.json` from disk (unlike `get_user_config`,
+/// which returns the startup snapshot). The settings window uses this so it
+/// always reflects what's actually on disk, including its own last save.
+#[tauri::command]
+fn read_config_file() -> crate::config::Config {
+    crate::config::Config::load()
+}
+
+/// Persist the whole config back to `~/.cenno/config.json`. The settings
+/// window round-trips the full Config (read → edit → save) so nothing else in
+/// the file is lost. `tts_speak` reads config fresh per call, so Voice/TTS
+/// changes take effect on the very next spoken prompt — no restart needed.
+#[tauri::command]
+fn save_config_file(config: crate::config::Config) -> Result<(), String> {
+    config.save()
+}
+
+/// Current launch-at-login state (OS truth via the autostart plugin).
+#[tauri::command]
+fn get_launch_at_login(app: tauri::AppHandle) -> bool {
+    use tauri_plugin_autostart::ManagerExt as _;
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+/// Enable/disable launch at login from the settings window (mirrors the tray
+/// checkbox). The autostart plugin persists the LaunchAgent plist itself.
+#[tauri::command]
+fn set_launch_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt as _;
+    let autolaunch = app.autolaunch();
+    let res = if enabled { autolaunch.enable() } else { autolaunch.disable() };
+    res.map_err(|e| format!("{e}"))
+}
+
+/// Show/hide the Dock icon. `false` → Accessory (menu-bar only, no Dock tile);
+/// `true` → Regular. Applies immediately; not yet persisted across restarts
+/// (cenno already runs Dock-less in `--tray` login launches).
+#[tauri::command]
+fn set_dock_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if visible {
+            tauri::ActivationPolicy::Regular
+        } else {
+            tauri::ActivationPolicy::Accessory
+        };
+        app.set_activation_policy(policy).map_err(|e| format!("{e}"))?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, visible);
+    Ok(())
 }
 
 /// Apply the configured panel width and default position at startup. Width is
@@ -412,6 +466,35 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
     }
 }
 
+/// Open (or focus) the settings/about window. A normal decorated window —
+/// distinct from the `main` NSPanel — labeled `settings`. The frontend
+/// branches on the window label to render the settings UI instead of the
+/// prompt panel. Idempotent: re-focuses an already-open window.
+pub fn open_settings_window(app: &tauri::AppHandle) {
+    use tauri::Manager as _;
+    if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    let built = tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("cenno")
+    .inner_size(760.0, 620.0)
+    .min_inner_size(560.0, 460.0)
+    .resizable(true)
+    .build();
+    match built {
+        Ok(win) => {
+            let _ = win.set_focus();
+        }
+        Err(e) => eprintln!("cenno: failed to open settings window: {e}"),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -649,10 +732,17 @@ pub fn run() {
             resize_panel,
             get_user_config,
             get_user_tokens,
+            read_config_file,
+            save_config_file,
+            get_launch_at_login,
+            set_launch_at_login,
+            set_dock_visible,
             voice::voice_start,
             voice::voice_stop,
             tts::tts_speak,
-            tts::tts_stop
+            tts::tts_stop,
+            tts::tts_model_status,
+            tts::tts_download_model
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

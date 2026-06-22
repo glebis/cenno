@@ -16,10 +16,11 @@
 #[allow(dead_code)]
 mod helper;
 
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
@@ -145,9 +146,162 @@ pub fn stop() {
     }
 }
 
+// ─────────────────────────── model download ───────────────────────────
+
+/// Pinned source. `resolve/main` is mutable upstream; we guard integrity by
+/// verifying each file's exact byte size against the manifest below, so a
+/// changed/truncated download is rejected rather than silently used.
+const HF_BASE: &str = "https://huggingface.co/Supertone/supertonic-3/resolve/main/";
+
+/// Every file the engine needs, with its exact size (bytes). Loading needs all
+/// of `onnx/` plus the voice styles; `assets_present` and the download both
+/// validate against this list (audit: the old 2-file check was insufficient).
+const REQUIRED: &[(&str, u64)] = &[
+    ("onnx/duration_predictor.onnx", 3_700_147),
+    ("onnx/text_encoder.onnx", 36_416_150),
+    ("onnx/tts.json", 8_253),
+    ("onnx/unicode_indexer.json", 277_676),
+    ("onnx/vector_estimator.onnx", 256_534_781),
+    ("onnx/vocoder.onnx", 101_424_195),
+    ("voice_styles/F1.json", 292_046),
+    ("voice_styles/F2.json", 292_423),
+    ("voice_styles/F3.json", 290_794),
+    ("voice_styles/F4.json", 291_808),
+    ("voice_styles/F5.json", 291_479),
+    ("voice_styles/M1.json", 291_748),
+    ("voice_styles/M2.json", 292_055),
+    ("voice_styles/M3.json", 290_198),
+    ("voice_styles/M4.json", 291_522),
+    ("voice_styles/M5.json", 291_469),
+];
+
+fn required_total() -> u64 {
+    REQUIRED.iter().map(|(_, s)| s).sum()
+}
+
+/// Status of the resolved model dir, for the settings UI.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ModelStatus {
+    /// True when every required file is present (existence check — a custom
+    /// model dir need not byte-match the managed manifest).
+    pub present: bool,
+    /// The resolved dir (custom path or default cache).
+    pub dir: String,
+    /// Whether `dir` is a user-set custom path vs the managed cache.
+    pub custom: bool,
+    /// Required files that are missing from `dir`.
+    pub missing: Vec<String>,
+    /// Total download size for the managed model (bytes).
+    pub total_bytes: u64,
+}
+
+pub fn model_status() -> ModelStatus {
+    let cfg = crate::config::Config::load();
+    let custom = cfg.tts.model_path.as_deref().is_some_and(|p| !p.trim().is_empty());
+    let dir = model_dir();
+    let Some(dir) = dir else {
+        return ModelStatus {
+            present: false,
+            dir: String::new(),
+            custom,
+            missing: REQUIRED.iter().map(|(p, _)| (*p).to_string()).collect(),
+            total_bytes: required_total(),
+        };
+    };
+    let missing: Vec<String> = REQUIRED
+        .iter()
+        .filter(|(rel, _)| !dir.join(rel).exists())
+        .map(|(rel, _)| (*rel).to_string())
+        .collect();
+    ModelStatus {
+        present: missing.is_empty(),
+        dir: dir.to_string_lossy().into_owned(),
+        custom,
+        missing,
+        total_bytes: required_total(),
+    }
+}
+
+/// Download the managed model into the default cache, verifying each file's
+/// size, then publish atomically (temp dir → swap). Always targets the cache,
+/// not a custom path. `progress(done, total)` is called as bytes arrive. Runs
+/// on a blocking thread (caller uses spawn_blocking).
+pub fn download_blocking(mut progress: impl FnMut(u64, u64)) -> Result<()> {
+    let dest = default_model_dir().context("no ~/.cenno for model cache")?;
+    let parent = dest.parent().context("model cache has no parent")?;
+    std::fs::create_dir_all(parent)?;
+    let tmp = parent.join(".supertonic-3.download");
+    if tmp.exists() {
+        std::fs::remove_dir_all(&tmp)?;
+    }
+
+    let total = required_total();
+    let mut done = 0u64;
+    let agent = ureq::AgentBuilder::new().build();
+
+    for (rel, expected) in REQUIRED {
+        let url = format!("{HF_BASE}{rel}");
+        let out = tmp.join(rel);
+        if let Some(d) = out.parent() {
+            std::fs::create_dir_all(d)?;
+        }
+        let resp = agent.get(&url).call().map_err(|e| anyhow!("GET {rel}: {e}"))?;
+        let mut reader = resp.into_reader();
+        let mut file = std::fs::File::create(&out)?;
+        let mut buf = [0u8; 65_536];
+        loop {
+            let n = reader.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            file.write_all(&buf[..n])?;
+            done += n as u64;
+            progress(done, total);
+        }
+        file.flush()?;
+        let got = std::fs::metadata(&out)?.len();
+        if got != *expected {
+            let _ = std::fs::remove_dir_all(&tmp);
+            return Err(anyhow!("{rel}: downloaded {got} bytes, expected {expected} (integrity check failed)"));
+        }
+    }
+
+    // Publish: swap temp → dest with a backup so a failed rename rolls back.
+    if dest.exists() {
+        let bak = parent.join(".supertonic-3.bak");
+        if bak.exists() {
+            std::fs::remove_dir_all(&bak)?;
+        }
+        std::fs::rename(&dest, &bak)?;
+        match std::fs::rename(&tmp, &dest) {
+            Ok(()) => {
+                let _ = std::fs::remove_dir_all(&bak);
+            }
+            Err(e) => {
+                let _ = std::fs::rename(&bak, &dest);
+                return Err(anyhow!("publishing model: {e}"));
+            }
+        }
+    } else {
+        std::fs::rename(&tmp, &dest)?;
+    }
+
+    // Fresh model on disk → drop the cached engine so the next speak reloads it.
+    *ENGINE.lock() = None;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manifest_total_is_about_398mb() {
+        // Guards against a typo'd size silently weakening integrity checks.
+        let total = required_total();
+        assert!(total > 395_000_000 && total < 410_000_000, "unexpected total {total}");
+        assert_eq!(REQUIRED.len(), 16);
+    }
 
     #[test]
     fn custom_path_used_only_when_valid() {

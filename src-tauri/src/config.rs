@@ -136,6 +136,18 @@ impl Config {
             }
         }
     }
+
+    /// Write the config back to `~/.cenno/config.json`, creating `~/.cenno`
+    /// if needed. Pretty-printed so a human can keep hand-editing it. Used by
+    /// the settings window to persist Voice/TTS and defaults choices.
+    pub fn save(&self) -> Result<(), String> {
+        let path = config_path().ok_or_else(|| "could not resolve ~/.cenno".to_string())?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
+        }
+        let json = serde_json::to_string_pretty(self).map_err(|e| format!("serializing config: {e}"))?;
+        std::fs::write(&path, json).map_err(|e| format!("writing {}: {e}", path.display()))
+    }
 }
 
 /// Resolved, clamped panel geometry — built-in defaults overridden by config.
