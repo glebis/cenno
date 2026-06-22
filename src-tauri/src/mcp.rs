@@ -58,10 +58,18 @@ use crate::registry::PromptRegistry;
 /// byte-identical (PromptEvent drops the field via `skip_serializing_if`).
 pub type NotifyFn = Arc<dyn Fn(&str, &AskRequest, Option<SeqMeta>) + Send + Sync>;
 
+/// Type-erased "hide the panel now" callback. The Tauri layer wires this to
+/// emit a `dismiss-panel` event to the webview; tests pass a no-op. Used by the
+/// `dismiss_pending` tool so an agent driving a voice loop (it speaks via cenno,
+/// captures the answer via an external STT) can take the panel down the moment
+/// that answer lands, instead of waiting out the prompt's timeout.
+pub type DismissFn = Arc<dyn Fn() + Send + Sync>;
+
 #[derive(Clone)]
 pub struct CennoServer {
     registry: PromptRegistry,
     notify: NotifyFn,
+    dismiss: DismissFn,
     db: Option<Db>,
     /// Default prompt timeout (from `~/.cenno` config, else the built-in 120)
     /// applied when an agent omits `timeout_s`.
@@ -75,6 +83,7 @@ impl CennoServer {
     pub fn new(
         registry: PromptRegistry,
         notify: NotifyFn,
+        dismiss: DismissFn,
         db: Option<Db>,
         default_timeout_s: u64,
         routing: crate::routing::RoutingConfig,
@@ -82,6 +91,7 @@ impl CennoServer {
         Self {
             registry,
             notify,
+            dismiss,
             db,
             default_timeout_s,
             routing,
@@ -179,6 +189,31 @@ impl CennoServer {
         }
 
         Ok(serde_json::to_string(&resp).expect("AskResponse is always serializable"))
+    }
+
+    #[tool(
+        description = "Dismiss any currently-pending prompt(s) and hide the panel \
+                       immediately. Use this when you've shown a question via cenno but \
+                       captured the answer some other way (e.g. an external voice \
+                       dictation), so the panel doesn't linger until its timeout. Any \
+                       parked ask_user/ask_sequence call for a dismissed prompt returns \
+                       as if it timed out. Returns JSON: {dismissed: <count>}."
+    )]
+    async fn dismiss_pending(&self) -> Result<String, String> {
+        // Snapshot the ids first, then dismiss each — registry.dismiss unparks
+        // the awaiting ask() (it returns TimedOut). Hiding the panel is a
+        // separate concern: the webview shows on a `prompt` event and otherwise
+        // only hides on its own answer/timeout, so we must signal it explicitly.
+        let ids = self.registry.pending_ids();
+        let mut dismissed = 0;
+        for id in &ids {
+            if self.registry.dismiss(id) {
+                dismissed += 1;
+            }
+        }
+        // Tell the webview to take the panel down now (no-op in tests).
+        (self.dismiss)();
+        Ok(format!("{{\"dismissed\":{dismissed}}}"))
     }
 
     #[tool(
@@ -302,6 +337,7 @@ pub async fn start_socket_server(
     sock_path: PathBuf,
     registry: PromptRegistry,
     notify: impl Fn(&str, &AskRequest, Option<SeqMeta>) + Send + Sync + 'static,
+    dismiss: impl Fn() + Send + Sync + 'static,
     db: Option<Db>,
     default_timeout_s: u64,
     routing: crate::routing::RoutingConfig,
@@ -330,6 +366,7 @@ pub async fn start_socket_server(
     }
 
     let notify: NotifyFn = Arc::new(notify);
+    let dismiss: DismissFn = Arc::new(dismiss);
     tokio::spawn(async move {
         loop {
             let (stream, _) = match listener.accept().await {
@@ -345,6 +382,7 @@ pub async fn start_socket_server(
             let server = CennoServer::new(
                 registry.clone(),
                 notify.clone(),
+                dismiss.clone(),
                 db.clone(),
                 default_timeout_s,
                 routing.clone(),

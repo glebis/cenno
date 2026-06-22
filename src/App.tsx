@@ -191,6 +191,24 @@ function App() {
     };
   }, []);
 
+  // External dismiss: the `dismiss_pending` MCP tool already unparked the
+  // prompt(s) server-side and emits this event so the panel comes down now,
+  // instead of lingering until its timeout. Used by agent-driven voice loops
+  // that speak the question via cenno but capture the answer elsewhere (an
+  // external STT) — the panel hides the moment that answer lands.
+  useEffect(() => {
+    const unlisten = listen("dismiss-panel", () => {
+      hideGenerationRef.current += 1;
+      awaitingSwapRef.current = false;
+      setAnswered(false);
+      setActive(null);
+      void hideWindow();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   // Whenever a prompt reaches the screen — fresh, replayed, or pulled off the
   // queue — tell Rust it's shown so its timeout starts now, not when it was
   // received. A prompt waiting its turn in the queue thus can't expire before

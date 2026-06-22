@@ -18,15 +18,17 @@ function expectConfirmationShown() {
 // Shared, hoisted so the vi.mock factories (hoisted above imports) see them.
 const mocks = vi.hoisted(() => ({
   hide: vi.fn(() => Promise.resolve()),
-  // Captured `prompt` event listeners — tests push events through these.
-  listeners: [] as Array<(event: { payload: unknown }) => void>,
+  // Captured event listeners, keyed by event name — tests push `prompt` events
+  // through these. The App also listens for `dismiss-panel`; keying by name
+  // keeps emitPrompt from firing that (production `listen` filters by name too).
+  listeners: [] as Array<{ event: string; cb: (event: { payload: unknown }) => void }>,
   // What the pending_prompts command returns (per-test).
   pending: [] as unknown[],
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn((_event: string, cb: (event: { payload: unknown }) => void) => {
-    mocks.listeners.push(cb);
+  listen: vi.fn((event: string, cb: (event: { payload: unknown }) => void) => {
+    mocks.listeners.push({ event, cb });
     return Promise.resolve(() => {});
   }),
 }));
@@ -75,10 +77,12 @@ const seqEvent = (
   seq: { index, total, last },
 });
 
-/** Deliver a `prompt` event to the App's captured listener(s). */
+/** Deliver a `prompt` event to the App's captured `prompt` listener(s). */
 function emitPrompt(event: unknown) {
   act(() => {
-    for (const cb of mocks.listeners) cb({ payload: event });
+    for (const { event: name, cb } of mocks.listeners) {
+      if (name === "prompt") cb({ payload: event });
+    }
   });
 }
 
@@ -90,7 +94,9 @@ function emitPrompt(event: unknown) {
  * cleared the timer.
  */
 function emitPromptWithoutCommit(event: unknown) {
-  for (const cb of mocks.listeners) cb({ payload: event });
+  for (const { event: name, cb } of mocks.listeners) {
+    if (name === "prompt") cb({ payload: event });
+  }
 }
 
 /**

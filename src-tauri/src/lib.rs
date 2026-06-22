@@ -720,6 +720,17 @@ pub fn run() {
                         }
                         show_prompt_window(&handle);
                     },
+                    {
+                        // dismiss callback: tell the webview to take the panel
+                        // down now (the `dismiss_pending` MCP tool calls this
+                        // after unparking the prompt server-side).
+                        let handle = app_handle.clone();
+                        move || {
+                            if let Err(e) = handle.emit("dismiss-panel", ()) {
+                                eprintln!("cenno: failed to emit dismiss-panel: {e}");
+                            }
+                        }
+                    },
                     db,
                     default_timeout_s,
                     routing,
