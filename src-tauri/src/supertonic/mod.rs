@@ -108,11 +108,41 @@ fn synthesize(text: &str, voice: &str) -> Result<(Vec<f32>, i32)> {
     Ok((wav[..len].to_vec(), tts.sample_rate))
 }
 
+/// List the names of available audio output devices, for the settings picker.
+/// Best-effort: returns an empty list if the host can't be queried. Names are
+/// what `speak_blocking`'s `device` argument matches against.
+pub fn output_device_names() -> Vec<String> {
+    use rodio::cpal::traits::{DeviceTrait, HostTrait};
+    let host = rodio::cpal::default_host();
+    match host.output_devices() {
+        Ok(devices) => devices.filter_map(|d| d.name().ok()).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Open an output stream on the named device, falling back to the default when
+/// the name is absent or no longer matches a present device (e.g. unplugged).
+fn open_output(device: Option<&str>) -> Option<(OutputStream, rodio::OutputStreamHandle)> {
+    use rodio::cpal::traits::{DeviceTrait, HostTrait};
+    if let Some(name) = device.filter(|n| !n.is_empty()) {
+        let host = rodio::cpal::default_host();
+        if let Ok(mut devices) = host.output_devices() {
+            if let Some(dev) = devices.find(|d| d.name().map(|n| n == name).unwrap_or(false)) {
+                if let Ok(pair) = OutputStream::try_from_device(&dev) {
+                    return Some(pair);
+                }
+            }
+        }
+    }
+    OutputStream::try_default().ok()
+}
+
 /// Synthesize and play `text` on a blocking thread, returning once playback has
 /// *started* (not finished) so the async command doesn't block. Any superseding
 /// call or `stop()` interrupts the previous utterance. Errors propagate so the
-/// caller can fall back to AVSpeech.
-pub fn speak_blocking(text: &str, voice: &str) -> Result<()> {
+/// caller can fall back to AVSpeech. `device` names the output to play through
+/// (None → system default).
+pub fn speak_blocking(text: &str, voice: &str, device: Option<String>) -> Result<()> {
     let (samples, sample_rate) = synthesize(text, voice)?;
     // Stop a prior utterance before starting this one.
     if let Some(prev) = SINK.lock().take() {
@@ -120,7 +150,7 @@ pub fn speak_blocking(text: &str, voice: &str) -> Result<()> {
     }
     // Own the output stream on a dedicated thread; it must outlive playback.
     std::thread::spawn(move || {
-        let Ok((_stream, handle)) = OutputStream::try_default() else {
+        let Some((_stream, handle)) = open_output(device.as_deref()) else {
             return;
         };
         let Ok(sink) = Sink::try_new(&handle) else {
@@ -136,6 +166,19 @@ pub fn speak_blocking(text: &str, voice: &str) -> Result<()> {
             *slot = None;
         }
     });
+    Ok(())
+}
+
+/// Delete the managed model cache (`~/.cenno/models/supertonic-3`) so it can be
+/// re-downloaded. Only ever touches the default cache — never a user's custom
+/// `tts.model_path`. Drops the in-memory engine too, so the next synthesis (or
+/// re-download) starts from a clean slate. No-op if the cache is already gone.
+pub fn delete_model() -> Result<()> {
+    *ENGINE.lock() = None;
+    let dir = default_model_dir().ok_or_else(|| anyhow!("no home dir for ~/.cenno"))?;
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).with_context(|| format!("removing {}", dir.display()))?;
+    }
     Ok(())
 }
 

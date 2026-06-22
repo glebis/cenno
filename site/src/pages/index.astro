@@ -237,6 +237,29 @@ const panels = [
       </div>
     </section>
 
+    <!-- 3b · EMA — voice / sound-out -->
+    <section class="panel" id="voice" data-flow="ema" aria-label="Voice and sound-out">
+      <div class="panel-body reveal">
+        <p class="caption">Sound-out</p>
+        <h2>It can speak, too.</h2>
+        <p class="lede">When you're not looking at the screen, cenno reads the prompt aloud — then waits, the same as always.</p>
+        <ul class="voice-points">
+          <li>
+            <h3>On-device, private</h3>
+            <p>A neural voice (Supertonic) runs fully local — nothing is sent anywhere. Or use the fast built-in macOS voice. Ten voices to choose from.</p>
+          </li>
+          <li>
+            <h3>Only when it matters</h3>
+            <p>You set the bar: speak only high-urgency asks, or everything. The agent marks each prompt's <code>urgency</code>; a short <code>say</code> line is read instead of the full text.</p>
+          </li>
+          <li>
+            <h3>Your output, your voice</h3>
+            <p>Pick the voice and the audio output device. Off by default — turn it on in cenno's settings whenever you want an ear on your agents.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <!-- 4 · QUESTION — quickstart -->
     <section class="panel" id="wire" data-flow="question" aria-label="Quickstart">
       <div class="panel-body reveal">
@@ -861,6 +884,21 @@ const panels = [
         padding-top: var(--cenno-space-2);
         margin-bottom: var(--cenno-space-2);
       }
+
+      /* ——— voice / sound-out points ———————————————————————— */
+      .voice-points {
+        list-style: none; padding: 0;
+        margin-top: var(--cenno-space-4);
+        display: grid; gap: var(--cenno-space-4);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+      }
+      .voice-points li {
+        border-top: 1px solid var(--cenno-color-line);
+        padding-top: var(--cenno-space-2);
+      }
+      .voice-points h3 { margin-bottom: var(--cenno-space-1); }
+      .voice-points p { color: var(--cenno-color-text-dim); max-width: 36ch; }
+      .voice-points code { font-size: 15px; color: var(--cenno-color-text-default); }
 
       /* ——— code blocks ————————————————————————————————————— */
       .code-pair {

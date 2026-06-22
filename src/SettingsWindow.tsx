@@ -41,6 +41,7 @@ interface RawConfig {
     voice?: string;
     engine?: string;
     model_path?: string;
+    output_device?: string;
   };
   routing?: unknown;
   widgets?: unknown;
@@ -165,7 +166,7 @@ export default function SettingsWindow() {
     <div className="sw">
       <header className="sw__top">
         <div className="sw__brand">
-          <span className="sw__dot" />
+          <CennoMark />
           <span className="sw__title">cenno</span>
         </div>
         <nav className="sw__tabs">
@@ -285,6 +286,11 @@ function SettingsTab(props: {
             </select>
           </Field>
 
+          <OutputDevicePicker
+            value={tts.output_device ?? ""}
+            onChange={(v) => props.onPatchTts({ output_device: v || undefined })}
+          />
+
           <button className="sw__btn" onClick={props.onTest} disabled={props.testing}>
             {props.testing ? "Speaking…" : "▶ Test voice"}
           </button>
@@ -324,6 +330,42 @@ function SettingsTab(props: {
         </Field>
       </section>
     </>
+  );
+}
+
+/* ─────────────────────── Output device picker ─────────────────────── */
+
+function OutputDevicePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [devices, setDevices] = useState<string[]>([]);
+
+  useEffect(() => {
+    invoke<string[]>("list_audio_outputs")
+      .then(setDevices)
+      .catch(() => setDevices([]));
+  }, []);
+
+  // A previously-saved device that isn't currently present (unplugged) should
+  // still appear, so the user sees what's configured rather than a silent reset.
+  const options = value && !devices.includes(value) ? [value, ...devices] : devices;
+
+  return (
+    <Field label="Output device (Supertonic voice)">
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">System default output</option>
+        {options.map((d) => (
+          <option key={d} value={d}>
+            {d}
+            {value === d && !devices.includes(d) ? " (not connected)" : ""}
+          </option>
+        ))}
+      </select>
+    </Field>
   );
 }
 
@@ -386,11 +428,23 @@ function SupertonicModel({
     }
   }
 
+  async function deleteModel() {
+    setErr(null);
+    try {
+      await invoke("tts_delete_model");
+      refresh();
+    } catch (e) {
+      setErr(typeof e === "string" ? e : "delete failed");
+    }
+  }
+
   return (
     <div className="sw__model">
       <div className="sw__model-status">
         {status?.present ? (
-          <span className="sw__ok">✓ Voice model installed</span>
+          <span className="sw__ok">
+            ✓ Voice model installed{status.custom ? " (custom path)" : ` · ${sizeGb} GB`}
+          </span>
         ) : (
           <span className="sw__warn">
             Model not installed — Supertonic falls back to the system voice until
@@ -403,6 +457,17 @@ function SupertonicModel({
         <button className="sw__btn" onClick={download}>
           Download voice model (~{sizeGb} GB)
         </button>
+      )}
+
+      {status?.present && !status.custom && !downloading && (
+        <div className="sw__model-actions">
+          <button className="sw__btn sw__btn--ghost" onClick={deleteModel}>
+            Delete model
+          </button>
+          <button className="sw__btn sw__btn--ghost" onClick={download}>
+            Re-download
+          </button>
+        </div>
       )}
 
       {downloading && (
@@ -509,6 +574,21 @@ function AboutTab({ onOpen }: { onOpen: (url: string) => Promise<void> }) {
 }
 
 /* ───────────────────────────── Primitives ─────────────────────────── */
+
+// The cenno wordmark glyph from the site: an arc over a dot (a head nodding).
+function CennoMark() {
+  return (
+    <svg className="sw__mark" width="18" height="20" viewBox="0 0 22 20" aria-hidden="true">
+      <path
+        d="M 5.6874 7.5765 A 5.5 5.5 0 0 1 16.3126 7.5765"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+      />
+      <circle cx="11" cy="16.25" r="2.75" fill="currentColor" />
+    </svg>
+  );
+}
 
 function Toggle({
   label,

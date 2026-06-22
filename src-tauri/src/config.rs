@@ -99,6 +99,11 @@ pub struct TtsConfig {
     /// `voice_styles/`). Absent → the default `~/.cenno/models/supertonic-3`
     /// cache. An invalid path falls back to AVSpeech, never crashes.
     pub model_path: Option<String>,
+    /// Audio output device (by name) the spoken prompt plays through. Absent →
+    /// the system default output. Applies to the Supertonic engine; the system
+    /// engine (AVSpeech) always follows the macOS default output. An unknown
+    /// name falls back to the default device.
+    pub output_device: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

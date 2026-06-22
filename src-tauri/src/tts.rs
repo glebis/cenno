@@ -27,11 +27,13 @@ pub async fn tts_speak(text: String, voice: Option<String>) -> Result<(), String
         // Engine choice lives in ~/.cenno (default "system"). When "supertonic"
         // is selected, try the on-device neural backend; on any failure fall
         // through to AVSpeech so the user still hears the prompt.
-        let engine = crate::config::Config::load().tts.engine.unwrap_or_default();
+        let cfg = crate::config::Config::load();
+        let engine = cfg.tts.engine.clone().unwrap_or_default();
         if engine == "supertonic" && crate::supertonic::assets_present() {
             let style = voice.clone().filter(|v| !v.is_empty()).unwrap_or_else(|| "F3".to_string());
+            let device = cfg.tts.output_device.clone();
             let t = text.clone();
-            match tokio::task::spawn_blocking(move || crate::supertonic::speak_blocking(&t, &style)).await {
+            match tokio::task::spawn_blocking(move || crate::supertonic::speak_blocking(&t, &style, device)).await {
                 Ok(Ok(())) => return Ok(()),
                 Ok(Err(e)) => eprintln!("cenno: Supertonic failed ({e}); falling back to AVSpeech"),
                 Err(e) => eprintln!("cenno: Supertonic task panicked ({e}); falling back to AVSpeech"),
@@ -59,6 +61,20 @@ pub async fn tts_speak(text: String, voice: Option<String>) -> Result<(), String
 #[tauri::command]
 pub fn tts_model_status() -> crate::supertonic::ModelStatus {
     crate::supertonic::model_status()
+}
+
+/// Names of available audio output devices, for the settings "Output device"
+/// picker. Empty list → only the system default is offered.
+#[tauri::command]
+pub fn list_audio_outputs() -> Vec<String> {
+    crate::supertonic::output_device_names()
+}
+
+/// Delete the managed Supertonic model cache so it can be re-downloaded from
+/// settings. Only the default cache is removed, never a custom model_path.
+#[tauri::command]
+pub fn tts_delete_model() -> Result<(), String> {
+    crate::supertonic::delete_model().map_err(|e| format!("{e}"))
 }
 
 /// Download the managed Supertonic model into the cache, emitting

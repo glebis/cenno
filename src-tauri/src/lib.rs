@@ -477,7 +477,7 @@ pub fn open_settings_window(app: &tauri::AppHandle) {
         let _ = win.set_focus();
         return;
     }
-    let built = tauri::WebviewWindowBuilder::new(
+    let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         "settings",
         tauri::WebviewUrl::App("index.html".into()),
@@ -485,8 +485,19 @@ pub fn open_settings_window(app: &tauri::AppHandle) {
     .title("cenno")
     .inner_size(760.0, 620.0)
     .min_inner_size(560.0, 460.0)
-    .resizable(true)
-    .build();
+    .resizable(true);
+
+    // macOS: float the traffic lights over the webview so our own black header
+    // bar runs full-width behind them (like the reference app). The frontend
+    // pads the header left to clear the lights. Title text stays hidden.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    let built = builder.build();
     match built {
         Ok(win) => {
             let _ = win.set_focus();
@@ -742,7 +753,9 @@ pub fn run() {
             tts::tts_speak,
             tts::tts_stop,
             tts::tts_model_status,
-            tts::tts_download_model
+            tts::tts_download_model,
+            tts::list_audio_outputs,
+            tts::tts_delete_model
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
