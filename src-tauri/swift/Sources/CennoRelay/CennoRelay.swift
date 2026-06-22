@@ -16,6 +16,7 @@
 
 import CloudKit
 import Foundation
+import Security
 import os
 
 // MARK: - Constants
@@ -23,6 +24,22 @@ import os
 private let containerID = "iCloud.app.cenno"
 private let zoneName    = "Prompts"
 private let recordType  = "Prompt"
+
+// MARK: - CloudKit availability gate
+
+// Constructing CKContainer(identifier:) for a container the app isn't entitled
+// to raises an Objective-C exception that Swift `do/catch` cannot catch — it
+// traps and crashes the whole process. Ad-hoc/unsigned local builds have no
+// `com.apple.developer.icloud-container-identifiers` entitlement, so we must
+// check for it BEFORE ever touching CKContainer. Result is cached: entitlements
+// don't change over a process's lifetime.
+private let cloudKitAvailable: Bool = {
+    guard let task = SecTaskCreateFromSelf(nil) else { return false }
+    let key = "com.apple.developer.icloud-container-identifiers" as CFString
+    guard let value = SecTaskCopyValueForEntitlement(task, key, nil) else { return false }
+    if let ids = value as? [String] { return ids.contains(containerID) }
+    return false
+}()
 
 private var _zoneID: CKRecordZone.ID {
     CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
@@ -75,6 +92,12 @@ public func cenno_relay_write_prompt(
         print("[CennoRelay] write_prompt: missing required args")
         return
     }
+    // Skip entirely when the app isn't entitled for CloudKit — otherwise
+    // constructing the container traps (uncatchable) and crashes the app.
+    guard cloudKitAvailable else {
+        print("[CennoRelay] write_prompt(\(pid)) skipped: no CloudKit entitlement")
+        return
+    }
     let targetsStr = string(targets) ?? ""
     let now        = Date()
     let expires    = now.addingTimeInterval(TimeInterval(timeout_secs) + 30)
@@ -114,6 +137,10 @@ public func cenno_relay_update_state(
 ) {
     guard let pid = string(prompt_id), let state = string(state_cstr) else {
         print("[CennoRelay] update_state: missing required args")
+        return
+    }
+    guard cloudKitAvailable else {
+        print("[CennoRelay] update_state(\(pid)) skipped: no CloudKit entitlement")
         return
     }
     let answer = string(answer_json)
