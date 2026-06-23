@@ -32,6 +32,22 @@ const DESCRIPTION =
 
 const SKILL_URL = `${GITHUB}/tree/main/skills/cenno`;
 
+// Contact for the iPhone/Watch companion beta.
+const EMAIL = "glebis@gmail.com";
+// Public TestFlight invite. Empty until the link is issued — the beta block
+// shows email-only while blank, and reveals the TestFlight button once set.
+const TESTFLIGHT = "";
+
+// Supertonic voice demos, rendered offline by
+// src-tauri/examples/gen_voice_samples and converted to MP3 into /public/voices.
+// Two female + two male so visitors can hear the on-device neural voice.
+const VOICE_SAMPLES = [
+  { id: "F3", label: "Female · F3", file: "/voices/F3.mp3" },
+  { id: "F1", label: "Female · F1", file: "/voices/F1.mp3" },
+  { id: "M1", label: "Male · M1", file: "/voices/M1.mp3" },
+  { id: "M3", label: "Male · M3", file: "/voices/M3.mp3" },
+];
+
 const PROMPT_UX = `Install cenno if it isn't already:
   brew install --cask glebis/tap/cenno
   npx skills add glebis/claude-skills@cenno -g -y
@@ -70,10 +86,13 @@ const panels = [
   { id: "hero", flow: "mood", label: "Introduction" },
   { id: "panels", flow: "paper", label: "What it looks like" },
   { id: "how", flow: "reminder", label: "How it works" },
+  { id: "voice", flow: "ema", label: "Voice and sound-out" },
+  { id: "companion", flow: "mood", label: "iPhone and Apple Watch" },
   { id: "wire", flow: "question", label: "Quickstart" },
   { id: "agents", flow: "ema", label: "Getting started for agents" },
   { id: "data", flow: "reminder", label: "Privacy and policy" },
   { id: "dev", flow: "paper", label: "For developers" },
+  { id: "deck", flow: "question", label: "Presentation" },
   { id: "ship", flow: "ambient", label: "Download and links" },
 ];
 ---
@@ -255,9 +274,71 @@ const panels = [
           </li>
           <li>
             <h3>Your output, your voice</h3>
-            <p>Pick the voice and the audio output device. Off by default — turn it on in cenno's settings whenever you want an ear on your agents.</p>
+            <p>Pick the voice and the audio output device. <strong>Off by default</strong> — a single switch in cenno's settings turns it on (and off again) whenever you want an ear on your agents.</p>
           </li>
         </ul>
+
+        <figure class="voices">
+          <figcaption>Hear the on-device neural voice — male and female:</figcaption>
+          <div class="voice-grid">
+            {VOICE_SAMPLES.map((v) => (
+              <button class="voice-chip" type="button" data-audio={v.file} aria-label={`Play ${v.label} sample`}>
+                <span class="voice-play" aria-hidden="true">▶</span>
+                <span class="voice-label">{v.label}</span>
+              </button>
+            ))}
+          </div>
+          <p class="voice-note">Same line, ten styles in the app (F1–F5, M1–M5). Generated fully on your Mac — no cloud, no API key.</p>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 3c · MOOD — iPhone & Apple Watch companion (in TestFlight beta) -->
+    <section class="panel" id="companion" data-flow="mood" aria-label="iPhone and Apple Watch">
+      <div class="panel-body reveal">
+        <p class="caption">iPhone &amp; Apple Watch · in testing</p>
+        <h2>Answer from your wrist.</h2>
+        <p class="lede">
+          When you step away from the Mac, cenno can hand the question to your
+          phone or Watch. The agent asks once; you answer wherever you are, and
+          the result flows back the same way.
+        </p>
+        <div class="companion-shots">
+          <figure class="device device--phone">
+            <img src="/companion-iphone.png" alt="cenno companion on iPhone showing an agent prompt with answer buttons" width="320" height="660" loading="lazy" />
+            <figcaption>iPhone — the prompt arrives as a card; tap to answer.</figcaption>
+          </figure>
+          <figure class="device device--watch">
+            <img src="/companion-watch.png" alt="cenno companion on Apple Watch showing a compact prompt with choices" width="324" height="396" loading="lazy" />
+            <figcaption>Apple Watch — a glance and a tap.</figcaption>
+          </figure>
+        </div>
+        <ul class="voice-points companion-points">
+          <li>
+            <h3>Your iCloud, end to end</h3>
+            <p>Prompts travel through <em>your</em> private iCloud (CloudKit). The developer never sees them — same local-first promise as the Mac.</p>
+          </li>
+          <li>
+            <h3>You decide what routes where</h3>
+            <p>Per device: <strong>off</strong>, <strong>fallback</strong> (only if you don't answer on the Mac in time), or <strong>mirror</strong> (live). iPhone fallback by default; Watch off until you turn it on.</p>
+          </li>
+          <li>
+            <h3>Second-screen mode</h3>
+            <p>Park an old iPhone on your desk as an ambient display — it shows a quiet clock until an agent needs you, then lights up with the question.</p>
+          </li>
+        </ul>
+
+        <div class="beta-block" id="beta">
+          <h3>Want the iPhone &amp; Watch beta?</h3>
+          <p>The companion app is in <strong>TestFlight beta</strong> while the iCloud relay is tested. Email me and I'll add you.</p>
+          <div class="cta-row">
+            <a class="btn btn-solid" href={`mailto:${EMAIL}?subject=cenno%20companion%20beta&body=Hi%20Gleb%20%E2%80%94%20I%27d%20like%20to%20try%20the%20cenno%20iPhone%20%26%20Watch%20beta.`}>Email to join →</a>
+            {TESTFLIGHT && (
+              <a class="btn btn-ghost" href={TESTFLIGHT}>Open in TestFlight</a>
+            )}
+          </div>
+          <p class="fine">Beta requests: <a href={`mailto:${EMAIL}`}>{EMAIL}</a></p>
+        </div>
       </div>
     </section>
 
@@ -410,6 +491,21 @@ const panels = [
           <a href={`${GITHUB}/blob/main/CONTRIBUTING.md`}>CONTRIBUTING</a> before
           your first PR.
         </p>
+      </div>
+    </section>
+
+    <!-- 7b · QUESTION — the deck -->
+    <section class="panel" id="deck" data-flow="question" aria-label="Presentation">
+      <div class="panel-body reveal">
+        <p class="caption">Presentation</p>
+        <h2>The two-minute version.</h2>
+        <p class="lede">A slide walk-through of what cenno is, the input kinds, sound-out, and the iPhone &amp; Watch companion — built with reveal.js.</p>
+        <div class="deck-preview">
+          <iframe src="/deck.html" title="cenno presentation" loading="lazy"></iframe>
+        </div>
+        <div class="cta-row">
+          <a class="btn btn-solid" href="/deck.html">Open the presentation →</a>
+        </div>
       </div>
     </section>
 
@@ -618,6 +714,39 @@ const panels = [
           }
         });
       });
+
+      // Voice samples: one <audio> reused; clicking a chip plays its file and
+      // marks it active, stopping any other. A second click stops it.
+      const voiceChips = [...document.querySelectorAll(".voice-chip")];
+      if (voiceChips.length) {
+        const audio = new Audio();
+        let current = null;
+        const reset = () => {
+          voiceChips.forEach((c) => c.classList.remove("is-playing"));
+          current = null;
+        };
+        audio.addEventListener("ended", reset);
+        voiceChips.forEach((chip) => {
+          chip.addEventListener("click", () => {
+            const src = chip.getAttribute("data-audio");
+            if (current === chip) {
+              audio.pause();
+              reset();
+              return;
+            }
+            reset();
+            audio.src = src;
+            audio.currentTime = 0;
+            audio.play().then(() => {
+              chip.classList.add("is-playing");
+              current = chip;
+            }).catch(() => {
+              chip.classList.add("is-error");
+              setTimeout(() => chip.classList.remove("is-error"), 1500);
+            });
+          });
+        });
+      }
     </script>
 
     <style is:global>
@@ -902,6 +1031,80 @@ const panels = [
       .voice-points h3 { margin-bottom: var(--cenno-space-1); }
       .voice-points p { color: var(--cenno-color-text-dim); max-width: 36ch; }
       .voice-points code { font-size: 15px; color: var(--cenno-color-text-default); }
+
+      /* ——— voice samples ——————————————————————————————————— */
+      .voices { margin: var(--cenno-space-4) 0 0; }
+      .voices figcaption { color: var(--cenno-color-text-dim); margin-bottom: var(--cenno-space-2); }
+      .voice-grid {
+        display: grid; gap: var(--cenno-space-2);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+      }
+      .voice-chip {
+        display: flex; align-items: center; gap: var(--cenno-space-2);
+        padding: var(--cenno-space-2) var(--cenno-space-3);
+        border: 1px solid var(--cenno-color-line);
+        border-radius: var(--cenno-radius-control);
+        background: rgb(255 255 255 / 6%); color: inherit;
+        font: inherit; cursor: pointer; text-align: left;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+      .voice-chip:hover { background: rgb(255 255 255 / 12%); }
+      .voice-chip .voice-play {
+        display: grid; place-items: center;
+        width: 26px; height: 26px; flex: 0 0 26px;
+        border-radius: 50%; background: var(--cenno-color-paper);
+        color: var(--cenno-color-flow-ambient); font-size: 11px;
+      }
+      .voice-chip.is-playing { border-color: var(--cenno-color-paper); background: rgb(255 255 255 / 16%); }
+      .voice-chip.is-playing .voice-play::after { content: ""; }
+      .voice-chip.is-playing .voice-play { font-size: 0; }
+      .voice-chip.is-playing .voice-play::before { content: "❚❚"; font-size: 10px; }
+      .voice-chip.is-error .voice-play { background: #d66; }
+      .voice-label { font-size: 15px; }
+      .voice-note { margin-top: var(--cenno-space-2); color: var(--cenno-color-text-dim); max-width: 44ch; }
+
+      /* ——— companion (iPhone + Watch) ——————————————————————— */
+      .companion-shots {
+        display: flex; flex-wrap: wrap; gap: var(--cenno-space-4);
+        align-items: flex-end; margin: var(--cenno-space-4) 0;
+      }
+      .device { margin: 0; }
+      .device img {
+        display: block; height: auto; border-radius: 22px;
+        box-shadow: 0 18px 50px rgb(0 0 0 / 28%);
+        background: rgb(0 0 0 / 15%);
+      }
+      .device--phone img { width: clamp(180px, 42vw, 260px); }
+      .device--watch img { width: clamp(130px, 30vw, 190px); border-radius: 34px; }
+      .device figcaption { margin-top: var(--cenno-space-2); color: var(--cenno-color-text-dim); font-size: 15px; }
+      .companion-points { margin-top: var(--cenno-space-3); }
+
+      /* ——— beta / contact block ———————————————————————————— */
+      .beta-block {
+        margin-top: var(--cenno-space-5);
+        padding: var(--cenno-space-4);
+        border: 1px solid var(--cenno-color-line);
+        border-radius: var(--cenno-radius-control);
+        background: rgb(255 255 255 / 7%);
+      }
+      .beta-block h3 { margin-bottom: var(--cenno-space-1); }
+      .beta-block p { color: var(--cenno-color-text-dim); max-width: 48ch; }
+      .beta-block .cta-row { margin-top: var(--cenno-space-3); }
+      .beta-block .fine { margin-top: var(--cenno-space-2); }
+      .beta-block .fine a { color: inherit; }
+
+      /* ——— presentation preview ———————————————————————————— */
+      .deck-preview {
+        margin: var(--cenno-space-4) 0;
+        aspect-ratio: 16 / 9;
+        width: 100%;
+        border-radius: var(--cenno-radius-control);
+        overflow: hidden;
+        border: 1px solid var(--cenno-color-line);
+        box-shadow: 0 18px 50px rgb(0 0 0 / 22%);
+        background: #14171a;
+      }
+      .deck-preview iframe { width: 100%; height: 100%; border: 0; display: block; }
 
       /* ——— code blocks ————————————————————————————————————— */
       .code-pair {

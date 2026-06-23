@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cenno — presentation</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme" />
+    <style>
+      :root {
+        --coral: #ff5a46;
+        --teal: #2aa6a0;
+        --ink: #14171a;
+        --paper: #f7f3ee;
+      }
+      .reveal { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
+      .reveal .slides section { text-align: left; }
+      .reveal h1, .reveal h2 { font-weight: 700; letter-spacing: -0.02em; text-transform: none; }
+      .reveal h1 { font-size: 2.6em; }
+      .reveal h2 { font-size: 1.7em; }
+      .reveal em { color: var(--coral); font-style: normal; }
+      .reveal .muted { color: #9aa0a6; }
+      .reveal ul { line-height: 1.7; }
+      .reveal code {
+        background: rgb(255 255 255 / 8%); padding: 0.1em 0.4em; border-radius: 6px;
+        color: #ffd9d2;
+      }
+      .reveal section.coral { background: linear-gradient(160deg, #ff7a68, #ff5a46); }
+      .reveal section.teal { background: linear-gradient(160deg, #2fb3ac, #1f8f8a); }
+      .reveal section.coral *, .reveal section.teal * { color: #fff; }
+      .reveal section.coral code, .reveal section.teal code { background: rgb(0 0 0 / 18%); color: #fff; }
+      .nod { display: inline-block; width: 0.9em; height: 0.9em; vertical-align: -0.05em; }
+      .kicker { font-size: 0.7em; letter-spacing: 0.18em; text-transform: uppercase; color: var(--coral); }
+      .teal .kicker, .coral .kicker { color: rgb(255 255 255 / 0.85); }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6em 1.4em; font-size: 0.85em; }
+    </style>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section class="coral" data-auto-animate>
+          <p class="kicker">cenno · un cenno</p>
+          <h1 data-id="t">agents ask.<br />you answer.</h1>
+          <p>A macOS menu-bar app that lets AI agents ask you questions through
+            small floating panels — without stealing your focus.</p>
+        </section>
+
+        <section>
+          <p class="kicker">the problem</p>
+          <h2>Agents are blind to you</h2>
+          <ul>
+            <li>They guess instead of asking.</li>
+            <li>Or they block a terminal you're not watching.</li>
+            <li>Or they interrupt and steal your keyboard.</li>
+          </ul>
+          <p class="muted">There was no <em>polite</em> way for an agent to reach a human.</p>
+        </section>
+
+        <section>
+          <p class="kicker">the interaction</p>
+          <h2>One small sign</h2>
+          <p>The agent calls <code>ask_user</code> over MCP. A non-activating panel
+            slides in. You glance, tap or type, and the agent gets
+            <code>{answer, via, elapsed_s}</code> — structured data, not parsed text.</p>
+          <p class="muted"><em>Fare un cenno</em> — Italian: to give a small sign, a nod.</p>
+        </section>
+
+        <section>
+          <p class="kicker">vocabulary</p>
+          <h2>Ask anything</h2>
+          <div class="grid">
+            <div><strong>choice</strong><br /><span class="muted">pick one of N</span></div>
+            <div><strong>scale</strong><br /><span class="muted">a 1–7 rating</span></div>
+            <div><strong>confirm</strong><br /><span class="muted">yes / no</span></div>
+            <div><strong>text · voice</strong><br /><span class="muted">type or dictate</span></div>
+            <div><strong>ask_sequence</strong><br /><span class="muted">multi-step in one panel</span></div>
+            <div><strong>custom widgets</strong><br /><span class="muted">A2UI layouts</span></div>
+          </div>
+        </section>
+
+        <section class="teal">
+          <p class="kicker">sound-out</p>
+          <h2>It can speak, too</h2>
+          <ul>
+            <li>Reads the prompt aloud when you're not looking.</li>
+            <li>On-device neural voice (Supertonic) — 10 styles, male &amp; female.</li>
+            <li>Urgency-gated. <strong>Off by default</strong>; one switch to enable.</li>
+          </ul>
+        </section>
+
+        <section class="coral">
+          <p class="kicker">iPhone &amp; Apple Watch · in testing</p>
+          <h2>Answer from your wrist</h2>
+          <ul>
+            <li>Prompts route to your phone or Watch when you step away.</li>
+            <li>Through <em>your</em> private iCloud — the developer never sees them.</li>
+            <li>Per-device: off · fallback · mirror. Second-screen ambient mode.</li>
+          </ul>
+        </section>
+
+        <section>
+          <p class="kicker">yours, locally</p>
+          <h2>Local-first by default</h2>
+          <ul>
+            <li>Every exchange stored in a local SQLite DB you own.</li>
+            <li><code>cenno export</code> to JSON/CSV anytime.</li>
+            <li>Free &amp; open source · Apache-2.0 · signed &amp; notarized.</li>
+          </ul>
+        </section>
+
+        <section class="coral" data-auto-animate>
+          <h1 data-id="t">Try it</h1>
+          <p><code>brew install --cask glebis/tap/cenno</code></p>
+          <p>cenno.salient.community · github.com/glebis/cenno</p>
+        </section>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+    <script>
+      Reveal.initialize({
+        hash: true,
+        transition: "slide",
+        controls: true,
+        progress: true,
+        slideNumber: "c/t",
+      });
+    </script>
+  </body>
+</html>

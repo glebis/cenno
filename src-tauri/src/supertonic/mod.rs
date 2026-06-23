@@ -108,6 +108,15 @@ fn synthesize(text: &str, voice: &str) -> Result<(Vec<f32>, i32)> {
     Ok((wav[..len].to_vec(), tts.sample_rate))
 }
 
+/// Synthesize `text` in voice style `voice` (e.g. "F3", "M1") and write a
+/// 16-bit mono WAV to `out`. Offline helper for generating sample audio (the
+/// website's voice demos) with the same on-device engine + model as live
+/// playback. See `examples/gen_voice_samples.rs`.
+pub fn synth_to_wav(text: &str, voice: &str, out: impl AsRef<std::path::Path>) -> Result<()> {
+    let (samples, sample_rate) = synthesize(text, voice)?;
+    helper::write_wav_file(out, &samples, sample_rate)
+}
+
 /// List the names of available audio output devices, for the settings picker.
 /// Best-effort: returns an empty list if the host can't be queried. Names are
 /// what `speak_blocking`'s `device` argument matches against.
