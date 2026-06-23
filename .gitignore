@@ -37,3 +37,6 @@ companion/build/
 .dolt/
 *.db
 .beads-credential-key
+
+# Local release env loader (identifiers only; password typed live, never stored)
+scripts/.release-env.local.sh
