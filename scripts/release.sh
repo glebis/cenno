@@ -194,4 +194,21 @@ sleep 3
 curl -sL "https://github.com/$REPO/releases/latest/download/latest.json" \
   | node -e "const d=JSON.parse(require('fs').readFileSync(0));console.log('live version:',d.version)"
 
+# --- Deploy the marketing site ----------------------------------------------
+# site/ (Astro, Vercel project 'cenno') resolves the download link + version
+# from the releases/latest API at BUILD time, so it must be redeployed AFTER the
+# GitHub release exists. A git push does NOT auto-deploy this project. Skippable
+# with SKIP_SITE_DEPLOY=1 (e.g. if the Vercel CLI isn't authed on this machine).
+if [[ "${SKIP_SITE_DEPLOY:-0}" == "1" ]]; then
+  echo "==> SKIP_SITE_DEPLOY=1 — not deploying site (run 'cd site && vercel --prod' yourself)"
+elif command -v vercel >/dev/null 2>&1; then
+  echo "==> deploying site to production (refreshes download link to $TAG)"
+  ( cd site && vercel --prod --yes >/dev/null ) \
+    && echo "    site deployed: https://cenno.salient.community/" \
+    || echo "    warning: site deploy failed — run 'cd site && vercel --prod' manually" >&2
+else
+  echo "==> vercel CLI not found — deploy the site manually so its download link" >&2
+  echo "    updates to $TAG: cd site && vercel --prod" >&2
+fi
+
 echo "==> done: https://github.com/$REPO/releases/tag/$TAG"
