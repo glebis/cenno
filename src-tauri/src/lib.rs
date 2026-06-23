@@ -225,6 +225,16 @@ fn mark_shown(state: tauri::State<PromptRegistry>, id: String) {
     state.mark_shown(&id);
 }
 
+/// Keep-alive from the panel while the user is editing a field (or just stopped):
+/// floor the prompt's deadline at `now + secs` so it never expires mid-typing and
+/// gets a think-window after. Only extends (never shortens the agent budget) — see
+/// PromptRegistry::keepalive. Called on focus/input (long floor) and blur (short
+/// floor) so typed answers are never lost to a timeout.
+#[tauri::command]
+fn keepalive(state: tauri::State<PromptRegistry>, id: String, secs: u64) {
+    state.keepalive(&id, secs);
+}
+
 /// Startup decision for launch-at-login: `(enabled, persist_default)`.
 /// Pure — the actual plugin call is glue (see `reconcile_launch_at_login`).
 ///
@@ -750,6 +760,7 @@ pub fn run() {
             answer_prompt,
             dismiss_prompt,
             mark_shown,
+            keepalive,
             pending_prompts,
             resize_panel,
             get_user_config,

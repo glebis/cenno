@@ -34,9 +34,30 @@ struct Pending {
     /// pending() treats an unshown prompt as fully answerable with its whole
     /// budget remaining.
     deadline: Option<Instant>,
+    /// Interaction floor: while the user is editing a field the webview pushes
+    /// this forward (keep-alive) so the prompt never expires mid-typing and gets
+    /// a think-window after they stop. The EFFECTIVE deadline is
+    /// `max(deadline, min_deadline)`, so a keep-alive only ever EXTENDS — it can
+    /// never shorten the agent's own budget. `None` until the user interacts.
+    min_deadline: Option<Instant>,
     /// Notifies the parked ask() the instant the prompt is first shown, so it
     /// can start its timeout from that moment.
     shown: Arc<Notify>,
+    /// Notifies the parked ask() when `min_deadline` moves (keep-alive), so it
+    /// recomputes its sleep against the new effective deadline.
+    extend: Arc<Notify>,
+}
+
+impl Pending {
+    /// The effective expiry: the later of the agent budget and the interaction
+    /// floor. `None` only while still unshown (no clock running yet).
+    fn effective_deadline(&self) -> Option<Instant> {
+        match (self.deadline, self.min_deadline) {
+            (Some(d), Some(m)) => Some(d.max(m)),
+            (d, None) => d,
+            (None, m) => m,
+        }
+    }
 }
 
 impl Default for PromptRegistry {
@@ -66,9 +87,18 @@ impl PromptRegistry {
         let (tx, mut rx) = oneshot::channel();
         let timeout = Duration::from_secs(req.timeout_secs(None));
         let shown = Arc::new(Notify::new());
+        let extend = Arc::new(Notify::new());
         self.inner.lock().insert(
             id.clone(),
-            Pending { tx: Some(tx), request: req.clone(), timeout, deadline: None, shown: shown.clone() },
+            Pending {
+                tx: Some(tx),
+                request: req.clone(),
+                timeout,
+                deadline: None,
+                min_deadline: None,
+                shown: shown.clone(),
+                extend: extend.clone(),
+            },
         );
         notify(&id, &req);
         let started = Instant::now();
@@ -93,14 +123,68 @@ impl PromptRegistry {
             }
         }
 
-        // Phase 2 — shown: wait for the answer on the now-running budget.
-        match tokio::time::timeout(timeout, rx).await {
-            Ok(Ok((answer, via))) => {
-                self.inner.lock().remove(&id);
-                AskResponse::Answered { answer, via, elapsed_s: started.elapsed().as_secs_f64() }
+        // Phase 2 — shown: wait for the answer against an EFFECTIVE deadline the
+        // user's interaction can push back (keep-alive while editing). Re-arm in
+        // a loop: each tick sleeps until the current effective deadline, but a
+        // keep-alive (`extend`) wakes us early to recompute, and a real expiry
+        // re-checks under the lock before giving up (the floor may have moved in
+        // the race). This is what stops a prompt from vanishing mid-typing.
+        loop {
+            let effective = self
+                .inner
+                .lock()
+                .get(&id)
+                .and_then(Pending::effective_deadline);
+            let Some(deadline) = effective else {
+                // Prompt vanished from the map (resolved/removed elsewhere).
+                return AskResponse::TimedOut { answered: false, prompt_id: id };
+            };
+            let now = Instant::now();
+            let sleep_for = deadline.saturating_duration_since(now);
+            tokio::select! {
+                res = &mut rx => {
+                    self.inner.lock().remove(&id);
+                    return match res {
+                        Ok((answer, via)) => AskResponse::Answered {
+                            answer, via, elapsed_s: started.elapsed().as_secs_f64(),
+                        },
+                        // Sender dropped by dismiss() → TimedOut wire shape.
+                        Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
+                    };
+                }
+                _ = tokio::time::sleep(sleep_for) => {
+                    // Reached the deadline — but a keep-alive may have pushed the
+                    // floor out in the gap. Only give up if it's REALLY expired.
+                    let still_expired = self
+                        .inner
+                        .lock()
+                        .get(&id)
+                        .and_then(Pending::effective_deadline)
+                        .is_none_or(|d| Instant::now() >= d);
+                    if still_expired {
+                        return AskResponse::TimedOut { answered: false, prompt_id: id };
+                    }
+                    // Floor moved — loop and re-arm against the new deadline.
+                }
+                _ = extend.notified() => { /* keep-alive: re-arm against new floor */ }
             }
-            // Err(Elapsed) = real timeout; Ok(Err(RecvError)) = sender dropped by dismiss(); both → TimedOut
-            _ => AskResponse::TimedOut { answered: false, prompt_id: id },
+        }
+    }
+
+    /// Keep-alive from the webview: floor the prompt's effective deadline at
+    /// `now + secs` because the user is editing (or just stopped). Only EXTENDS
+    /// the effective deadline — `effective_deadline()` takes the max with the
+    /// agent's own budget, so this can never shorten the agent's timeout. A
+    /// no-op for an unknown, unshown, or already-resolved prompt. Wakes the
+    /// parked `ask()` so it re-arms immediately.
+    pub fn keepalive(&self, id: &str, secs: u64) {
+        let mut map = self.inner.lock();
+        if let Some(p) = map.get_mut(id) {
+            // Only meaningful once shown (clock running) and still answerable.
+            if p.deadline.is_some() && p.tx.is_some() {
+                p.min_deadline = Some(Instant::now() + Duration::from_secs(secs));
+                p.extend.notify_one();
+            }
         }
     }
 

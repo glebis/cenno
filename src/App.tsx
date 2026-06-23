@@ -75,6 +75,14 @@ export const ANSWERED_LINGER_MS = 900;
 // immediately, which would instantly hide a long-timeout prompt.
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
+// Keep-alive floors (seconds). While the user is editing a text field the panel
+// must NOT time out from under them — each keystroke/focus floors the deadline
+// well into the future; when they stop (blur) it relaxes to a think-window. The
+// effective deadline is always max(agent budget, this floor), so keep-alive only
+// ever extends — it can never cut an agent's own longer timeout short.
+const KEEPALIVE_EDIT_S = 600; // actively editing → effectively never expires
+const KEEPALIVE_IDLE_S = 45; // stopped editing → at least this long to think
+
 async function hideWindow() {
   try {
     // hide() = orderOut: — the correct counterpart to the Rust side's
@@ -101,6 +109,13 @@ function App() {
   // hideWindow() would land AFTER the show, leaving live content in an
   // invisible window.
   const hideGenerationRef = useRef(0);
+  // Wall-clock (ms) when the current prompt reached the screen, and an
+  // interaction floor the user's typing pushes forward. The auto-hide timer
+  // expires at max(shownAt + budget, interactionFloor). A nonce re-arms that
+  // timer the instant a keep-alive moves the floor.
+  const shownAtRef = useRef(0);
+  const interactionFloorRef = useRef(0);
+  const [keepaliveTick, setKeepaliveTick] = useState(0);
   // Render-synced mirrors so the `prompt` listener (created once) can read the
   // latest state without re-subscribing.
   const activeRef = useRef<ActivePrompt | null>(null);
@@ -221,6 +236,10 @@ function App() {
     }
     if (shownIdRef.current === active.prompt.id) return;
     shownIdRef.current = active.prompt.id;
+    // New prompt on screen: anchor its budget clock and clear any stale
+    // interaction floor carried over from the previous prompt.
+    shownAtRef.current = Date.now();
+    interactionFloorRef.current = 0;
     invoke("mark_shown", { id: active.prompt.id }).catch((e) =>
       console.error("mark_shown failed:", e),
     );
@@ -233,16 +252,74 @@ function App() {
   useEffect(() => {
     if (!active || answered) return;
     const generation = hideGenerationRef.current;
-    const timer = setTimeout(() => {
-      // A newer prompt was installed after this timer was armed (and before
-      // cleanup could clear it) — hiding now would hide THAT prompt.
+    // The agent's own budget, anchored to when this prompt reached the screen.
+    const budgetDeadline = shownAtRef.current + active.remainingS * 1000;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Self-rescheduling: each tick re-reads the interaction floor, so a
+    // keystroke that pushed the floor out (and bumped keepaliveTick to re-run
+    // this effect) keeps the panel up instead of hiding mid-typing.
+    const tick = () => {
+      // A newer prompt was installed after this timer was armed — hiding now
+      // would hide THAT prompt.
       if (hideGenerationRef.current !== generation) return;
-      // This prompt timed out server-side too; show the next queued one (or
-      // hide if none) rather than just hiding.
-      void advanceOrHide();
-    }, Math.min(active.remainingS * 1000, MAX_TIMEOUT_MS));
-    return () => clearTimeout(timer);
-  }, [active, answered]);
+      const deadline = Math.max(budgetDeadline, interactionFloorRef.current);
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        // Timed out (and the user isn't mid-edit): show the next queued prompt
+        // or hide. The Rust side honors the same keep-alive floor, so a
+        // delivered answer still resolves up to this moment.
+        void advanceOrHide();
+        return;
+      }
+      timer = setTimeout(tick, Math.min(left, MAX_TIMEOUT_MS));
+    };
+    tick();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [active, answered, keepaliveTick]);
+
+  // Keep-alive: never let the panel time out while the user is editing a text
+  // field, and give them a think-window after they stop. Any input/focus floors
+  // the deadline far out; blur relaxes it to ~45s. Each move also tells Rust
+  // (so the parked ask() doesn't expire) and re-arms the hide timer above.
+  useEffect(() => {
+    if (!active) return;
+    const id = active.prompt.id;
+    const root = document.getElementById("root") ?? document.body;
+    const isTextEntry = (el: EventTarget | null) =>
+      el instanceof HTMLElement &&
+      (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    const floor = (secs: number) => {
+      interactionFloorRef.current = Date.now() + secs * 1000;
+      setKeepaliveTick((t) => t + 1);
+      void invoke("keepalive", { id, secs }).catch(() => {});
+    };
+    const onEdit = (e: Event) => {
+      if (!isTextEntry(e.target)) return;
+      floor(KEEPALIVE_EDIT_S);
+      // Safety net: persist the in-progress text per prompt so it survives even
+      // an unexpected teardown. Cleared once the prompt is answered/dismissed.
+      const el = e.target as HTMLInputElement & HTMLElement;
+      try {
+        const v = typeof el.value === "string" ? el.value : el.textContent ?? "";
+        if (v) localStorage.setItem(`cenno-draft-${id}`, v);
+      } catch {
+        /* storage unavailable — keep-alive still protects the live field */
+      }
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      if (isTextEntry(e.target)) floor(KEEPALIVE_IDLE_S);
+    };
+    root.addEventListener("input", onEdit, true);
+    root.addEventListener("focusin", onEdit, true);
+    root.addEventListener("focusout", onFocusOut, true);
+    return () => {
+      root.removeEventListener("input", onEdit, true);
+      root.removeEventListener("focusin", onEdit, true);
+      root.removeEventListener("focusout", onFocusOut, true);
+    };
+  }, [active]);
 
   // Answered linger: keep the surface up with a quiet confirmation, then
   // hide. Never unmount straight to a blank window — that was the
@@ -272,6 +349,12 @@ function App() {
       // Prompt already timed out (or unknown id) — the agent never saw this
       // answer. Skeleton behavior: log it, still confirm-and-hide.
       console.warn(`prompt ${id} already expired; answer was not delivered`);
+    }
+    // Answered → the saved draft is no longer needed.
+    try {
+      localStorage.removeItem(`cenno-draft-${id}`);
+    } catch {
+      /* storage unavailable */
     }
     // Mid-sequence step (ask_sequence, not the last): do NOT hide and do NOT
     // run the "noted." linger. The Rust loop fires the next registry.ask the
@@ -309,6 +392,12 @@ function App() {
   // of fighting this teardown.
   async function handleDismiss(id: string) {
     hideGenerationRef.current += 1;
+    // The user took the panel down themselves — drop the saved draft.
+    try {
+      localStorage.removeItem(`cenno-draft-${id}`);
+    } catch {
+      /* storage unavailable */
+    }
     try {
       await invoke<boolean>("dismiss_prompt", { id });
     } catch (e) {

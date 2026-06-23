@@ -8,6 +8,13 @@ All notable changes to cenno are documented here. The format follows
 
 ### Fixed
 
+- **The panel no longer times out while you're typing — and never loses your
+  text.** Editing a field now holds the prompt open (the deadline is pushed far
+  out on every keystroke), and after you stop you get at least a 45-second
+  think-window before it can expire. The keep-alive reaches the agent side too,
+  so a late answer still delivers, and in-progress text is saved as a draft as a
+  safety net. Previously a prompt could close mid-edit and discard what you'd
+  typed.
 - **Voice-out (sound-out) stayed silent after you turned it on.** The prompt
   panel decided whether to speak using the config loaded at app launch, so
   enabling or retuning voice-out in Settings did nothing until a restart —
