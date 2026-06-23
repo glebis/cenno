@@ -214,7 +214,7 @@ const panels = [
       <div class="panel-body reveal">
         <p class="caption">What it looks like</p>
         <h2>One question per screen.<br />The answer is the interface.</h2>
-        <div class="shots">
+        <div class="shots" data-stagger>
           <figure>
             <img src="/qa-mood.png" alt="cenno mood check-in panel: 'How are you feeling right now?' over a coral background with five mood words" width="840" height="480" loading="lazy" />
             <figcaption>A mood check-in. Tap a word, done.</figcaption>
@@ -237,7 +237,7 @@ const panels = [
       <div class="panel-body reveal">
         <p class="caption">How it works</p>
         <h2>Three small signs.</h2>
-        <ol class="steps">
+        <ol class="steps" data-stagger>
           <li>
             <span class="step-n">01</span>
             <h3>The agent asks</h3>
@@ -263,7 +263,7 @@ const panels = [
         <p class="caption">Sound-out</p>
         <h2>It can speak, too.</h2>
         <p class="lede">When you're not looking at the screen, cenno reads the prompt aloud — then waits, the same as always.</p>
-        <ul class="voice-points">
+        <ul class="voice-points" data-stagger>
           <li>
             <h3>On-device, private</h3>
             <p>A neural voice (Supertonic) runs fully local — nothing is sent anywhere. Or use the fast built-in macOS voice. Ten voices to choose from.</p>
@@ -280,7 +280,7 @@ const panels = [
 
         <figure class="voices">
           <figcaption>Hear the on-device neural voice — male and female:</figcaption>
-          <div class="voice-grid">
+          <div class="voice-grid" data-stagger>
             {VOICE_SAMPLES.map((v) => (
               <button class="voice-chip" type="button" data-audio={v.file} aria-label={`Play ${v.label} sample`}>
                 <span class="voice-play" aria-hidden="true">▶</span>
@@ -303,7 +303,7 @@ const panels = [
           phone or Watch. The agent asks once; you answer wherever you are, and
           the result flows back the same way.
         </p>
-        <div class="companion-shots">
+        <div class="companion-shots" data-stagger>
           <figure class="device device--phone">
             <img src="/companion-iphone.png" alt="cenno companion on iPhone showing an agent prompt with answer buttons" width="320" height="660" loading="lazy" />
             <figcaption>iPhone — the prompt arrives as a card; tap to answer.</figcaption>
@@ -313,7 +313,7 @@ const panels = [
             <figcaption>Apple Watch — a glance and a tap.</figcaption>
           </figure>
         </div>
-        <ul class="voice-points companion-points">
+        <ul class="voice-points companion-points" data-stagger>
           <li>
             <h3>Your iCloud, end to end</h3>
             <p>Prompts travel through <em>your</em> private iCloud (CloudKit). The developer never sees them — same local-first promise as the Mac.</p>
@@ -499,12 +499,34 @@ const panels = [
       <div class="panel-body reveal">
         <p class="caption">Presentation</p>
         <h2>The two-minute version.</h2>
-        <p class="lede">A slide walk-through of what cenno is, the input kinds, sound-out, and the iPhone &amp; Watch companion — built with reveal.js.</p>
-        <div class="deck-preview">
-          <iframe src="/deck.html" title="cenno presentation" loading="lazy"></iframe>
+        <p class="lede">A slide walk-through of cenno — what it is, the input kinds, sound-out, and the iPhone &amp; Watch companion. Built with reveal.js.</p>
+
+        <a class="slide slide--feature slide--coral" href="/deck.html" aria-label="Open the cenno presentation">
+          <span class="slide-no">01 · cenno</span>
+          <span class="slide-h">agents ask.<br />you answer.</span>
+          <span class="slide-sub">A polite way for AI agents to reach a human — without stealing your focus.</span>
+        </a>
+
+        <div class="slide-strip" data-stagger>
+          <a class="slide slide--ink" href="/deck.html#/3">
+            <span class="slide-no">02 · ASK</span>
+            <span class="slide-h">One panel,<br />any question.</span>
+            <span class="slide-sub">choice · scale · confirm · text · voice</span>
+          </a>
+          <a class="slide slide--teal" href="/deck.html#/4">
+            <span class="slide-no">03 · SOUND-OUT</span>
+            <span class="slide-h">It speaks, too.</span>
+            <span class="slide-sub">On-device neural voice · off by default</span>
+          </a>
+          <a class="slide slide--paper" href="/deck.html#/5">
+            <span class="slide-no">04 · COMPANION</span>
+            <span class="slide-h">Phone &amp; Watch.</span>
+            <span class="slide-sub">iPhone &amp; Apple Watch · in testing</span>
+          </a>
         </div>
+
         <div class="cta-row">
-          <a class="btn btn-solid" href="/deck.html">Open the presentation →</a>
+          <a class="btn btn-solid" href="/deck.html">Open the full presentation →</a>
         </div>
       </div>
     </section>
@@ -591,6 +613,15 @@ const panels = [
         { threshold: 0.2 }
       );
       document.querySelectorAll(".reveal").forEach((el) => revealer.observe(el));
+
+      // Staggered groups: pre-index children so each arrives a beat after the
+      // last when the group scrolls into view (CSS reads --i for the delay).
+      document.querySelectorAll("[data-stagger]").forEach((group) => {
+        Array.from(group.children).forEach((child, i) =>
+          (child as HTMLElement).style.setProperty("--i", String(i)),
+        );
+        revealer.observe(group);
+      });
 
       // ——— interactive demo: a four-question preference interview ———
       type Scene = {
@@ -963,10 +994,10 @@ const panels = [
         font-weight: var(--cenno-font-weight-question);
         text-decoration: none;
         cursor: pointer;
-        transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s;
+        transition: transform 0.28s var(--ease-out-expo), box-shadow 0.28s var(--ease-out-quart), opacity 0.2s;
       }
-      .btn:hover { transform: translateY(-2px); }
-      .btn:active { transform: translateY(0); }
+      .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgb(20 23 26 / 16%); }
+      .btn:active { transform: translateY(-1px) scale(0.975); transition-duration: 0.12s; }
       .btn-solid { background: var(--cenno-color-text-default); color: var(--cenno-color-flow-ambient); border: 0; }
       .btn-ghost {
         background: transparent; color: inherit;
@@ -1093,18 +1124,47 @@ const panels = [
       .beta-block .fine { margin-top: var(--cenno-space-2); }
       .beta-block .fine a { color: inherit; }
 
-      /* ——— presentation preview ———————————————————————————— */
-      .deck-preview {
-        margin: var(--cenno-space-4) 0;
-        aspect-ratio: 16 / 9;
-        width: 100%;
-        border-radius: var(--cenno-radius-control);
-        overflow: hidden;
-        border: 1px solid var(--cenno-color-line);
-        box-shadow: 0 18px 50px rgb(0 0 0 / 22%);
-        background: #14171a;
+      /* ——— presentation preview (slide cards) ——————————————— */
+      .slide {
+        display: flex; flex-direction: column; justify-content: flex-end;
+        text-decoration: none; border-radius: 18px;
+        padding: clamp(20px, 3vw, 32px);
+        min-height: 180px; position: relative; overflow: hidden;
+        border: 1px solid rgb(0 0 0 / 8%);
+        transition: transform 0.18s ease, box-shadow 0.18s ease;
       }
-      .deck-preview iframe { width: 100%; height: 100%; border: 0; display: block; }
+      .slide:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgb(0 0 0 / 22%); }
+      .slide-no {
+        font-family: var(--cenno-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+        font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+        opacity: 0.62; margin-bottom: auto;
+      }
+      .slide-h {
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 700; line-height: 1.05; letter-spacing: -0.01em;
+        font-size: clamp(26px, 3.4vw, 40px); margin: 0.5em 0 0.3em;
+      }
+      .slide-sub { font-size: 14px; opacity: 0.78; max-width: 32ch; }
+
+      .slide--feature {
+        margin: var(--cenno-space-4) 0 var(--cenno-space-3);
+        min-height: clamp(280px, 34vw, 420px);
+        box-shadow: 0 20px 56px rgb(0 0 0 / 26%);
+      }
+      .slide--feature .slide-h { font-size: clamp(40px, 6vw, 76px); }
+      .slide--feature .slide-sub { font-size: 16px; max-width: 44ch; }
+
+      .slide-strip {
+        display: grid; gap: var(--cenno-space-3);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+      }
+
+      .slide--coral { background: linear-gradient(155deg, #ff7a68, #ff5a46); color: #fff; }
+      .slide--ink   { background: #14171a; color: #f3efea; }
+      .slide--teal  { background: linear-gradient(155deg, #129e8c, #0e7c6b); color: #fff; }
+      .slide--paper { background: #faf8f5; color: #14171a; border-color: rgb(0 0 0 / 12%); }
+      .slide--paper .slide-no { opacity: 0.5; }
+      .slide--coral .slide-no, .slide--teal .slide-no, .slide--ink .slide-no { color: rgb(255 255 255 / 0.85); }
 
       /* ——— code blocks ————————————————————————————————————— */
       .code-pair {
@@ -1225,6 +1285,7 @@ const panels = [
       /* ——— motion: the mark beckons, content answers ———————— */
       :root {
         --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+        --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
         --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
       }
       @keyframes draw-arc {
@@ -1258,16 +1319,37 @@ const panels = [
         transition: opacity 0.6s var(--ease-out-quart), transform 0.6s var(--ease-out-quart);
       }
       .reveal.in { opacity: 1; transform: none; }
-      .copy-hint { transition: color 0.2s; }
+
+      /* Staggered child reveals — within a revealed block, items arrive in
+         sequence (like a deck laid down one card at a time). JS sets --i. */
+      [data-stagger] > * {
+        opacity: 0;
+        transform: translateY(14px);
+        transition: opacity 0.55s var(--ease-out-quint), transform 0.55s var(--ease-out-quint);
+        transition-delay: calc(var(--i, 0) * 0.065s);
+      }
+      [data-stagger].in > * { opacity: 1; transform: none; }
+
+      /* A calm pulse on the voice chip while its sample is playing — feedback
+         tied to real state, not decoration. */
+      @keyframes voice-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgb(255 255 255 / 0%); }
+        50% { box-shadow: 0 0 0 5px rgb(255 255 255 / 14%); }
+      }
+      .voice-chip.is-playing .voice-play { animation: voice-pulse 1.5s var(--ease-out-quart) infinite; }
+
+      .copy-hint { transition: color 0.2s var(--ease-out-quart); }
+
       @media (prefers-reduced-motion: reduce) {
         .mark-arc, .mark-dot, .enter { animation: none; }
-        .reveal { opacity: 1; transform: none; transition: none; }
-        .btn, .dot { transition: none; }
-        .btn:hover { transform: none; }
+        .reveal, [data-stagger] > * { opacity: 1; transform: none; transition: none; }
+        .voice-chip.is-playing .voice-play { animation: none; }
+        .btn, .dot, .slide, .voice-chip { transition: none; }
+        .btn:hover, .slide:hover { transform: none; }
       }
       /* No-JS fallback: never hide content behind a class JS must add. */
       @media (scripting: none) {
-        .reveal { opacity: 1; transform: none; }
+        .reveal, [data-stagger] > * { opacity: 1; transform: none; }
       }
 
       /* ——— small screens ——————————————————————————————————— */
