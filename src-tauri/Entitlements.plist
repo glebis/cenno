@@ -6,23 +6,19 @@
 	     appear at all; without it AVCaptureDevice denies silently. -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
-	<!-- CloudKit relay: write Prompt records so Watch/iPhone companion can
-	     display agent prompts when the user is away from the Mac. -->
-	<!-- application-identifier + team-identifier are REQUIRED for CloudKit to
-	     authorize the app against the container. Without them, modifyRecords
-	     fails per-record with "Invalid bundle ID for container" (and the relay
-	     swallows it, so it looks like nothing happened). -->
-	<key>com.apple.application-identifier</key>
-	<string>79SP7TM5PH.app.cenno</string>
-	<key>com.apple.developer.team-identifier</key>
-	<string>79SP7TM5PH</string>
-	<key>com.apple.developer.icloud-container-identifiers</key>
-	<array>
-		<string>iCloud.app.cenno</string>
-	</array>
-	<key>com.apple.developer.icloud-services</key>
-	<array>
-		<string>CloudKit</string>
-	</array>
+	<!-- iCloud/CloudKit entitlements were REMOVED in 0.3.1. They are RESTRICTED
+	     entitlements that macOS AMFI only honours when the bundle ships an
+	     embedded.provisionprofile authorizing them. A Developer-ID (non-App-Store)
+	     build has no such profile, so AMFI SIGKILLs the app at launch
+	     ("Launchd job spawn failed", exit 137) — this bricked 0.3.0. The CloudKit
+	     relay is already gated to run without the entitlement, so dropping these
+	     only disables a relay that could not publish from a shipped build anyway.
+	     To re-enable CloudKit on the Mac build later: generate a Developer ID
+	     provisioning profile that includes the iCloud.app.cenno container, embed
+	     it at Contents/embedded.provisionprofile, and re-add these keys:
+	       com.apple.application-identifier                  79SP7TM5PH.app.cenno
+	       com.apple.developer.team-identifier               79SP7TM5PH
+	       com.apple.developer.icloud-container-identifiers  [iCloud.app.cenno]
+	       com.apple.developer.icloud-services               [CloudKit] -->
 </dict>
 </plist>

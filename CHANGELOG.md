@@ -4,6 +4,19 @@ All notable changes to cenno are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
+## [0.3.1] — 2026-06-23
+
+### Fixed
+
+- **0.3.0 would not launch ("The application "cenno" can't be opened").** The
+  0.3.0 build added restricted iCloud/CloudKit entitlements for the relay, but a
+  Developer-ID (non-App-Store) bundle ships no `embedded.provisionprofile` to
+  authorize them, so macOS AMFI killed the app at spawn (exit 137). The iCloud
+  entitlements are removed; the relay is already gated to run without them, so no
+  functionality is lost on the Mac build. The release pipeline now launch-tests
+  the built app and rejects restricted entitlements lacking a provisioning
+  profile, so this class of brick cannot ship again.
+
 ## [0.3.0] — 2026-06-22
 
 ### Added
