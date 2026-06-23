@@ -63,6 +63,16 @@ if git rev-parse "$TAG" >/dev/null 2>&1 || \
   exit 1
 fi
 
+# Guard: the UI must not carry a HARD-CODED version literal (the About footer
+# reads it at runtime via getVersion()). A literal like "cenno v0.2.0" drifts
+# silently from the shipped build — exactly what stranded the About page at
+# 0.2.0. Fail the release if one reappears.
+if STALE="$(grep -rnE 'cenno v[0-9]+\.[0-9]+\.[0-9]+' src/ 2>/dev/null)"; then
+  echo "error: hard-coded version literal in UI — read it at runtime instead:" >&2
+  echo "$STALE" >&2
+  exit 1
+fi
+
 # --- Build (PATH=/usr/bin first: shadow conda/Python xattr that breaks bundling) ---
 
 echo "==> building (signed, notarized, updater artifacts)"

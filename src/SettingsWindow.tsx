@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "./SettingsWindow.css";
@@ -529,6 +530,12 @@ function IntegrationTab({ onCopy }: { onCopy: (t: string) => void }) {
 /* ───────────────────────────── About tab ──────────────────────────── */
 
 function AboutTab({ onOpen }: { onOpen: (url: string) => Promise<void> }) {
+  // Read the version at runtime from tauri.conf.json (the source release.sh
+  // bumps), so the About footer never drifts from the shipped build.
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => setVersion(null));
+  }, []);
   return (
     <>
       <section className="sw__section">
@@ -567,7 +574,7 @@ function AboutTab({ onOpen }: { onOpen: (url: string) => Promise<void> }) {
       </section>
 
       <footer className="sw__footer">
-        Made by Gleb Kalinin · cenno v0.2.0
+        Made by Gleb Kalinin · cenno{version ? ` v${version}` : ""}
       </footer>
     </>
   );
