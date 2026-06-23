@@ -159,7 +159,8 @@ const panels = [
             </button>
           </div>
           <p class="fine enter enter-4">
-            Apple Silicon · macOS&nbsp;12+ · free &amp; open source
+            Apple Silicon · macOS&nbsp;12+ · free &amp; open source · v{VERSION} ·{" "}
+            <a href={`${GITHUB}/releases`}>release notes</a>
           </p>
         </div>
 
@@ -419,10 +420,12 @@ const panels = [
         <h2 class="ship-q">Ship it?</h2>
         <div class="cta-row">
           <a class="btn btn-solid" href={DMG}>Download for macOS</a>
+          <a class="btn btn-ghost" href={`${GITHUB}/releases`}>All releases</a>
           <a class="btn btn-ghost" href={GITHUB}>View on GitHub</a>
         </div>
         <p class="fine">
-          <code>{BREW}</code>
+          <code>{BREW}</code> · latest v{VERSION} ·{" "}
+          <a href={`${GITHUB}/releases/latest`}>release notes</a>
         </p>
 
         <footer class="footer">
