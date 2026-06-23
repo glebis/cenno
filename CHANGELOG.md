@@ -4,6 +4,22 @@ All notable changes to cenno are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
+## [0.3.2] — 2026-06-23
+
+### Fixed
+
+- **Voice-out (sound-out) stayed silent after you turned it on.** The prompt
+  panel decided whether to speak using the config loaded at app launch, so
+  enabling or retuning voice-out in Settings did nothing until a restart —
+  while "Test voice" (which reads fresh and skips the gate) worked, masking the
+  bug. The panel now re-reads the voice config fresh for every prompt, so
+  Settings changes take effect on the next prompt with no restart.
+
+### Changed
+
+- **cenno is now pronounced the Italian way** ("CHEN-no") when read aloud.
+- The **About** tab shows the live app version instead of a hard-coded one.
+
 ## [0.3.1] — 2026-06-23
 
 ### Fixed
