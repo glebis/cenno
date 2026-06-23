@@ -36,6 +36,11 @@ export function normalizeForSpeech(text: string): string {
     .replace(/__/g, "")
     .replace(/`/g, "");
 
+  // 3b. Pronunciation fixes: "cenno" is Italian ("a nod/sign"), said "CHEN-no",
+  //     but English TTS reads it "SEN-no". Respell it phonetically for speech
+  //     only (this text is never shown). Word-boundary + case-insensitive.
+  out = out.replace(/\bcenno\b/gi, "chenno");
+
   // 4. Tokenize and voice identifier-shaped tokens.
   const spoken = out
     .split(/\s+/)

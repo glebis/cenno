@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { shouldSpeak, type TtsConfig } from "./gating";
 import { speechTextFor } from "./speechText";
+import { readFreshTts } from "../userConfig";
 
 /** The bits of a prompt the player needs. */
 export interface SpeakablePrompt {
@@ -36,22 +37,37 @@ export function useTtsPlayer(prompt: SpeakablePrompt | null, cfg: PlayerConfig):
   const id = prompt?.id;
 
   useEffect(() => {
-    if (!prompt || !shouldSpeak(prompt.urgency, cfg)) {
+    if (!prompt) {
       setSpeaking(false);
       return;
     }
-    const text = speechTextFor(prompt);
-    if (!text) {
-      setSpeaking(false);
-      return;
-    }
-    setSpeaking(true);
-    void invoke("tts_speak", { text, voice: cfg.voice ?? null }).catch(() => {});
+    let cancelled = false;
+    // Resolve the gate against config read FRESH from disk, not the startup
+    // snapshot in `cfg` — otherwise enabling/retuning voice-out in settings is
+    // ignored until the app is restarted. `cfg` is the fallback when the fresh
+    // read is unavailable (tests/browser). Read fresh, then gate, then speak.
+    void readFreshTts()
+      .catch(() => cfg)
+      .then((fresh) => {
+        if (cancelled) return;
+        if (!shouldSpeak(prompt.urgency, fresh)) {
+          setSpeaking(false);
+          return;
+        }
+        const text = speechTextFor(prompt);
+        if (!text) {
+          setSpeaking(false);
+          return;
+        }
+        setSpeaking(true);
+        void invoke("tts_speak", { text, voice: fresh.voice ?? null }).catch(() => {});
+      });
     return () => {
+      cancelled = true;
       setSpeaking(false);
       void invoke("tts_stop").catch(() => {});
     };
-    // Re-run only on a new prompt identity; cfg is read at fire time.
+    // Re-run only on a new prompt identity; config is read fresh at fire time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 

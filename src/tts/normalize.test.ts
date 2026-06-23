@@ -85,4 +85,12 @@ describe("normalizeForSpeech — substance preservation (the anxiety guard)", ()
     expect(normalizeForSpeech("")).toBe("");
     expect(normalizeForSpeech("   ")).toBe("");
   });
+
+  it("respells 'cenno' phonetically (Italian: CHEN-no) for any casing", () => {
+    expect(normalizeForSpeech("cenno is live")).toBe("chenno is live");
+    expect(normalizeForSpeech("Cenno")).toBe("chenno");
+    expect(normalizeForSpeech("Ask via CENNO now")).toBe("Ask via chenno now");
+    // whole word only — not substrings like a hypothetical "cennobot"
+    expect(normalizeForSpeech("cennobot")).toBe("cennobot");
+  });
 });

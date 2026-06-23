@@ -65,6 +65,25 @@ export function getTts(): ResolvedTtsConfig {
   return cachedTts;
 }
 
+/**
+ * Re-read the tts block FRESH from disk (`read_config_file`, not the startup
+ * snapshot `get_user_config`) and update the cache. The sound-out gate calls
+ * this per prompt so enabling/retuning voice-out in settings takes effect on the
+ * very next prompt — no app restart. (Mirrors `tts_speak`, which already reads
+ * config fresh per call; without this the gate stayed pinned to launch-time
+ * config and silently dropped every prompt after the user turned voice-out on.)
+ * Best-effort: outside Tauri, or on any error, returns the last known config.
+ */
+export async function readFreshTts(): Promise<ResolvedTtsConfig> {
+  try {
+    const config = await invoke<UserConfig>("read_config_file");
+    cachedTts = resolveTts(config.tts);
+  } catch {
+    /* not in Tauri, or command missing → keep the cached value */
+  }
+  return cachedTts;
+}
+
 function resolveTts(raw: RawTtsConfig | undefined): ResolvedTtsConfig {
   const min = (raw?.min_urgency ?? "high").toLowerCase();
   const minUrgency = min === "low" || min === "normal" ? min : "high";
