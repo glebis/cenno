@@ -1,6 +1,6 @@
 import { act, render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import App, { ANSWERED_LINGER_MS } from "./App";
+import App, { ANSWERED_LINGER_MS, draftFingerprint, draftKey } from "./App";
 import { NOTED_WORDS } from "./notedWords";
 
 /** The confirmation card, if shown. Its text rotates through NOTED_WORDS,
@@ -75,6 +75,18 @@ const seqEvent = (
   request: { ...moodEvent(remaining_s).request, title },
   remaining_s,
   seq: { index, total, last },
+});
+
+/** A text-input prompt — renders the editable textarea (cenno-field__input). */
+const textEvent = (id: string, remaining_s = 40) => ({
+  id,
+  request: {
+    title: "What's on your mind?",
+    body_md: "",
+    input: { kind: "text" as const },
+    flow: "question",
+  },
+  remaining_s,
 });
 
 /** Deliver a `prompt` event to the App's captured `prompt` listener(s). */
@@ -365,5 +377,89 @@ describe("App timeout auto-hide", () => {
       await vi.advanceTimersByTimeAsync(2500);
     });
     expect(mocks.hide).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("App draft restore", () => {
+  const ta = () =>
+    document.querySelector<HTMLTextAreaElement>(".cenno-field__input");
+
+  // Stash a draft in the exact session-namespaced, fingerprinted format the
+  // save side writes, so restore (which verifies both) accepts it.
+  function stashDraft(id: string, v: string, fingerprintOf = textEvent(id)) {
+    window.localStorage.setItem(
+      draftKey(id),
+      JSON.stringify({ f: draftFingerprint(fingerprintOf.request), v }),
+    );
+  }
+
+  it("restores a saved draft into the field when its prompt shows", async () => {
+    // A draft was saved (per-prompt-id) before the panel was torn down.
+    stashDraft("p_text", "half-written answer");
+    await renderApp();
+    emitPrompt(textEvent("p_text"));
+    await act(async () => {});
+
+    expect(ta()).toBeTruthy();
+    expect(ta()!.value).toBe("half-written answer");
+  });
+
+  it("does not restore a draft belonging to a different prompt id", async () => {
+    stashDraft("p_other", "not this one");
+    await renderApp();
+    emitPrompt(textEvent("p_text"));
+    await act(async () => {});
+
+    expect(ta()!.value).toBe("");
+  });
+
+  it("ignores a draft whose fingerprint doesn't match (reused id)", async () => {
+    // Same id p_text and same session key, but the stored draft was for a
+    // DIFFERENT prompt (the Rust id counter resets each launch, so ids get
+    // reused). The content fingerprint won't match → the stale text must not
+    // leak into this prompt.
+    window.localStorage.setItem(
+      draftKey("p_text"),
+      JSON.stringify({ f: "some other prompt entirely", v: "leaked secret" }),
+    );
+    await renderApp();
+    emitPrompt(textEvent("p_text"));
+    await act(async () => {});
+
+    expect(ta()!.value).toBe("");
+    // The foreign draft is dropped so it can't resurface.
+    expect(window.localStorage.getItem(draftKey("p_text"))).toBeNull();
+  });
+
+  it("leaves the field empty when no draft was saved", async () => {
+    await renderApp();
+    emitPrompt(textEvent("p_text"));
+    await act(async () => {});
+
+    expect(ta()!.value).toBe("");
+  });
+
+  it("clears the draft when the field is emptied (type then delete all)", async () => {
+    await renderApp();
+    emitPrompt(textEvent("p_text"));
+    await act(async () => {});
+    // Type, then clear — the save side must remove the draft, not keep stale text.
+    fireEvent.input(ta()!, { target: { value: "abc" } });
+    expect(window.localStorage.getItem(draftKey("p_text"))).not.toBeNull();
+    fireEvent.input(ta()!, { target: { value: "" } });
+
+    expect(window.localStorage.getItem(draftKey("p_text"))).toBeNull();
+  });
+
+  it("clears the draft on answer so it is not restored next time", async () => {
+    stashDraft("p_text", "to be cleared");
+    await renderApp();
+    emitPrompt(textEvent("p_text"));
+    await act(async () => {});
+    // Submit the textarea (Enter completes a text prompt).
+    fireEvent.keyDown(ta()!, { key: "Enter" });
+    await act(async () => {});
+
+    expect(window.localStorage.getItem(draftKey("p_text"))).toBeNull();
   });
 });

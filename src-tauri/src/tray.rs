@@ -92,6 +92,12 @@ pub fn setup_tray(
     let settings =
         MenuItem::with_id(app, "open_settings", "cenno settings…", true, None::<&str>)?;
 
+    // Manual recovery: bring a parked/hidden prompt back on screen (e.g. after
+    // it was dismissed or hidden). No-op when nothing is pending — same
+    // always-present, harmless-when-empty pattern as "Resume now".
+    let show_pending =
+        MenuItem::with_id(app, "show_pending", "Show pending prompt", true, None::<&str>)?;
+
     let check_updates =
         MenuItem::with_id(app, "check_updates", "Check for updates…", true, None::<&str>)?;
 
@@ -101,6 +107,7 @@ pub fn setup_tray(
         app,
         &[
             &settings,
+            &show_pending,
             &PredefinedMenuItem::separator(app)?,
             &pause_menu,
             &resume,
@@ -188,6 +195,12 @@ pub fn setup_tray(
                 }
                 "open_settings" => {
                     crate::open_settings_window(app);
+                }
+                "show_pending" => {
+                    // Re-show the front-of-queue parked prompt (restores its
+                    // draft on the frontend). Internally re-checks suppression,
+                    // so a fullscreen/paused state still keeps it quiet.
+                    crate::replay_pending(app);
                 }
                 "check_updates" => {
                     // Off the menu-event (main) thread: the flow blocks on

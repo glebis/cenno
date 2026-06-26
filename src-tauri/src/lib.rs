@@ -351,6 +351,50 @@ fn pick_replay<T>(pending: Vec<(String, T, u64)>) -> Option<(String, T, u64)> {
 /// prompt then reappears on the next trigger or the next prompt arrival.
 /// Replays via the same PromptEvent path as fresh prompts; remaining_s
 /// carries what's left of the budget so the webview's auto-hide stays honest.
+/// Parse a user-configured shortcut combo (e.g. "Cmd+Shift+C") into a
+/// `Shortcut`. Empty/whitespace → None (nothing to register); an unparseable
+/// combo → None (caller logs and skips). Never panics — the combo comes from
+/// untrusted `~/.cenno/config.json`.
+#[cfg(desktop)]
+pub(crate) fn parse_reopen_shortcut(
+    combo: &str,
+) -> Option<tauri_plugin_global_shortcut::Shortcut> {
+    let combo = combo.trim();
+    if combo.is_empty() {
+        return None;
+    }
+    combo.parse().ok()
+}
+
+/// Register the reopen-pending global shortcut (fail-soft). A missing combo
+/// registers nothing; an invalid one or a registration error logs and is
+/// ignored — a hotkey collision or denied Accessibility permission must never
+/// block startup.
+#[cfg(desktop)]
+fn register_reopen_shortcut(handle: &tauri::AppHandle, combo: Option<&str>) {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    let Some(combo) = combo else { return };
+    let Some(shortcut) = parse_reopen_shortcut(combo) else {
+        if !combo.trim().is_empty() {
+            eprintln!("cenno: ignoring invalid reopen shortcut {combo:?}");
+        }
+        return;
+    };
+    let result = handle
+        .global_shortcut()
+        .on_shortcut(shortcut, move |app, _shortcut, event| {
+            // Fire on press only — release would double-trigger.
+            if event.state == ShortcutState::Pressed {
+                replay_pending(app);
+            }
+        });
+    if let Err(e) = result {
+        eprintln!("cenno: failed to register reopen shortcut {combo:?}: {e}");
+    } else {
+        eprintln!("cenno: reopen shortcut registered ({combo})");
+    }
+}
+
 pub(crate) fn replay_pending(handle: &tauri::AppHandle) {
     let suppress = handle.state::<SuppressionState>();
     if suppress.should_suppress(|| fullscreen_on_panel_display(handle)) {
@@ -557,6 +601,10 @@ pub fn run() {
         });
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
+    // Global-shortcut plugin: enables the configurable reopen-pending hotkey.
+    // Registered Rust-side in setup (no JS IPC surface, so no capability entry).
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());
     builder
         .setup(move |app| {
             let registry = PromptRegistry::new();
@@ -583,6 +631,10 @@ pub fn run() {
             // Cross-device routing policy — cloned out before the config is moved
             // into managed state, so the MCP server can own its own copy.
             let routing = user_config.routing.clone();
+            // Reopen-pending global shortcut — cloned out before the config moves
+            // into managed state; registered (fail-soft) just below. Takes effect
+            // on launch; a changed combo applies after the next restart.
+            let reopen_shortcut = user_config.shortcuts.reopen.clone();
             app.manage(geometry);
             app.manage(user_config);
 
@@ -660,6 +712,14 @@ pub fn run() {
                 (suppress, restored_until)
             };
             app.manage(suppress.clone());
+
+            // Register the reopen-pending global shortcut now — AFTER both the
+            // registry and SuppressionState are managed, so a hotkey press in
+            // the startup window can't fire replay_pending() into unmanaged
+            // state. Fail-soft; takes effect on launch (a changed combo applies
+            // after the next restart).
+            #[cfg(desktop)]
+            register_reopen_shortcut(app.handle(), reopen_shortcut.as_deref());
 
             // Launch at login: default ON. Decide from the persisted setting
             // (absent → enable + write back) and reconcile the OS state to
@@ -786,6 +846,22 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(desktop)]
+    #[test]
+    fn parse_reopen_shortcut_accepts_good_rejects_garbage() {
+        // Good combos parse.
+        assert!(parse_reopen_shortcut("Cmd+Shift+C").is_some());
+        assert!(parse_reopen_shortcut("CmdOrCtrl+Alt+P").is_some());
+        // Surrounding whitespace is tolerated.
+        assert!(parse_reopen_shortcut("  Cmd+Shift+C  ").is_some());
+        // Empty / whitespace-only → nothing to register (None, no panic).
+        assert!(parse_reopen_shortcut("").is_none());
+        assert!(parse_reopen_shortcut("   ").is_none());
+        // Garbage → None, never a panic.
+        assert!(parse_reopen_shortcut("not a shortcut").is_none());
+        assert!(parse_reopen_shortcut("Cmd+").is_none());
+    }
 
     #[test]
     fn clamp_panel_height_clamps_to_band() {

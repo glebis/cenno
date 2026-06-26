@@ -83,6 +83,119 @@ const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 const KEEPALIVE_EDIT_S = 600; // actively editing → effectively never expires
 const KEEPALIVE_IDLE_S = 45; // stopped editing → at least this long to think
 
+// Write a value into a (possibly React-controlled) text field so React's
+// onChange actually fires. A plain `el.value = v` is swallowed by React's
+// value tracker; going through the prototype setter defeats that shim, and the
+// dispatched `input` event then drives the component's state + the keep-alive
+// re-save. Mirrors the DOM-level *save* in the keep-alive effect.
+function setFieldValue(el: HTMLInputElement | HTMLTextAreaElement, v: string) {
+  const proto =
+    el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  if (setter) setter.call(el, v);
+  else el.value = v;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+// Per-app-launch nonce. Rust prompt ids (`p_N`) restart from zero each launch,
+// so a draft persisted under a bare id could be restored into an unrelated
+// prompt that reuses that id on a LATER launch — leaking one agent's half-typed
+// answer into another's field. Namespacing draft keys by a fresh per-launch
+// nonce confines restore to the same app session (where ids are unique) and
+// makes prior-session drafts unmatchable. The content fingerprint below is then
+// defense-in-depth on top of that.
+const DRAFT_PREFIX = "cenno-draft-";
+const DRAFT_SESSION =
+  globalThis.crypto?.randomUUID?.() ?? `s${Date.now()}-${Math.random()}`;
+export function draftKey(id: string): string {
+  return `${DRAFT_PREFIX}${DRAFT_SESSION}-${id}`;
+}
+
+// Drop drafts left by previous app launches (any other session nonce) so a
+// reused prompt id can never restore stale text and old drafts don't pile up.
+// Runs once at module load — i.e. once per webview launch.
+function sweepForeignDrafts() {
+  try {
+    const mine = `${DRAFT_PREFIX}${DRAFT_SESSION}-`;
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(DRAFT_PREFIX) && !k.startsWith(mine)) stale.push(k);
+    }
+    for (const k of stale) localStorage.removeItem(k);
+  } catch {
+    /* storage unavailable — nothing to sweep */
+  }
+}
+sweepForeignDrafts();
+
+// A draft is also fingerprinted by its prompt's content (JSON-encoded so the
+// title/body separator can't collide) — belt-and-suspenders against any id
+// reuse: restore refuses a draft whose fingerprint doesn't match this prompt.
+export function draftFingerprint(p: { title: string; body_md: string }): string {
+  return JSON.stringify([p.title, p.body_md]);
+}
+
+// Save half-typed text for `prompt` (fingerprinted). Empty text clears the
+// draft so "type then delete all" doesn't leave a stale value to restore.
+function saveDraft(prompt: Prompt, v: string) {
+  try {
+    if (v) {
+      localStorage.setItem(
+        draftKey(prompt.id),
+        JSON.stringify({ f: draftFingerprint(prompt), v }),
+      );
+    } else {
+      localStorage.removeItem(draftKey(prompt.id));
+    }
+  } catch {
+    /* storage unavailable — keep-alive still protects the live field */
+  }
+}
+
+// Restore a stashed draft into the first text field on screen. Restores only
+// when the stored fingerprint matches THIS prompt (else the draft is foreign —
+// a reused id — and is dropped) and only into an empty field (never clobber a
+// prompt the user is already typing into). Returns whether it restored.
+function restoreDraft(prompt: Prompt): boolean {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(draftKey(prompt.id));
+  } catch {
+    return false;
+  }
+  if (!raw) return false;
+  let saved: string | null = null;
+  try {
+    const parsed = JSON.parse(raw) as { f?: unknown; v?: unknown };
+    if (parsed?.f === draftFingerprint(prompt) && typeof parsed.v === "string") {
+      saved = parsed.v;
+    }
+  } catch {
+    /* legacy/garbled value — treat as no match */
+  }
+  if (saved == null) {
+    // Foreign or unparseable draft for this id — drop it so it can't resurface.
+    try {
+      localStorage.removeItem(draftKey(prompt.id));
+    } catch {
+      /* storage unavailable */
+    }
+    return false;
+  }
+  const root = document.getElementById("root") ?? document.body;
+  const field = root.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    'textarea, input[type="text"], input:not([type])',
+  );
+  if (field && field.value === "") {
+    setFieldValue(field, saved);
+    return true;
+  }
+  return false;
+}
+
 async function hideWindow() {
   try {
     // hide() = orderOut: — the correct counterpart to the Rust side's
@@ -240,6 +353,22 @@ function App() {
     // interaction floor carried over from the previous prompt.
     shownAtRef.current = Date.now();
     interactionFloorRef.current = 0;
+    // Read-back half of the draft safety net (the save side lives in the
+    // keep-alive effect): if this prompt was torn down mid-typing, its text
+    // was stashed under cenno-draft-<id>. Restore it now — once, before paint
+    // — so a reopened panel comes back with the user's words instead of blank.
+    if (restoreDraft(active.prompt)) {
+      // The keep-alive input-listener isn't mounted yet this render (its effect
+      // runs after this one), so the restore's dispatched `input` won't floor
+      // the deadline. Floor it here directly: a reopened, half-answered prompt
+      // must not expire out from under the restored text before the user reacts.
+      interactionFloorRef.current = Date.now() + KEEPALIVE_EDIT_S * 1000;
+      setKeepaliveTick((t) => t + 1);
+      void invoke("keepalive", {
+        id: active.prompt.id,
+        secs: KEEPALIVE_EDIT_S,
+      }).catch(() => {});
+    }
     invoke("mark_shown", { id: active.prompt.id }).catch((e) =>
       console.error("mark_shown failed:", e),
     );
@@ -299,14 +428,11 @@ function App() {
       if (!isTextEntry(e.target)) return;
       floor(KEEPALIVE_EDIT_S);
       // Safety net: persist the in-progress text per prompt so it survives even
-      // an unexpected teardown. Cleared once the prompt is answered/dismissed.
+      // an unexpected teardown. Cleared once the prompt is answered/dismissed,
+      // or when the field is emptied (saveDraft removes an empty draft).
       const el = e.target as HTMLInputElement & HTMLElement;
-      try {
-        const v = typeof el.value === "string" ? el.value : el.textContent ?? "";
-        if (v) localStorage.setItem(`cenno-draft-${id}`, v);
-      } catch {
-        /* storage unavailable — keep-alive still protects the live field */
-      }
+      const v = typeof el.value === "string" ? el.value : el.textContent ?? "";
+      saveDraft(active.prompt, v);
     };
     const onFocusOut = (e: FocusEvent) => {
       if (isTextEntry(e.target)) floor(KEEPALIVE_IDLE_S);
@@ -352,7 +478,7 @@ function App() {
     }
     // Answered → the saved draft is no longer needed.
     try {
-      localStorage.removeItem(`cenno-draft-${id}`);
+      localStorage.removeItem(draftKey(id));
     } catch {
       /* storage unavailable */
     }
@@ -394,7 +520,7 @@ function App() {
     hideGenerationRef.current += 1;
     // The user took the panel down themselves — drop the saved draft.
     try {
-      localStorage.removeItem(`cenno-draft-${id}`);
+      localStorage.removeItem(draftKey(id));
     } catch {
       /* storage unavailable */
     }

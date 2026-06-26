@@ -106,6 +106,17 @@ pub struct TtsConfig {
     pub output_device: Option<String>,
 }
 
+/// Global keyboard shortcuts. Absent/empty values register nothing.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ShortcutsConfig {
+    /// Global shortcut that re-shows a parked/pending prompt (e.g.
+    /// "Cmd+Shift+C"). Absent or empty → no global shortcut is registered.
+    /// Validated at startup; an unparseable combo logs a warning and is
+    /// ignored (never crashes the app).
+    pub reopen: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
@@ -113,6 +124,8 @@ pub struct Config {
     pub defaults: DefaultsConfig,
     /// Voice-out settings (sound-out). Defaults to disabled.
     pub tts: TtsConfig,
+    /// Global keyboard shortcuts (e.g. reopen a pending prompt).
+    pub shortcuts: ShortcutsConfig,
     /// Cross-device prompt routing policy (which companion devices receive
     /// prompts and how). See `crate::routing`.
     pub routing: crate::routing::RoutingConfig,

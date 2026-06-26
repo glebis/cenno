@@ -313,6 +313,15 @@ const panels = [
             <figcaption>Apple Watch — a glance and a tap.</figcaption>
           </figure>
         </div>
+
+        <figure class="secondscreen">
+          <div class="secondscreen-strip" data-stagger>
+            <img src="/secondscreen-scale.png" alt="cenno second-screen mode: a 1-to-7 focus scale prompt filling the display" width="1100" height="688" loading="lazy" />
+            <img src="/secondscreen-choice.png" alt="cenno second-screen mode: an attention check-in with choice chips" width="1100" height="688" loading="lazy" />
+            <img src="/secondscreen-voice.png" alt="cenno second-screen mode: a voice-or-type prompt with an ambient sound level" width="1100" height="688" loading="lazy" />
+          </div>
+          <figcaption>Real screens from the companion's second-screen mode — the same prompts, full-bleed on a parked device.</figcaption>
+        </figure>
         <ul class="voice-points companion-points" data-stagger>
           <li>
             <h3>Your iCloud, end to end</h3>
@@ -1109,6 +1118,19 @@ const panels = [
       .device--watch img { width: clamp(130px, 30vw, 190px); border-radius: 34px; }
       .device figcaption { margin-top: var(--cenno-space-2); color: var(--cenno-color-text-dim); font-size: 15px; }
       .companion-points { margin-top: var(--cenno-space-3); }
+
+      /* Real second-screen captures — a row of the actual full-bleed app frames. */
+      .secondscreen { margin: var(--cenno-space-4) 0 0; }
+      .secondscreen-strip {
+        display: grid; gap: var(--cenno-space-2);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+      }
+      .secondscreen-strip img {
+        width: 100%; height: auto; display: block;
+        border-radius: 12px; border: 1px solid var(--cenno-color-line);
+        box-shadow: 0 10px 30px rgb(0 0 0 / 16%);
+      }
+      .secondscreen figcaption { margin-top: var(--cenno-space-2); color: var(--cenno-color-text-dim); font-size: 15px; }
 
       /* ——— beta / contact block ———————————————————————————— */
       .beta-block {

@@ -45,6 +45,9 @@ tauri-plugin-updater = "2"
 # Native message dialogs for the update flow (a tray app has no other surface
 # for "you're up to date" / "install and restart?" feedback).
 tauri-plugin-dialog = "2"
+# Global keyboard shortcut to reopen a parked/pending prompt (combo configured
+# in ~/.cenno/config.json). Registration is Rust-side only — no JS IPC surface.
+tauri-plugin-global-shortcut = "2"
 
 # sound-out Supertonic backend (on-device TTS). ort loads the ONNX models;
 # the rest are the inference pipeline (vendored from supertone-inc/supertonic,

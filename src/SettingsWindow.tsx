@@ -15,7 +15,6 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "./SettingsWindow.css";
@@ -45,8 +44,12 @@ interface RawConfig {
     output_device?: string;
   };
   routing?: unknown;
+  shortcuts?: { reopen?: string };
   widgets?: unknown;
 }
+
+// Suggested default for the reopen-pending global shortcut (user-changeable).
+const DEFAULT_REOPEN_SHORTCUT = "Cmd+Shift+C";
 
 const FLOWS = ["question", "mood", "ema", "reminder", "ambient"] as const;
 const URGENCIES = ["low", "normal", "high"] as const;
@@ -117,6 +120,10 @@ export default function SettingsWindow() {
   function patchDefaults(p: Partial<NonNullable<RawConfig["defaults"]>>) {
     if (!cfg) return;
     persist({ ...cfg, defaults: { ...cfg.defaults, ...p } });
+  }
+  function patchShortcuts(p: Partial<NonNullable<RawConfig["shortcuts"]>>) {
+    if (!cfg) return;
+    persist({ ...cfg, shortcuts: { ...cfg.shortcuts, ...p } });
   }
 
   async function testVoice() {
@@ -195,6 +202,7 @@ export default function SettingsWindow() {
             hideFromDock={hideFromDock}
             onPatchTts={patchTts}
             onPatchDefaults={patchDefaults}
+            onPatchShortcuts={patchShortcuts}
             onTest={testVoice}
             onToggleLaunch={toggleLaunchAtLogin}
             onToggleDock={toggleDock}
@@ -220,6 +228,7 @@ function SettingsTab(props: {
   hideFromDock: boolean;
   onPatchTts: (p: Partial<NonNullable<RawConfig["tts"]>>) => void;
   onPatchDefaults: (p: Partial<NonNullable<RawConfig["defaults"]>>) => void;
+  onPatchShortcuts: (p: Partial<NonNullable<RawConfig["shortcuts"]>>) => void;
   onTest: () => void;
   onToggleLaunch: (v: boolean) => void;
   onToggleDock: (v: boolean) => void;
@@ -227,6 +236,7 @@ function SettingsTab(props: {
   const { cfg, tts, engine } = props;
   if (!cfg) return <p className="sw__muted">Loading…</p>;
   const enabled = tts.enabled === true;
+  const reopenShortcut = cfg.shortcuts?.reopen ?? "";
 
   return (
     <>
@@ -312,6 +322,29 @@ function SettingsTab(props: {
         />
         <p className="sw__hint">
           Dock change applies now; persistence across restarts is coming.
+        </p>
+      </section>
+
+      <section className="sw__section">
+        <h2>Shortcut — reopen a pending prompt</h2>
+        <p className="sw__muted">
+          A global hotkey (and the “Show pending prompt” tray item) brings a
+          dismissed or hidden prompt back — with whatever you’d typed restored.
+        </p>
+        <Field label="Reopen shortcut">
+          <input
+            type="text"
+            value={reopenShortcut}
+            placeholder={`${DEFAULT_REOPEN_SHORTCUT} (leave blank to disable)`}
+            spellCheck={false}
+            onChange={(e) =>
+              props.onPatchShortcuts({ reopen: e.target.value || undefined })
+            }
+          />
+        </Field>
+        <p className="sw__hint">
+          Format like <code>{DEFAULT_REOPEN_SHORTCUT}</code> or{" "}
+          <code>CmdOrCtrl+Alt+P</code>. Takes effect after restarting cenno.
         </p>
       </section>
 
@@ -530,12 +563,6 @@ function IntegrationTab({ onCopy }: { onCopy: (t: string) => void }) {
 /* ───────────────────────────── About tab ──────────────────────────── */
 
 function AboutTab({ onOpen }: { onOpen: (url: string) => Promise<void> }) {
-  // Read the version at runtime from tauri.conf.json (the source release.sh
-  // bumps), so the About footer never drifts from the shipped build.
-  const [version, setVersion] = useState<string | null>(null);
-  useEffect(() => {
-    getVersion().then(setVersion).catch(() => setVersion(null));
-  }, []);
   return (
     <>
       <section className="sw__section">
@@ -574,7 +601,7 @@ function AboutTab({ onOpen }: { onOpen: (url: string) => Promise<void> }) {
       </section>
 
       <footer className="sw__footer">
-        Made by Gleb Kalinin · cenno{version ? ` v${version}` : ""}
+        Made by Gleb Kalinin · cenno
       </footer>
     </>
   );
