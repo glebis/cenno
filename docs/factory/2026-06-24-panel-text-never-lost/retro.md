@@ -1,0 +1,6 @@
+# Retro — Panel text is never lost
+
+1. **What slowed shipping?** The localStorage *save* already existed (from the 0.3.2 keepalive work) but the *restore* half was never wired — so the bug the user hit was really "fix shipped in source, never installed (running 0.3.1) + half-built." Diagnosis took longer than the fix.
+2. **What caught a real bug?** The codex diff audit — it found a genuine BLOCKER (prompt ids reset per launch, so content-only draft keys could leak text across prompts) and a real NUL byte in the source that local `grep -P` missed. Neither was caught by the 148-test suite. Three audit rounds converged the blocker to a session-nonce fix.
+3. **Which artifact was never used?** The scratchpad `feature.diff` file — codex couldn't see it (different cwd) and reviewed the live working tree instead. Passing a diff *file* to a cwd-bound reviewer was wasted; just point it at `git diff HEAD`.
+4. **What gets deleted before the next feature?** The "write the diff to a scratchpad file for codex" step — replace with `codex … "review git diff HEAD"`. And lean on the audit earlier: the BLOCKER was an id-identity design issue that a 30-second "are these keys unique across restarts?" question would have surfaced before writing the save/restore code.
