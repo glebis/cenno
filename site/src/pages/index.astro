@@ -342,11 +342,16 @@ const panels = [
           <p>The companion app is in <strong>TestFlight beta</strong> while the iCloud relay is tested. Email me and I'll add you.</p>
           <div class="cta-row">
             <a class="btn btn-solid" href={`mailto:${EMAIL}?subject=cenno%20companion%20beta&body=Hi%20Gleb%20%E2%80%94%20I%27d%20like%20to%20try%20the%20cenno%20iPhone%20%26%20Watch%20beta.`}>Email to join →</a>
-            {TESTFLIGHT && (
-              <a class="btn btn-ghost" href={TESTFLIGHT}>Open in TestFlight</a>
+            {TESTFLIGHT ? (
+              <a class="btn btn-ghost" href={TESTFLIGHT}>Open the beta in TestFlight →</a>
+            ) : (
+              <a class="btn btn-ghost" href="https://apps.apple.com/app/testflight/id899247664">Get TestFlight →</a>
             )}
           </div>
-          <p class="fine">Beta requests: <a href={`mailto:${EMAIL}`}>{EMAIL}</a></p>
+          <p class="fine">
+            Testing happens over Apple <a href="https://testflight.apple.com/">TestFlight</a> —
+            email me and I'll send your invite. Beta requests: <a href={`mailto:${EMAIL}`}>{EMAIL}</a>
+          </p>
         </div>
       </div>
     </section>
