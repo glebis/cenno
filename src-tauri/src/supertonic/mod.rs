@@ -211,12 +211,40 @@ pub fn delete_model() -> Result<()> {
     Ok(())
 }
 
-/// Stop any in-progress Supertonic utterance — both started playback (via the
-/// sink) and one still synthesizing (via the generation gate). Idempotent.
+/// Volume levels for the stop fade-out, from `from` down to silence. Pure so
+/// the curve is testable; the thread in `stop()` walks it with a fixed step
+/// delay. Linear is fine at this duration — the point is only that the voice
+/// doesn't chop off mid-phoneme when the user answers while it's speaking.
+fn fade_curve(from: f32, steps: usize) -> Vec<f32> {
+    (1..=steps)
+        .map(|i| from * (steps - i) as f32 / steps as f32)
+        .collect()
+}
+
+/// How the stop fade walks `fade_curve`: 10 × 20ms ≈ 200ms to silence —
+/// audibly a fade, short enough that "stop" still feels immediate.
+const FADE_STEPS: usize = 10;
+const FADE_STEP_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
+
+/// Stop any in-progress Supertonic utterance — a synthesis still in flight is
+/// cancelled outright (via the generation gate), started playback fades to
+/// silence over ~200ms instead of chopping off mid-phoneme. Idempotent.
+///
+/// The sink is TAKEN out of the slot before the fade so a superseding
+/// utterance can register immediately; the fade thread owns the old sink to
+/// its end. (`speak_blocking` itself still cuts a previous utterance hard —
+/// there a new voice replaces the old, and two overlapping voices would be
+/// worse than an abrupt swap.)
 pub fn stop() {
     SPEAK_GEN.invalidate();
-    if let Some(sink) = SINK.lock().as_ref() {
-        sink.stop();
+    if let Some(sink) = SINK.lock().take() {
+        std::thread::spawn(move || {
+            for v in fade_curve(sink.volume(), FADE_STEPS) {
+                sink.set_volume(v);
+                std::thread::sleep(FADE_STEP_DELAY);
+            }
+            sink.stop();
+        });
     }
 }
 
@@ -375,6 +403,30 @@ mod tests {
         let total = required_total();
         assert!(total > 395_000_000 && total < 410_000_000, "unexpected total {total}");
         assert_eq!(REQUIRED.len(), 16);
+    }
+
+    #[test]
+    fn fade_curve_descends_monotonically_to_silence() {
+        let curve = fade_curve(1.0, 8);
+        assert_eq!(curve.len(), 8);
+        for pair in curve.windows(2) {
+            assert!(pair[1] < pair[0], "not descending: {curve:?}");
+        }
+        assert!(curve[0] < 1.0, "first step must already be quieter than the start");
+        assert_eq!(*curve.last().unwrap(), 0.0, "must end at silence");
+    }
+
+    #[test]
+    fn fade_curve_scales_with_current_volume() {
+        // A sink already at half volume fades from there, not from full.
+        let curve = fade_curve(0.5, 4);
+        assert!(curve[0] < 0.5);
+        assert_eq!(*curve.last().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn fade_curve_with_zero_steps_is_empty() {
+        assert!(fade_curve(1.0, 0).is_empty());
     }
 
     #[test]
