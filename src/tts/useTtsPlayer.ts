@@ -1,21 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { shouldSpeak, type TtsConfig } from "./gating";
-import { speechTextFor } from "./speechText";
+import { orchestratePrompt, type PlayerConfig, type SpeakablePrompt } from "./orchestrate";
 import { readFreshTts } from "../userConfig";
 
-/** The bits of a prompt the player needs. */
-export interface SpeakablePrompt {
-  id: string;
-  title: string;
-  body_md: string;
-  /** Optional agent-authored spoken summary; spoken instead of the body. */
-  say?: string;
-  urgency?: string;
-}
-
-/** Gating config plus the optional on-device voice identifier to speak with. */
-export type PlayerConfig = TtsConfig & { voice?: string };
+export type { PlayerConfig, SpeakablePrompt } from "./orchestrate";
 
 export interface TtsPlayer {
   /** True while this prompt is being (or was just) read aloud. */
@@ -30,6 +18,12 @@ export interface TtsPlayer {
  * identity (keyed on `id`), never on incidental re-renders, so a prompt is
  * never read twice. Unmounting or swapping prompts stops any in-flight speech.
  *
+ * Also owns the panel-show handshake: Rust keeps the panel hidden until the
+ * webview invokes `panel_ready` (with a Rust-side fallback deadline), and this
+ * hook fires that signal — immediately for silent prompts, at playback start
+ * for spoken ones — so the panel never sits mute while audio is synthesized.
+ * The sequencing itself lives in orchestrate.ts.
+ *
  * Outside Tauri (tests/browser) the invokes simply reject and are swallowed.
  */
 export function useTtsPlayer(prompt: SpeakablePrompt | null, cfg: PlayerConfig): TtsPlayer {
@@ -42,29 +36,21 @@ export function useTtsPlayer(prompt: SpeakablePrompt | null, cfg: PlayerConfig):
       return;
     }
     let cancelled = false;
-    // Resolve the gate against config read FRESH from disk, not the startup
-    // snapshot in `cfg` — otherwise enabling/retuning voice-out in settings is
-    // ignored until the app is restarted. `cfg` is the fallback when the fresh
-    // read is unavailable (tests/browser). Read fresh, then gate, then speak.
-    void readFreshTts()
-      .catch(() => cfg)
-      .then((fresh) => {
-        if (cancelled) return;
-        if (!shouldSpeak(prompt.urgency, fresh)) {
-          setSpeaking(false);
-          return;
-        }
-        const text = speechTextFor(prompt);
-        if (!text) {
-          setSpeaking(false);
-          return;
-        }
-        setSpeaking(true);
-        void invoke("tts_speak", { text, voice: fresh.voice ?? null }).catch(() => {});
-      });
+    void orchestratePrompt(prompt, cfg, {
+      readFresh: readFreshTts,
+      speak: (text, voice) => invoke("tts_speak", { text, voice }),
+      panelReady: () => {
+        void invoke("panel_ready").catch(() => {});
+      },
+      setSpeaking: (v) => {
+        if (!cancelled) setSpeaking(v);
+      },
+      cancelled: () => cancelled,
+    });
     return () => {
       cancelled = true;
       setSpeaking(false);
+      // Stops started playback AND cancels an utterance still synthesizing.
       void invoke("tts_stop").catch(() => {});
     };
     // Re-run only on a new prompt identity; config is read fresh at fire time.

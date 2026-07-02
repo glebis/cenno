@@ -3,6 +3,7 @@ pub mod bridge;
 pub mod cli;
 pub mod config;
 pub mod db;
+pub mod generation;
 pub mod mcp;
 pub mod protocol;
 pub mod registry;
@@ -408,7 +409,7 @@ pub(crate) fn replay_pending(handle: &tauri::AppHandle) {
         if let Err(e) = handle.emit("prompt", payload) {
             eprintln!("cenno: failed to emit replayed prompt: {e}");
         }
-        show_prompt_window(handle);
+        schedule_panel_show(handle);
     }
 }
 
@@ -518,6 +519,55 @@ fn show_prompt_window(handle: &tauri::AppHandle) {
         let _ = win.show();
         let _ = win.set_focus();
     }
+}
+
+/// How long a prompt may hold the panel off-screen waiting for the webview's
+/// `panel_ready`. Long enough for Supertonic to synthesize a short summary,
+/// short enough that a wedged webview or slow synthesis never leaves the user
+/// waiting on an invisible question.
+const PANEL_SHOW_FALLBACK_MS: u64 = 2500;
+
+/// Gate for the deferred panel show: `panel_ready` (or a newer schedule)
+/// stales an armed fallback so it stands down.
+static SHOW_GATE: crate::generation::Generation = crate::generation::Generation::new();
+
+/// Bring the prompt UI on screen once the webview says it's ready — or after
+/// a fallback deadline, whichever comes first.
+///
+/// Ordering the panel front the instant a prompt arrives put it on screen
+/// seconds before voice-out finished synthesizing the spoken version; users
+/// answered (and the panel hid) before the audio ever played. So the show is
+/// now a handshake: emit the prompt, keep the panel hidden, and let the
+/// webview call `panel_ready` when it has decided speak-or-silent (and, when
+/// speaking, once playback has started). The deadline covers a dead or wedged
+/// webview — a prompt must never stay invisible for want of a signal.
+fn schedule_panel_show(handle: &tauri::AppHandle) {
+    let token = SHOW_GATE.begin();
+    let handle = handle.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(PANEL_SHOW_FALLBACK_MS)).await;
+        if !SHOW_GATE.is_current(token) {
+            return; // webview signalled ready (or a newer prompt owns the show)
+        }
+        // Resolved before ever being shown (answered from the companion,
+        // dismissed, timed out): nothing to show — a late order-front would
+        // put up an empty panel.
+        let registry = handle.state::<PromptRegistry>();
+        if registry.pending().is_empty() {
+            return;
+        }
+        eprintln!("cenno: no panel_ready within {PANEL_SHOW_FALLBACK_MS}ms — showing panel anyway");
+        show_prompt_window(&handle);
+    });
+}
+
+/// The webview's half of the deferred-show handshake (see
+/// `schedule_panel_show`): the prompt is rendered and any voice-out has
+/// started, so the panel may appear now.
+#[tauri::command]
+fn panel_ready(app: tauri::AppHandle) {
+    SHOW_GATE.invalidate();
+    show_prompt_window(&app);
 }
 
 /// Open (or focus) the settings/about window. A normal decorated window —
@@ -788,7 +838,7 @@ pub fn run() {
                         if let Err(e) = handle.emit("prompt", payload) {
                             eprintln!("cenno: failed to emit prompt event: {e}");
                         }
-                        show_prompt_window(&handle);
+                        schedule_panel_show(&handle);
                     },
                     {
                         // dismiss callback: tell the webview to take the panel
@@ -832,6 +882,7 @@ pub fn run() {
             set_dock_visible,
             voice::voice_start,
             voice::voice_stop,
+            panel_ready,
             tts::tts_speak,
             tts::tts_stop,
             tts::tts_model_status,

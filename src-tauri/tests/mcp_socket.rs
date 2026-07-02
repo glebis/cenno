@@ -21,7 +21,7 @@ async fn ask_user_over_socket_resolves() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("mcp.sock");
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, None, 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, None, 120, off_routing())
         .await
         .unwrap();
 
@@ -56,7 +56,7 @@ async fn ask_user_with_invalid_a2ui_errors_without_registering_prompt() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("mcp.sock");
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, None, 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, None, 120, off_routing())
         .await
         .unwrap();
 
@@ -108,7 +108,7 @@ async fn answered_ask_writes_history_row() {
     let db = Db::open(&db_path).unwrap();
 
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, Some(db.clone()), 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing())
         .await
         .unwrap();
 
@@ -161,7 +161,7 @@ async fn ask_sequence_runs_questions_in_order_and_records_each() {
     let db = Db::open(&db_path).unwrap();
 
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, Some(db.clone()), 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing())
         .await
         .unwrap();
 
@@ -233,7 +233,7 @@ async fn ask_sequence_timeout_ends_run_early() {
     let db = Db::open(&db_path).unwrap();
 
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, Some(db.clone()), 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing())
         .await
         .unwrap();
 
@@ -326,6 +326,7 @@ async fn suppressed_notify_skips_display_but_prompt_still_registers() {
                 displayed_probe.store(true, Ordering::SeqCst);
             }
         },
+        || {},
         None,
         120,
         off_routing(),

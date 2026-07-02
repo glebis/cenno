@@ -41,6 +41,11 @@ static ENGINE: Mutex<Option<(PathBuf, TextToSpeech)>> = Mutex::new(None);
 /// button or a superseding prompt). `Arc` because the playback thread also
 /// holds it to `sleep_until_end`.
 static SINK: Mutex<Option<Arc<Sink>>> = Mutex::new(None);
+/// Supersession gate covering the SYNTHESIS window, which `SINK` cannot: a
+/// stop() that lands while audio is still being generated finds no sink to
+/// stop, and without this gate the utterance would start playing anyway —
+/// after the user already answered and the panel came down.
+static SPEAK_GEN: crate::generation::Generation = crate::generation::Generation::new();
 
 /// The default model cache, `~/.cenno/models/supertonic-3`.
 fn default_model_dir() -> Option<PathBuf> {
@@ -152,7 +157,15 @@ fn open_output(device: Option<&str>) -> Option<(OutputStream, rodio::OutputStrea
 /// caller can fall back to AVSpeech. `device` names the output to play through
 /// (None → system default).
 pub fn speak_blocking(text: &str, voice: &str, device: Option<String>) -> Result<()> {
+    // Claim the gate BEFORE synthesizing: any stop() or newer utterance during
+    // the (potentially seconds-long) synthesis stales this token and the audio
+    // is dropped unplayed. A cancelled utterance returns Ok — it must not
+    // trigger the AVSpeech fallback and speak after all.
+    let token = SPEAK_GEN.begin();
     let (samples, sample_rate) = synthesize(text, voice)?;
+    if !SPEAK_GEN.is_current(token) {
+        return Ok(());
+    }
     // Stop a prior utterance before starting this one.
     if let Some(prev) = SINK.lock().take() {
         prev.stop();
@@ -167,7 +180,14 @@ pub fn speak_blocking(text: &str, voice: &str, device: Option<String>) -> Result
         };
         let sink = Arc::new(sink);
         *SINK.lock() = Some(sink.clone());
-        sink.append(SamplesBuffer::new(1, sample_rate as u32, samples));
+        // Re-check AFTER registering the sink: a stop() racing this thread now
+        // either sees the sink (and stops it) or moved the generation first
+        // (and we never append). Either way nothing plays past a stop.
+        if !SPEAK_GEN.is_current(token) {
+            sink.stop();
+        } else {
+            sink.append(SamplesBuffer::new(1, sample_rate as u32, samples));
+        }
         sink.sleep_until_end(); // keeps _stream alive until done or stopped
         // Clear our slot if it's still us (a newer utterance may have replaced it).
         let mut slot = SINK.lock();
@@ -191,10 +211,40 @@ pub fn delete_model() -> Result<()> {
     Ok(())
 }
 
-/// Stop any in-progress Supertonic playback. Idempotent.
+/// Volume levels for the stop fade-out, from `from` down to silence. Pure so
+/// the curve is testable; the thread in `stop()` walks it with a fixed step
+/// delay. Linear is fine at this duration — the point is only that the voice
+/// doesn't chop off mid-phoneme when the user answers while it's speaking.
+fn fade_curve(from: f32, steps: usize) -> Vec<f32> {
+    (1..=steps)
+        .map(|i| from * (steps - i) as f32 / steps as f32)
+        .collect()
+}
+
+/// How the stop fade walks `fade_curve`: 10 × 20ms ≈ 200ms to silence —
+/// audibly a fade, short enough that "stop" still feels immediate.
+const FADE_STEPS: usize = 10;
+const FADE_STEP_DELAY: std::time::Duration = std::time::Duration::from_millis(20);
+
+/// Stop any in-progress Supertonic utterance — a synthesis still in flight is
+/// cancelled outright (via the generation gate), started playback fades to
+/// silence over ~200ms instead of chopping off mid-phoneme. Idempotent.
+///
+/// The sink is TAKEN out of the slot before the fade so a superseding
+/// utterance can register immediately; the fade thread owns the old sink to
+/// its end. (`speak_blocking` itself still cuts a previous utterance hard —
+/// there a new voice replaces the old, and two overlapping voices would be
+/// worse than an abrupt swap.)
 pub fn stop() {
-    if let Some(sink) = SINK.lock().as_ref() {
-        sink.stop();
+    SPEAK_GEN.invalidate();
+    if let Some(sink) = SINK.lock().take() {
+        std::thread::spawn(move || {
+            for v in fade_curve(sink.volume(), FADE_STEPS) {
+                sink.set_volume(v);
+                std::thread::sleep(FADE_STEP_DELAY);
+            }
+            sink.stop();
+        });
     }
 }
 
@@ -353,6 +403,30 @@ mod tests {
         let total = required_total();
         assert!(total > 395_000_000 && total < 410_000_000, "unexpected total {total}");
         assert_eq!(REQUIRED.len(), 16);
+    }
+
+    #[test]
+    fn fade_curve_descends_monotonically_to_silence() {
+        let curve = fade_curve(1.0, 8);
+        assert_eq!(curve.len(), 8);
+        for pair in curve.windows(2) {
+            assert!(pair[1] < pair[0], "not descending: {curve:?}");
+        }
+        assert!(curve[0] < 1.0, "first step must already be quieter than the start");
+        assert_eq!(*curve.last().unwrap(), 0.0, "must end at silence");
+    }
+
+    #[test]
+    fn fade_curve_scales_with_current_volume() {
+        // A sink already at half volume fades from there, not from full.
+        let curve = fade_curve(0.5, 4);
+        assert!(curve[0] < 0.5);
+        assert_eq!(*curve.last().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn fade_curve_with_zero_steps_is_empty() {
+        assert!(fade_curve(1.0, 0).is_empty());
     }
 
     #[test]
