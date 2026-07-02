@@ -41,6 +41,11 @@ static ENGINE: Mutex<Option<(PathBuf, TextToSpeech)>> = Mutex::new(None);
 /// button or a superseding prompt). `Arc` because the playback thread also
 /// holds it to `sleep_until_end`.
 static SINK: Mutex<Option<Arc<Sink>>> = Mutex::new(None);
+/// Supersession gate covering the SYNTHESIS window, which `SINK` cannot: a
+/// stop() that lands while audio is still being generated finds no sink to
+/// stop, and without this gate the utterance would start playing anyway —
+/// after the user already answered and the panel came down.
+static SPEAK_GEN: crate::generation::Generation = crate::generation::Generation::new();
 
 /// The default model cache, `~/.cenno/models/supertonic-3`.
 fn default_model_dir() -> Option<PathBuf> {
@@ -152,7 +157,15 @@ fn open_output(device: Option<&str>) -> Option<(OutputStream, rodio::OutputStrea
 /// caller can fall back to AVSpeech. `device` names the output to play through
 /// (None → system default).
 pub fn speak_blocking(text: &str, voice: &str, device: Option<String>) -> Result<()> {
+    // Claim the gate BEFORE synthesizing: any stop() or newer utterance during
+    // the (potentially seconds-long) synthesis stales this token and the audio
+    // is dropped unplayed. A cancelled utterance returns Ok — it must not
+    // trigger the AVSpeech fallback and speak after all.
+    let token = SPEAK_GEN.begin();
     let (samples, sample_rate) = synthesize(text, voice)?;
+    if !SPEAK_GEN.is_current(token) {
+        return Ok(());
+    }
     // Stop a prior utterance before starting this one.
     if let Some(prev) = SINK.lock().take() {
         prev.stop();
@@ -167,7 +180,14 @@ pub fn speak_blocking(text: &str, voice: &str, device: Option<String>) -> Result
         };
         let sink = Arc::new(sink);
         *SINK.lock() = Some(sink.clone());
-        sink.append(SamplesBuffer::new(1, sample_rate as u32, samples));
+        // Re-check AFTER registering the sink: a stop() racing this thread now
+        // either sees the sink (and stops it) or moved the generation first
+        // (and we never append). Either way nothing plays past a stop.
+        if !SPEAK_GEN.is_current(token) {
+            sink.stop();
+        } else {
+            sink.append(SamplesBuffer::new(1, sample_rate as u32, samples));
+        }
         sink.sleep_until_end(); // keeps _stream alive until done or stopped
         // Clear our slot if it's still us (a newer utterance may have replaced it).
         let mut slot = SINK.lock();
@@ -191,8 +211,10 @@ pub fn delete_model() -> Result<()> {
     Ok(())
 }
 
-/// Stop any in-progress Supertonic playback. Idempotent.
+/// Stop any in-progress Supertonic utterance — both started playback (via the
+/// sink) and one still synthesizing (via the generation gate). Idempotent.
 pub fn stop() {
+    SPEAK_GEN.invalidate();
     if let Some(sink) = SINK.lock().as_ref() {
         sink.stop();
     }
