@@ -384,9 +384,10 @@ fn register_reopen_shortcut(handle: &tauri::AppHandle, combo: Option<&str>) {
     let result = handle
         .global_shortcut()
         .on_shortcut(shortcut, move |app, _shortcut, event| {
-            // Fire on press only — release would double-trigger.
+            // Fire on press only — release would double-trigger. Explicit
+            // user gesture → force past suppression (see replay_pending).
             if event.state == ShortcutState::Pressed {
-                replay_pending(app);
+                replay_pending(app, true);
             }
         });
     if let Err(e) = result {
@@ -396,9 +397,20 @@ fn register_reopen_shortcut(handle: &tauri::AppHandle, combo: Option<&str>) {
     }
 }
 
-pub(crate) fn replay_pending(handle: &tauri::AppHandle) {
+/// Re-emit and re-show the front-of-queue pending prompt, if any.
+///
+/// `force` distinguishes the two kinds of caller:
+/// - Automatic replays (pause expiry, fullscreen quiet mode turned off,
+///   "Resume now") pass `false`: they re-check suppression, so e.g. a
+///   fullscreen app still keeps things quiet after a pause expires.
+/// - Explicit user gestures (the tray's "Show pending prompt", the reopen
+///   global shortcut) pass `true`: the user asking to SEE the prompt IS the
+///   override — honoring the suppression that hid it would make the gesture
+///   a permanent no-op (cenno-74i). Forcing does not end a pause; it shows
+///   this one prompt and leaves the suppression state untouched.
+pub(crate) fn replay_pending(handle: &tauri::AppHandle, force: bool) {
     let suppress = handle.state::<SuppressionState>();
-    if suppress.should_suppress(|| fullscreen_on_panel_display(handle)) {
+    if !force && suppress.should_suppress(|| fullscreen_on_panel_display(handle)) {
         eprintln!("cenno: replay skipped — still suppressed");
         return;
     }
@@ -440,7 +452,7 @@ pub(crate) fn arm_pause_expiry_timer(
             }
         }
         eprintln!("cenno: pause expired — replaying pending prompts if any");
-        replay_pending(&handle);
+        replay_pending(&handle, false);
     });
 }
 
@@ -786,6 +798,17 @@ pub fn run() {
 
             // Tray icon + menu — always, in both windowed and --tray modes.
             tray::setup_tray(app.handle(), suppress.clone(), db.clone(), launch_at_login)?;
+
+            // Keep the tray's "Show pending prompt" item mirroring the
+            // registry: enabled with a live label while something is
+            // answerable, disabled "No pending prompt" otherwise. The watcher
+            // fires on registration and on every ask() settle (answer /
+            // dismiss / timeout), so the item can't go stale.
+            {
+                let handle = app.handle().clone();
+                registry.set_watcher(move || tray::refresh_pending_item(&handle));
+                tray::refresh_pending_item(app.handle()); // seed initial state
+            }
 
             // A restored pause needs its expiry timer re-armed, otherwise
             // prompts suppressed after this restart would only replay

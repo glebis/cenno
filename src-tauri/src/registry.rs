@@ -19,7 +19,16 @@ use tokio::sync::{oneshot, Notify};
 pub struct PromptRegistry {
     inner: Arc<Mutex<HashMap<String, Pending>>>,
     counter: Arc<std::sync::atomic::AtomicU64>,
+    /// Change watcher: called whenever the answerable-pending set may have
+    /// changed (registration, and every `ask()` settle — answer, dismiss, or
+    /// timeout). The tray uses it to keep "Show pending prompt" in sync.
+    /// Always invoked with the map lock RELEASED, so it may call back into
+    /// `pending()`.
+    watcher: Arc<Mutex<Option<Watcher>>>,
 }
+
+/// The registry change-watcher callback (see `PromptRegistry::watcher`).
+type Watcher = Arc<dyn Fn() + Send + Sync>;
 
 struct Pending {
     /// None after a resolve() consumed the sender (including a late resolve on a timed-out prompt).
@@ -71,6 +80,21 @@ impl PromptRegistry {
         Self {
             inner: Arc::new(Mutex::new(HashMap::new())),
             counter: Arc::new(0.into()),
+            watcher: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Install the change watcher (see the field doc). Replaces any previous
+    /// one; lib.rs installs a single tray-refresh watcher at setup.
+    pub fn set_watcher(&self, f: impl Fn() + Send + Sync + 'static) {
+        *self.watcher.lock() = Some(Arc::new(f));
+    }
+
+    /// Snapshot-then-call so the watcher runs without ANY registry lock held.
+    fn notify_watcher(&self) {
+        let watcher = self.watcher.lock().clone();
+        if let Some(f) = watcher {
+            f();
         }
     }
 
@@ -82,6 +106,14 @@ impl PromptRegistry {
     /// semantics; plan 4 reads these via get_response).
     /// Note: timeout_s == 0 times out immediately once shown.
     pub async fn ask(&self, req: AskRequest, notify: impl FnOnce(&str, &AskRequest)) -> AskResponse {
+        let resp = self.ask_inner(req, notify).await;
+        // Every way a prompt stops being pending (answered, dismissed, timed
+        // out) settles this future — one watcher call here covers them all.
+        self.notify_watcher();
+        resp
+    }
+
+    async fn ask_inner(&self, req: AskRequest, notify: impl FnOnce(&str, &AskRequest)) -> AskResponse {
         let n = self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let id = format!("p_{n}");
         let (tx, mut rx) = oneshot::channel();
@@ -101,6 +133,7 @@ impl PromptRegistry {
             },
         );
         notify(&id, &req);
+        self.notify_watcher(); // registration grew the pending set
         let started = Instant::now();
 
         // Phase 1 — park until the prompt is first shown OR resolved/dismissed,
@@ -276,6 +309,29 @@ mod tests {
 
     fn req_urgency(u: &str) -> AskRequest {
         serde_json::from_str(&format!(r#"{{"title":"t","timeout_s":1,"urgency":"{u}"}}"#)).unwrap()
+    }
+
+    /// The change watcher fires on registration and again when the parked
+    /// ask() settles — the transitions the tray's "Show pending prompt" item
+    /// refreshes on. (Timeout and dismiss also settle ask(), so they're
+    /// covered by the same path this test exercises via resolve().)
+    #[tokio::test]
+    async fn watcher_fires_on_register_and_settle() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let reg = PromptRegistry::new();
+        let fired = Arc::new(AtomicUsize::new(0));
+        let fired2 = fired.clone();
+        reg.set_watcher(move || {
+            fired2.fetch_add(1, Ordering::SeqCst);
+        });
+        let reg2 = reg.clone();
+        let task = tokio::spawn(async move { reg2.ask(req(), |_id, _req| {}).await });
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert_eq!(fired.load(Ordering::SeqCst), 1, "registration fires the watcher");
+        let id = reg.pending_ids().pop().unwrap();
+        assert!(reg.resolve(&id, "ok".into(), Via::Text));
+        task.await.unwrap();
+        assert_eq!(fired.load(Ordering::SeqCst), 2, "settle fires the watcher");
     }
 
     /// Enqueue Normal, High, Low (in arrival order); pending() must return them

@@ -13,8 +13,46 @@ use tauri::{
     AppHandle,
 };
 
+use tauri::Manager as _;
+
 use crate::db::Db;
 use crate::suppress::SuppressionState;
+
+/// Handle to the "Show pending prompt" menu item, managed as Tauri state so
+/// `refresh_pending_item` can update its label/enabled state after the menu
+/// is built (registry changes arrive from arbitrary threads).
+pub struct PendingMenuItem(MenuItem<tauri::Wry>);
+
+/// Label + enabled state for the show-pending item given the number of
+/// answerable prompts. Disabled with an explicit "No pending prompt" when
+/// empty — a greyed-out truthful label instead of a silent no-op (cenno-74i).
+fn pending_item_state(count: usize) -> (String, bool) {
+    match count {
+        0 => ("No pending prompt".to_string(), false),
+        1 => ("Show pending prompt".to_string(), true),
+        n => (format!("Show pending prompts ({n})"), true),
+    }
+}
+
+/// Sync the tray's show-pending item with the registry. Called from the
+/// registry's change watcher (any thread) and once at setup to seed the
+/// initial state; menu mutation is hopped onto the main thread, as AppKit
+/// requires. No-ops before the tray exists (watcher can't fire earlier —
+/// lib.rs installs it after setup_tray).
+pub fn refresh_pending_item(app: &AppHandle) {
+    let app = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        let Some(item) = app.try_state::<PendingMenuItem>() else { return };
+        let count = app.state::<crate::registry::PromptRegistry>().pending().len();
+        let (label, enabled) = pending_item_state(count);
+        if let Err(e) = item.0.set_text(&label) {
+            eprintln!("cenno: failed to update show_pending label: {e}");
+        }
+        if let Err(e) = item.0.set_enabled(enabled) {
+            eprintln!("cenno: failed to update show_pending enabled: {e}");
+        }
+    });
+}
 
 /// Settings keys shared with the startup loader in lib.rs.
 pub const SETTING_PAUSE_UNTIL: &str = "pause_until";
@@ -92,11 +130,14 @@ pub fn setup_tray(
     let settings =
         MenuItem::with_id(app, "open_settings", "cenno settings…", true, None::<&str>)?;
 
-    // Manual recovery: bring a parked/hidden prompt back on screen (e.g. after
-    // it was dismissed or hidden). No-op when nothing is pending — same
-    // always-present, harmless-when-empty pattern as "Resume now".
-    let show_pending =
-        MenuItem::with_id(app, "show_pending", "Show pending prompt", true, None::<&str>)?;
+    // Manual recovery: bring a parked (suppressed or hidden) prompt back on
+    // screen. NOT for dismissed/answered/timed-out prompts — those ended their
+    // ask() and are gone for good. The item mirrors the registry (see
+    // refresh_pending_item): disabled with a "No pending prompt" label when
+    // there is nothing answerable, so a dead click is visible as a dead item.
+    let (label, enabled) = pending_item_state(0);
+    let show_pending = MenuItem::with_id(app, "show_pending", &label, enabled, None::<&str>)?;
+    app.manage(PendingMenuItem(show_pending.clone()));
 
     let check_updates =
         MenuItem::with_id(app, "check_updates", "Check for updates…", true, None::<&str>)?;
@@ -166,7 +207,7 @@ pub fn setup_tray(
                     eprintln!("cenno: resumed");
                     // Re-show anything that arrived while paused. (Internally
                     // re-checks suppression — a fullscreen app keeps it quiet.)
-                    crate::replay_pending(app);
+                    crate::replay_pending(app, false);
                 }
                 "hide_fullscreen" => {
                     let checked = hide_fullscreen_handle.is_checked().unwrap_or(true);
@@ -175,7 +216,7 @@ pub fn setup_tray(
                     eprintln!("cenno: hide_in_fullscreen = {checked}");
                     if !checked {
                         // Quiet mode just turned off — surface whatever queued.
-                        crate::replay_pending(app);
+                        crate::replay_pending(app, false);
                     }
                 }
                 "launch_at_login" => {
@@ -198,9 +239,11 @@ pub fn setup_tray(
                 }
                 "show_pending" => {
                     // Re-show the front-of-queue parked prompt (restores its
-                    // draft on the frontend). Internally re-checks suppression,
-                    // so a fullscreen/paused state still keeps it quiet.
-                    crate::replay_pending(app);
+                    // draft on the frontend). Explicit user gesture → force
+                    // past suppression: clicking this WHILE paused/fullscreen
+                    // is precisely a request to see the prompt anyway. The
+                    // pause itself stays in effect for future prompts.
+                    crate::replay_pending(app, true);
                 }
                 "check_updates" => {
                     // Off the menu-event (main) thread: the flow blocks on
@@ -220,4 +263,18 @@ pub fn setup_tray(
         .build(app)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pending_item_state;
+
+    /// Empty queue → disabled item that says so; one prompt → the classic
+    /// label; several → the label carries the count.
+    #[test]
+    fn pending_item_state_reflects_queue_depth() {
+        assert_eq!(pending_item_state(0), ("No pending prompt".to_string(), false));
+        assert_eq!(pending_item_state(1), ("Show pending prompt".to_string(), true));
+        assert_eq!(pending_item_state(3), ("Show pending prompts (3)".to_string(), true));
+    }
 }
