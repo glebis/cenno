@@ -49,6 +49,13 @@ a slider). Current state: A2UI catalog already has a display-only `Image` compon
 grid), and (b) serving *local* image files into the webview (agents have paths, not URLs —
 needs Tauri asset-protocol scoping, a security surface to design deliberately).
 
+Descope 2026-07-13 (Gleb): adjustable/interactive image controls are NOT a priority. Fixed
+scaling stands as decided: existing variant caps (icon 24 / avatar 44 / smallFeature 80 /
+mediumFeature 120 / largeFeature+header 160, max-width 100%), recommended default
+`fit: contain` + `mediumFeature`, `largeFeature` when the image is the subject of the
+question. Document this in the widget-advisor guide (cenno-bee). The only remaining app-code
+piece under this idea is local-file image serving (scoped asset protocol) — kept on cenno-88n.
+
 ## 2026-07-13 — Widget-advisor guidance in the cenno skill (from Gleb, voice)
 
 The `skills/cenno/SKILL.md` teaches mechanics (kinds, A2UI payloads) but not *judgment*:
