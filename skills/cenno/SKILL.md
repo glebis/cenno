@@ -303,6 +303,70 @@ Returns `{"answer": "...", "via": "text"|"choice", "elapsed_s": 1.4}`, or
 
 `mood` (warm), `question` (neutral, the default feel), `ema` (check-in/survey), `reminder` (calm), `ambient` (quiet/info). They only change the panel color; pick the one that matches the moment.
 
+## Widget advisor — which widget for which question
+
+Match the *shape of the decision* to the widget. Work down this table and take the first row that fits; prefer a built-in `input.kind` over an `a2ui` payload whenever both could work — built-ins are cheaper to send and harder to get wrong.
+
+| the question is… | use | notes |
+|---|---|---|
+| yes/no before an action | `confirm` | timeout ≠ yes — never proceed on `answered: false` |
+| pick one of 2–5 named options | `choice` | keep labels short; ≤5 or the panel crowds |
+| pick one of 6+ / an open set | `text` (or `choice` with the top 4 + let text catch the rest) | don't scroll the user through a long list |
+| a rating or intensity, 1–7 fits | `scale` | built-in is hard-wired 1–7, discrete |
+| a rating with another range or labeled ends (1–5, NPS 0–10) | `a2ui` **Scale** | discrete numeral row, `min`/`max`/`minLabel`/`maxLabel` |
+| a continuous quantity (percent, budget, "how much") | `a2ui` **Slider** | `min`/`max`/`step`; commit fires `selectAction` — or omit it and pair with a **Button** for an explicit confirm |
+| open-ended, a sentence or more | `voice_text` | same as `text` plus a mic — default to it over `text` when the answer is likely > a few words |
+| a date, time, or deadline | `a2ui` **DateTimeInput** | native picker; `enableDate`/`enableTime` |
+| judge or pick among visual artifacts | `a2ui` **Image** (+ ChoicePicker or Buttons) | see image conventions below |
+| several related questions | `ask_sequence` | one panel, instant advance; hand-roll a loop only when a later question depends on an earlier answer |
+| FYI only, no answer needed | `none` | auto-dismisses; don't dress information up as a question |
+
+Two rules that trump the table: **one decision per panel** (if a prompt needs two widgets to answer two things, it's two questions — use `ask_sequence`), and **the widget must constrain the answer to what you can act on** (if you'd have to parse or re-ask, you picked too loose a widget).
+
+### Showing images — conventions
+
+The release build's CSP allows only `img-src 'self' data:` — **remote URLs and local file paths will not render.** Embed images as base64 `data:` URIs, and remember the whole `a2ui` payload is capped at 256 KiB, so downscale/compress first (~600px JPEG ≈ 60 KB is plenty at panel size):
+
+```bash
+sips -Z 640 -s format jpeg -s formatOptions 60 input.png --out /tmp/small.jpg
+B64=$(base64 -i /tmp/small.jpg)   # → "data:image/jpeg;base64,$B64"
+```
+
+Scaling is fixed by convention — images are display-only, no zoom/pan:
+
+- Always set `"fit": "contain"` (the API default is `fill`, which distorts).
+- Default `"variant": "mediumFeature"` (120px cap) when the image accompanies the question; `"largeFeature"` (160px, full width) when the image **is** the question — e.g. "keep this one?".
+- `icon` (24px) / `avatar` (44px, round) for decoration only, never for content the user must judge.
+
+A "keep this thumbnail?" prompt — Image + choice buttons:
+
+```json
+{
+  "title": "Keep this thumbnail?",
+  "timeout_s": 90,
+  "a2ui": [
+    { "version": "v0.9", "createSurface": { "surfaceId": "main", "catalogId": "cenno:catalog/v1" } },
+    { "version": "v0.9", "updateComponents": { "surfaceId": "main", "components": [
+      { "id": "root",  "component": "Column", "children": ["col"] },
+      { "id": "col",   "component": "Column", "children": ["title", "img", "picker"] },
+      { "id": "title", "component": "Text", "text": "Keep this thumbnail?", "variant": "h2" },
+      { "id": "img",   "component": "Image", "url": "data:image/jpeg;base64,…",
+        "description": "generated thumbnail candidate", "fit": "contain", "variant": "largeFeature" },
+      { "id": "picker", "component": "ChoicePicker", "options": [
+          { "label": "Keep", "value": "keep" },
+          { "label": "Regenerate", "value": "regenerate" },
+          { "label": "Skip", "value": "skip" } ],
+        "value": { "path": "/pick" },
+        "selectAction": { "event": { "name": "submit-pick",
+          "context": { "value": { "path": "/pick" }, "via": "choice" } } } }
+    ] } },
+    { "version": "v0.9", "updateDataModel": { "surfaceId": "main", "path": "/", "value": {} } }
+  ]
+}
+```
+
+To choose among N candidates, prefer one panel per candidate via `ask_sequence` (keep/reject each) over cramming a grid into one panel — the panel is small and the per-image verdict is cleaner data.
+
 ## Patterns
 
 **Confirm before something irreversible** — the highest-value use:
