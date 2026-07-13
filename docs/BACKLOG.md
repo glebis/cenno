@@ -41,3 +41,18 @@ Cenno should be able to present media files inline in a prompt — audio, video,
 Shape sketch: a prompt can attach a list of media items, each rendered with an inline play/pause toggle (for audio/video) or preview (image/animation). The user can replay any item individually, and select or react to any one — or all at once (e.g. "pick A", "reject all", per-item thumbs). Part of a larger media-display capability, not audio-only.
 
 Fields sketch: `media: [{id, kind: audio|video|image|animation, url_or_path, label}]` on AskRequest; answer carries which item(s) were selected/reacted to. Composes with `choices` (each choice could bind to a media item) and with the `actions` idea above.
+
+Addendum 2026-07-13 (from Gleb, voice): images should come with *controls*, not just display —
+per-image select/react, zoom/compare, and pairing with input widgets (e.g. rate each image on
+a slider). Current state: A2UI catalog already has a display-only `Image` component plus
+`Scale`/`Slider`; what's missing is (a) interactive image affordances (select, zoom, compare
+grid), and (b) serving *local* image files into the webview (agents have paths, not URLs —
+needs Tauri asset-protocol scoping, a security surface to design deliberately).
+
+## 2026-07-13 — Widget-advisor guidance in the cenno skill (from Gleb, voice)
+
+The `skills/cenno/SKILL.md` teaches mechanics (kinds, A2UI payloads) but not *judgment*:
+which widget fits which question. Add a decision guide — confirm for yes/no, choice ≤5
+options, scale for intensity/satisfaction, slider for continuous ranges, voice_text for
+open-ended, media grid for "pick one of these artifacts", sequences for check-ins.
+Docs-only, no app code — buildable during revenue focus without breaking the freeze.
