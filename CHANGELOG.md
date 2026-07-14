@@ -4,9 +4,26 @@ All notable changes to cenno are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
-## [0.3.2] — 2026-06-23
+## [0.4.0] — 2026-07-14
+
+> Includes everything staged under the never-published 0.3.2 bump.
+
+### Added
+
+- **Voice-mute** — prompts can open silently (`--muted`), with an in-panel
+  mute/unmute toggle; the final mute state is reported in the answer.
+
+### Changed
+
+- **Voice-out timing** — the panel now appears when speech actually starts,
+  and stopping a voice fades it out (~200 ms) instead of cutting it off;
+  stop also cancels any in-flight synthesis.
+- **cenno is now pronounced the Italian way** ("CHEN-no") when read aloud.
+- The **About** tab shows the live app version instead of a hard-coded one.
 
 ### Fixed
+
+- Tray: **"Show pending prompt"** is now truthful and functional.
 
 - **The panel no longer times out while you're typing — and never loses your
   text.** Editing a field now holds the prompt open (the deadline is pushed far
@@ -15,17 +32,12 @@ All notable changes to cenno are documented here. The format follows
   so a late answer still delivers, and in-progress text is saved as a draft as a
   safety net. Previously a prompt could close mid-edit and discard what you'd
   typed.
-- **Voice-out (sound-out) stayed silent after you turned it on.** The prompt
+- **Voice-out respects live config changes.** The prompt
   panel decided whether to speak using the config loaded at app launch, so
   enabling or retuning voice-out in Settings did nothing until a restart —
   while "Test voice" (which reads fresh and skips the gate) worked, masking the
   bug. The panel now re-reads the voice config fresh for every prompt, so
   Settings changes take effect on the next prompt with no restart.
-
-### Changed
-
-- **cenno is now pronounced the Italian way** ("CHEN-no") when read aloud.
-- The **About** tab shows the live app version instead of a hard-coded one.
 
 ## [0.3.1] — 2026-06-23
 
