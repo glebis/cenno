@@ -31,7 +31,7 @@ async fn ask_user_over_socket_resolves() {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             for id in reg2.pending_ids() {
-                reg2.resolve(&id, "yes".into(), Via::Text);
+                reg2.resolve(&id, "yes".into(), Via::Text, None);
             }
         }
     });
@@ -118,7 +118,7 @@ async fn answered_ask_writes_history_row() {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             for id in reg2.pending_ids() {
-                reg2.resolve(&id, "ship it".into(), Via::Choice);
+                reg2.resolve(&id, "ship it".into(), Via::Choice, None);
             }
         }
     });
@@ -175,7 +175,7 @@ async fn ask_sequence_runs_questions_in_order_and_records_each() {
             // sequence fires the next ask only after this resolves).
             for (id, request, _remaining) in reg2.pending() {
                 let answer = format!("ans-{}", request.title);
-                reg2.resolve(&id, answer, Via::Text);
+                reg2.resolve(&id, answer, Via::Text, None);
             }
         }
     });
@@ -245,7 +245,7 @@ async fn ask_sequence_timeout_ends_run_early() {
             tokio::time::sleep(std::time::Duration::from_millis(30)).await;
             for (id, request, _remaining) in reg2.pending() {
                 if request.title == "first" {
-                    reg2.resolve(&id, "ok".into(), Via::Text);
+                    reg2.resolve(&id, "ok".into(), Via::Text, None);
                 }
             }
         }
@@ -355,7 +355,7 @@ async fn suppressed_notify_skips_display_but_prompt_still_registers() {
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             for id in reg2.pending_ids() {
-                reg2.resolve(&id, "back".into(), Via::Text);
+                reg2.resolve(&id, "back".into(), Via::Text, None);
             }
         }
     });

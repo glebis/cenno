@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { orchestratePrompt, type PlayerConfig, type SpeakablePrompt } from "./orchestrate";
+import { speechTextFor } from "./speechText";
 import { readFreshTts } from "../userConfig";
 
 export type { PlayerConfig, SpeakablePrompt } from "./orchestrate";
@@ -10,6 +11,8 @@ export interface TtsPlayer {
   speaking: boolean;
   /** Stop the current utterance without dismissing the prompt. */
   stop: () => void;
+  /** Speak the prompt now (unmute a silently-opened panel). */
+  readNow: () => void;
 }
 
 /**
@@ -62,5 +65,18 @@ export function useTtsPlayer(prompt: SpeakablePrompt | null, cfg: PlayerConfig):
     void invoke("tts_stop").catch(() => {});
   }, []);
 
-  return { speaking, stop };
+  const readNow = useCallback(() => {
+    if (!prompt) return;
+    const text = speechTextFor(prompt);
+    if (!text) return;
+    setSpeaking(true);
+    void (async () => {
+      const fresh = await readFreshTts().catch(() => cfg);
+      await invoke("tts_speak", { text, voice: fresh.voice ?? null }).catch(() => {});
+    })();
+    // Re-create only for a new prompt identity, like the auto-speak effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  return { speaking, stop, readNow };
 }

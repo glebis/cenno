@@ -8,8 +8,8 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Command::Ask { title, body, say, timeout }) => {
-            run_ask(title, body, say, timeout);
+        Some(Command::Ask { title, body, say, timeout, muted }) => {
+            run_ask(title, body, say, timeout, muted);
         }
         Some(Command::Export { format, since }) => {
             run_export(format, since);
@@ -117,7 +117,7 @@ fn run_mcp_stdio() -> ! {
     }
 }
 
-fn run_ask(title: String, body: String, say: String, timeout: u64) {
+fn run_ask(title: String, body: String, say: String, timeout: u64, muted: bool) {
     let sock_path = cenno_lib::mcp::socket_path();
 
     if !sock_path.exists() {
@@ -137,6 +137,9 @@ fn run_ask(title: String, body: String, say: String, timeout: u64) {
     });
     if !say.is_empty() {
         payload["say"] = serde_json::Value::String(say);
+    }
+    if muted {
+        payload["muted"] = serde_json::Value::Bool(true);
     }
 
     let result = rt.block_on(cenno_lib::mcp::client::call_ask_user(&sock_path, payload));

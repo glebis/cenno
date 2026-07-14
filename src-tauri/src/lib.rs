@@ -199,13 +199,13 @@ fn apply_panel_layout(
 }
 
 #[tauri::command]
-fn answer_prompt(state: tauri::State<PromptRegistry>, id: String, answer: String, via: String) -> bool {
+fn answer_prompt(state: tauri::State<PromptRegistry>, id: String, answer: String, via: String, muted: Option<bool>) -> bool {
     let via = match via.as_str() {
         "voice_text" => Via::VoiceText,
         "choice" => Via::Choice,
         _ => Via::Text,
     };
-    state.resolve(&id, answer, via)
+    state.resolve(&id, answer, via, muted)
 }
 
 /// User dismissed the panel (clicked ✕): end the parked `ask()` as a

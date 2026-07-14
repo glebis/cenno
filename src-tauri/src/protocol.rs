@@ -96,6 +96,10 @@ pub struct AskRequest {
     /// ear-friendly line. Absent → fall back to reading the prompt itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub say: Option<String>,
+    /// Open the panel silently regardless of urgency gating (voice-mute).
+    /// The final mute state is echoed back on `Answered.muted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
 }
 fn default_urgency() -> Urgency {
     Urgency::Normal
@@ -128,7 +132,16 @@ pub enum Via {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 pub enum AskResponse {
-    Answered { answer: String, via: Via, elapsed_s: f64 },
+    Answered {
+        answer: String,
+        via: Via,
+        elapsed_s: f64,
+        /// Final voice-mute state of the panel (user toggle wins over the
+        /// request default). Absent on older frontends — callers treat
+        /// missing as unknown.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        muted: Option<bool>,
+    },
     /// Invariant: `answered` is always `false` on the wire. The presence of
     /// this shape (`{"answered":false,"prompt_id":...}`) MEANS the prompt
     /// timed out; the field exists only because the wire format requires it.
@@ -193,7 +206,7 @@ mod tests {
     fn sequence_response_serializes_ordered_answers() {
         let resp = SequenceResponse {
             answers: vec![
-                AskResponse::Answered { answer: "y".into(), via: Via::Text, elapsed_s: 1.0 },
+                AskResponse::Answered { answer: "y".into(), via: Via::Text, elapsed_s: 1.0, muted: None },
                 AskResponse::TimedOut { answered: false, prompt_id: "p_1".into() },
             ],
         };
@@ -224,7 +237,7 @@ mod tests {
 
     #[test]
     fn answered_response_serializes() {
-        let resp = AskResponse::Answered { answer: "ok".into(), via: Via::Text, elapsed_s: 3.2 };
+        let resp = AskResponse::Answered { answer: "ok".into(), via: Via::Text, elapsed_s: 3.2, muted: None };
         let json = serde_json::to_string(&resp).unwrap();
         assert_eq!(json, r#"{"answer":"ok","via":"text","elapsed_s":3.2}"#);
     }
@@ -235,6 +248,7 @@ mod tests {
             answer: "dictated".into(),
             via: Via::VoiceText,
             elapsed_s: 4.0,
+            muted: None,
         };
         assert_eq!(
             serde_json::to_string(&resp).unwrap(),

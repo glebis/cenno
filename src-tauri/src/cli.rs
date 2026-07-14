@@ -32,6 +32,9 @@ pub enum Command {
         /// Seconds to wait for an answer
         #[arg(long, default_value = "120")]
         timeout: u64,
+        /// Open the panel silently (no voice-out); the user can unmute in-panel
+        #[arg(long)]
+        muted: bool,
     },
     /// Export prompt history to stdout (headless — no app needed)
     Export {
@@ -75,6 +78,20 @@ pub fn parse_since(s: &str) -> Result<DateTime<Utc>, String> {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn parses_ask_muted() {
+        let cli = Cli::try_parse_from(["cenno", "ask", "x", "--muted"]).unwrap();
+        match cli.command {
+            Some(Command::Ask { muted, .. }) => assert!(muted),
+            _ => panic!(),
+        }
+        let cli = Cli::try_parse_from(["cenno", "ask", "x"]).unwrap();
+        match cli.command {
+            Some(Command::Ask { muted, .. }) => assert!(!muted),
+            _ => panic!(),
+        }
+    }
 
     #[test]
     fn parses_ask() {

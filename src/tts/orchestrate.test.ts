@@ -111,3 +111,12 @@ describe("orchestratePrompt — cancellation stands down silently", () => {
     expect(calls).not.toContain("panelReady");
   });
 });
+
+describe("orchestratePrompt — voice-mute", () => {
+  it("signals panelReady without speaking when the prompt is muted", async () => {
+    const { io, calls } = fakeIo();
+    await orchestratePrompt(prompt({ muted: true }), cfg(), io);
+    expect(calls).not.toContain("speak");
+    expect(calls).toContain("panelReady");
+  });
+});

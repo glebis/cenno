@@ -50,6 +50,8 @@ export interface Prompt {
   urgency?: string;
   /** Optional short spoken summary for sound-out (spoken instead of the body). */
   say?: string;
+  /** Open silently (voice-mute default); the chrome offers unmute instead. */
+  muted?: boolean;
   /**
    * Native A2UI v0.9 message array (the desugar envelope shape). When
    * present it REPLACES desugaring: the payload is fed to the processor
@@ -104,6 +106,7 @@ export default function PromptPanel({
   onAnswer,
   onDismiss,
   onStopReading,
+  onReadAloud,
 }: {
   prompt: Prompt;
   onAnswer: (id: string, answer: string, via: Via) => void;
@@ -120,6 +123,11 @@ export default function PromptPanel({
    * (the user can still read and answer). Absent → no control shown.
    */
   onStopReading?: () => void;
+  /**
+   * Present when the prompt opened muted and is not currently speaking.
+   * Renders a speaker-on control that reads the prompt aloud now (unmute).
+   */
+  onReadAloud?: () => void;
 }) {
   // Refs keep the action handler (created once per prompt.id) pointed at the
   // latest props without rebuilding the processor on every render.
@@ -231,6 +239,32 @@ export default function PromptPanel({
           z-index above the drag strip so the ✕ stays clickable. */}
       <div className="prompt-panel__chrome">
         <span className="prompt-panel__wordmark">cenno</span>
+        {onReadAloud && !onStopReading && (
+          <button
+            type="button"
+            className="prompt-panel__mute"
+            aria-label="Read aloud"
+            title="Read aloud"
+            onClick={onReadAloud}
+          >
+            {/* Speaker-on glyph — mirrors the mute control's styling. */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M4 9v6h4l5 4V5L8 9H4z"
+                fill="currentColor"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        )}
         {onStopReading && (
           <button
             type="button"

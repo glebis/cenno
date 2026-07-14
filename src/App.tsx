@@ -24,6 +24,8 @@ interface PromptEvent {
     urgency?: string;
     // Optional short spoken summary for sound-out (spoken instead of the body).
     say?: string;
+    // Voice-mute: open the panel silently; user can unmute in the chrome.
+    muted?: boolean;
     // Native A2UI payload (already vetted by src-tauri/src/a2ui_guard.rs).
     a2ui?: unknown;
   };
@@ -57,6 +59,7 @@ function toPrompt({ id, request, seq }: PromptEvent): Prompt {
     progress: request.progress,
     urgency: request.urgency,
     say: request.say,
+    muted: request.muted,
     a2ui: request.a2ui,
     seq,
   };
@@ -210,6 +213,9 @@ function App() {
   const [active, setActive] = useState<ActivePrompt | null>(null);
   // Post-answer linger: true between a delivered answer and the hide.
   const [answered, setAnswered] = useState(false);
+  // Voice-mute final state for the active prompt: null → follow the request
+  // default; the user's in-panel toggle overrides. Reported on the answer.
+  const [userMuted, setUserMuted] = useState<boolean | null>(null);
   // The confirmation word for THIS answer — drawn from the rotating cycle
   // once per answer (state, not a render-time call: re-renders during the
   // linger must not advance the cycle).
@@ -462,10 +468,17 @@ function App() {
     return () => clearTimeout(timer);
   }, [answered]);
 
+  // A mute/unmute choice belongs to one prompt only — a new prompt on the
+  // panel falls back to its own request default.
+  useEffect(() => {
+    setUserMuted(null);
+  }, [active?.prompt.id]);
+
   async function handleAnswer(id: string, answer: string, via: Via) {
+    const muted = userMuted ?? active?.prompt.muted ?? false;
     let resolved: boolean;
     try {
-      resolved = await invoke<boolean>("answer_prompt", { id, answer, via });
+      resolved = await invoke<boolean>("answer_prompt", { id, answer, via, muted });
     } catch (e) {
       // Keep the panel up so the user can retry instead of silently losing it.
       console.error("answer_prompt failed:", e);
@@ -546,6 +559,7 @@ function App() {
           body_md: active.prompt.body_md,
           say: active.prompt.say,
           urgency: active.prompt.urgency,
+          muted: userMuted ?? active.prompt.muted,
         }
       : null,
     getTts(),
@@ -577,7 +591,22 @@ function App() {
       prompt={active.prompt}
       onAnswer={handleAnswer}
       onDismiss={handleDismiss}
-      onStopReading={tts.speaking ? tts.stop : undefined}
+      onStopReading={
+        tts.speaking
+          ? () => {
+              tts.stop();
+              setUserMuted(true);
+            }
+          : undefined
+      }
+      onReadAloud={
+        !tts.speaking && (userMuted ?? active.prompt.muted)
+          ? () => {
+              tts.readNow();
+              setUserMuted(false);
+            }
+          : undefined
+      }
     />
   );
 }

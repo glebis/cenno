@@ -21,6 +21,8 @@ export interface SpeakablePrompt {
   /** Optional agent-authored spoken summary; spoken instead of the body. */
   say?: string;
   urgency?: string;
+  /** Voice-mute: open silently regardless of urgency gating. */
+  muted?: boolean;
 }
 
 /** Gating config plus the optional on-device voice identifier to speak with. */
@@ -51,7 +53,7 @@ export async function orchestratePrompt(
   if (io.cancelled()) return;
 
   const text = speechTextFor(prompt);
-  if (!shouldSpeak(prompt.urgency, fresh) || !text) {
+  if (prompt.muted || !shouldSpeak(prompt.urgency, fresh) || !text) {
     io.setSpeaking(false);
     // Nothing to wait for — the panel may show right away.
     io.panelReady();

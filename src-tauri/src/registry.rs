@@ -32,7 +32,7 @@ type Watcher = Arc<dyn Fn() + Send + Sync>;
 
 struct Pending {
     /// None after a resolve() consumed the sender (including a late resolve on a timed-out prompt).
-    tx: Option<oneshot::Sender<(String, Via)>>,
+    tx: Option<oneshot::Sender<(String, Via, Option<bool>)>>,
     pub request: AskRequest,
     /// The prompt's timeout budget. The clock does NOT start at registration —
     /// it starts when the panel first DISPLAYS the prompt (mark_shown), so a
@@ -145,8 +145,8 @@ impl PromptRegistry {
                 res = &mut rx => {
                     self.inner.lock().remove(&id);
                     return match res {
-                        Ok((answer, via)) => AskResponse::Answered {
-                            answer, via, elapsed_s: started.elapsed().as_secs_f64(),
+                        Ok((answer, via, muted)) => AskResponse::Answered {
+                            answer, via, elapsed_s: started.elapsed().as_secs_f64(), muted,
                         },
                         // Sender dropped by dismiss() before the prompt was shown.
                         Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
@@ -178,8 +178,8 @@ impl PromptRegistry {
                 res = &mut rx => {
                     self.inner.lock().remove(&id);
                     return match res {
-                        Ok((answer, via)) => AskResponse::Answered {
-                            answer, via, elapsed_s: started.elapsed().as_secs_f64(),
+                        Ok((answer, via, muted)) => AskResponse::Answered {
+                            answer, via, elapsed_s: started.elapsed().as_secs_f64(), muted,
                         },
                         // Sender dropped by dismiss() → TimedOut wire shape.
                         Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
@@ -233,10 +233,10 @@ impl PromptRegistry {
         }
     }
 
-    pub fn resolve(&self, id: &str, answer: String, via: Via) -> bool {
+    pub fn resolve(&self, id: &str, answer: String, via: Via, muted: Option<bool>) -> bool {
         let mut map = self.inner.lock();
         match map.get_mut(id).and_then(|p| p.tx.take()) {
-            Some(tx) => tx.send((answer, via)).is_ok(),
+            Some(tx) => tx.send((answer, via, muted)).is_ok(),
             None => false,
         }
     }
@@ -329,7 +329,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         assert_eq!(fired.load(Ordering::SeqCst), 1, "registration fires the watcher");
         let id = reg.pending_ids().pop().unwrap();
-        assert!(reg.resolve(&id, "ok".into(), Via::Text));
+        assert!(reg.resolve(&id, "ok".into(), Via::Text, None));
         task.await.unwrap();
         assert_eq!(fired.load(Ordering::SeqCst), 2, "settle fires the watcher");
     }
@@ -403,7 +403,7 @@ mod tests {
         let task = tokio::spawn(async move { reg2.ask(req(), |_id, _req| {}).await });
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let id = reg.pending_ids()[0].clone();
-        assert!(reg.resolve(&id, "hello".into(), Via::Text));
+        assert!(reg.resolve(&id, "hello".into(), Via::Text, None));
         match task.await.unwrap() {
             AskResponse::Answered { answer, .. } => assert_eq!(answer, "hello"),
             _ => panic!("expected Answered"),
@@ -436,13 +436,13 @@ mod tests {
         assert_eq!(pending[0].2, 1, "reports the full budget until shown");
         assert!(!task.is_finished(), "ask() must not have timed out before being shown");
         // Clean up.
-        assert!(reg.resolve(&pending[0].0, "late".into(), Via::Text));
+        assert!(reg.resolve(&pending[0].0, "late".into(), Via::Text, None));
         task.await.unwrap();
     }
 
     #[tokio::test]
     async fn resolve_unknown_id_is_false() {
-        assert!(!PromptRegistry::new().resolve("nope", "x".into(), Via::Text));
+        assert!(!PromptRegistry::new().resolve("nope", "x".into(), Via::Text, None));
     }
 
     #[tokio::test]
@@ -455,7 +455,7 @@ mod tests {
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].1.title, "t");
         let id = pending[0].0.clone();
-        assert!(reg.resolve(&id, "hi".into(), Via::Text));
+        assert!(reg.resolve(&id, "hi".into(), Via::Text, None));
         task.await.unwrap();
         assert!(reg.pending().is_empty());
     }
@@ -477,7 +477,7 @@ mod tests {
         assert!(remaining < 10, "remaining_s should have decreased, got {remaining}");
         assert!(remaining >= 8, "remaining_s implausibly low, got {remaining}");
         let id = pending[0].0.clone();
-        assert!(reg.resolve(&id, "done".into(), Via::Text));
+        assert!(reg.resolve(&id, "done".into(), Via::Text, None));
         task.await.unwrap();
     }
 

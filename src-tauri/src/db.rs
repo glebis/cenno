@@ -55,7 +55,7 @@ impl Db {
 
         let (status, answer, via, elapsed_s): (&str, Option<String>, Option<String>, Option<f64>) =
             match outcome {
-                AskResponse::Answered { answer, via, elapsed_s } => {
+                AskResponse::Answered { answer, via, elapsed_s, .. } => {
                     let via_str = serde_json::to_value(via)
                         .ok()
                         .and_then(|v| v.as_str().map(|s| s.to_string()));
@@ -205,6 +205,7 @@ mod tests {
             answer: "yes".to_string(),
             via: Via::Text,
             elapsed_s: 3.5,
+            muted: None,
         };
         db.record_prompt(&req, "p_0", &outcome, created_at).unwrap();
 
@@ -273,6 +274,7 @@ mod tests {
             answer: "ok".to_string(),
             via: Via::Choice,
             elapsed_s: 1.0,
+            muted: None,
         };
         db.record_prompt(&req, "p_2", &outcome, created_at).unwrap();
 
@@ -307,6 +309,7 @@ mod tests {
             answer: "exported".to_string(),
             via: Via::Text,
             elapsed_s: 2.0,
+            muted: None,
         };
         db.record_prompt(&req, "p_exp", &outcome, created_at).unwrap();
 
@@ -331,11 +334,11 @@ mod tests {
         db.record_prompt(&req, "before", &AskResponse::TimedOut { answered: false, prompt_id: "before".into() }, before).unwrap();
 
         // Insert row AT the boundary (should be included — inclusive).
-        db.record_prompt(&req, "at", &AskResponse::Answered { answer: "y".into(), via: Via::Text, elapsed_s: 1.0 }, t0).unwrap();
+        db.record_prompt(&req, "at", &AskResponse::Answered { answer: "y".into(), via: Via::Text, elapsed_s: 1.0, muted: None }, t0).unwrap();
 
         // Insert row AFTER the boundary.
         let after = t0 + chrono::Duration::seconds(1);
-        db.record_prompt(&req, "after", &AskResponse::Answered { answer: "z".into(), via: Via::Text, elapsed_s: 1.0 }, after).unwrap();
+        db.record_prompt(&req, "after", &AskResponse::Answered { answer: "z".into(), via: Via::Text, elapsed_s: 1.0, muted: None }, after).unwrap();
 
         // since = t0: "before" excluded, "at" and "after" included.
         let rows = db.export_rows(Some(t0)).unwrap();
