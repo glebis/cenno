@@ -117,6 +117,32 @@ pub struct ShortcutsConfig {
     pub reopen: Option<String>,
 }
 
+/// Screen-context safety policy. Capture is available on demand by default,
+/// while passive sampling is explicitly opt-in.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CaptureConfig {
+    pub enabled: Option<bool>,
+    pub passive_sampling: Option<bool>,
+    pub denylist_bundles: Vec<String>,
+    pub denylist_hosts: Vec<String>,
+    pub redaction: Option<bool>,
+}
+
+impl CaptureConfig {
+    pub fn capture_enabled(&self) -> bool {
+        self.enabled.unwrap_or(true)
+    }
+
+    pub fn passive_sampling_enabled(&self) -> bool {
+        self.passive_sampling.unwrap_or(false)
+    }
+
+    pub fn redaction_enabled(&self) -> bool {
+        self.redaction.unwrap_or(true)
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
@@ -126,6 +152,8 @@ pub struct Config {
     pub tts: TtsConfig,
     /// Global keyboard shortcuts (e.g. reopen a pending prompt).
     pub shortcuts: ShortcutsConfig,
+    /// Screen-context capture, denylist, and redaction policy.
+    pub capture: CaptureConfig,
     /// Cross-device prompt routing policy (which companion devices receive
     /// prompts and how). See `crate::routing`.
     pub routing: crate::routing::RoutingConfig,
@@ -226,6 +254,27 @@ mod tests {
         assert_eq!(geo.width, 420.0);
         assert_eq!(geo.min_height, 240.0);
         assert_eq!(geo.max_height, 560.0);
+    }
+
+    #[test]
+    fn capture_defaults_are_safe_and_capture_is_on_demand() {
+        let cfg: Config = serde_json::from_str("{}").unwrap();
+        assert!(cfg.capture.capture_enabled());
+        assert!(!cfg.capture.passive_sampling_enabled());
+        assert!(cfg.capture.redaction_enabled());
+        assert!(cfg.capture.denylist_bundles.is_empty());
+        assert!(cfg.capture.denylist_hosts.is_empty());
+    }
+
+    #[test]
+    fn capture_config_round_trips() {
+        let src = r#"{"capture":{"enabled":false,"passive_sampling":false,"denylist_bundles":["com.example.Secret"],"denylist_hosts":["private.example"],"redaction":false}}"#;
+        let cfg: Config = serde_json::from_str(src).unwrap();
+        assert!(!cfg.capture.capture_enabled());
+        assert_eq!(cfg.capture.denylist_hosts, ["private.example"]);
+        let json = serde_json::to_string(&cfg).unwrap();
+        let round: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(round.capture.denylist_bundles, ["com.example.Secret"]);
     }
 
     #[test]

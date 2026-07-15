@@ -27,9 +27,22 @@ Working examples: [`docs/examples/dot-cenno/`](examples/dot-cenno/).
     "timeout_s": 90,              // when an agent omits timeout_s (built-in 120)
     "flow": "ema"                 // when an agent omits flow (mood|question|ema|reminder|ambient)
   },
+  "capture": {
+    "enabled": true,              // global screen-context kill switch
+    "passive_sampling": false,    // opt-in; on-demand reads still allowed
+    "denylist_bundles": ["com.example.SecretApp"],
+    "denylist_hosts": ["private.example"],
+    "redaction": true
+  },
   "widgets": { /* see below */ }
 }
 ```
+
+Bundle identifiers are exact, case-sensitive matches. A denied host also
+denies its subdomains (`private.example` blocks `mail.private.example`) but not
+lookalikes such as `notprivate.example`. Built-in password-manager and Keychain
+bundle identifiers are always denied. Capture and high-confidence secret
+redaction default on; passive sampling defaults off.
 
 **Position** is either a screen-corner anchor or explicit coordinates:
 

@@ -36,6 +36,13 @@ export interface UserConfig {
   defaults?: { timeout_s?: number; flow?: string };
   widgets?: Record<string, WidgetTemplate>;
   tts?: RawTtsConfig;
+  capture?: {
+    enabled?: boolean;
+    passive_sampling?: boolean;
+    denylist_bundles?: string[];
+    denylist_hosts?: string[];
+    redaction?: boolean;
+  };
 }
 
 /** Resolved voice-out config the player consumes (camelCase, defaults applied). */
