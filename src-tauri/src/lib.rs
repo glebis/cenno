@@ -724,6 +724,7 @@ pub fn run() {
             // Cross-device routing policy — cloned out before the config is moved
             // into managed state, so the MCP server can own its own copy.
             let routing = user_config.routing.clone();
+            let capture_policy = user_config.capture.clone();
             // Reopen-pending global shortcut — cloned out before the config moves
             // into managed state; registered (fail-soft) just below. Takes effect
             // on launch; a changed combo applies after the next restart.
@@ -833,6 +834,11 @@ pub fn run() {
                 move |snapshot| tray::refresh_capture_item(&capture_handle, snapshot),
             );
             app.manage(capture_state.clone());
+            let screen_context = crate::screen_context::ScreenContextServices::new(
+                std::sync::Arc::new(crate::screen_context::SwiftScreenContextReader),
+                capture_state.clone(),
+                capture_policy,
+            );
 
             // Register the reopen-pending global shortcut now — AFTER both the
             // registry and SuppressionState are managed, so a hotkey press in
@@ -943,6 +949,7 @@ pub fn run() {
                     db,
                     default_timeout_s,
                     routing,
+                    screen_context,
                 )
                 .await;
                 if let Err(e) = result {

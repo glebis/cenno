@@ -1,6 +1,47 @@
-use cenno_lib::{db::Db, mcp::start_socket_server, protocol::Via, registry::PromptRegistry};
+use cenno_lib::{
+    capture_guard::CaptureState,
+    config::CaptureConfig,
+    db::Db,
+    mcp::start_socket_server,
+    protocol::{RawScreenContext, ScreenContextRequest, ScreenContextStatus, Via},
+    registry::PromptRegistry,
+    screen_context::{ScreenContextReader, ScreenContextServices},
+};
 use cenno_lib::routing::{DeviceMode, RoutingConfig};
 use rmcp::{model::CallToolRequestParams, ServiceExt};
+use std::sync::Arc;
+
+#[derive(Clone)]
+struct FakeScreenContextReader(RawScreenContext);
+
+impl ScreenContextReader for FakeScreenContextReader {
+    fn read(&self, _request: &ScreenContextRequest) -> Result<RawScreenContext, String> {
+        Ok(self.0.clone())
+    }
+}
+
+fn screen_context(status: ScreenContextStatus, policy: CaptureConfig) -> ScreenContextServices {
+    ScreenContextServices::new(
+        Arc::new(FakeScreenContextReader(RawScreenContext {
+            status,
+            app_name: Some("Notes".into()),
+            bundle_id: Some("com.apple.Notes".into()),
+            window_title: Some("note".into()),
+            url: None,
+            host: None,
+            focused_role: Some("AXTextArea".into()),
+            selected_text: Some("chosen".into()),
+            visible_text: Some("visible".into()),
+            truncated: false,
+        })),
+        CaptureState::new(true, |_| {}),
+        policy,
+    )
+}
+
+fn default_screen_context() -> ScreenContextServices {
+    screen_context(ScreenContextStatus::AxUnavailable, CaptureConfig::default())
+}
 
 /// All companion devices off → `relay::write_prompt` short-circuits on empty
 /// targets, so these socket-flow tests never invoke the CloudKit FFI (which
@@ -17,11 +58,86 @@ fn off_routing() -> RoutingConfig {
 }
 
 #[tokio::test]
+async fn get_screen_context_is_listed_and_permission_denied_is_data() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("mcp.sock");
+    let reg = PromptRegistry::new();
+    start_socket_server(
+        sock.clone(),
+        reg,
+        |_id, _req, _seq| {},
+        || {},
+        None,
+        120,
+        off_routing(),
+        screen_context(ScreenContextStatus::PermissionDenied, CaptureConfig::default()),
+    )
+    .await
+    .unwrap();
+
+    let stream = tokio::net::UnixStream::connect(&sock).await.unwrap();
+    let client = ().serve(stream).await.unwrap();
+    let tools = client.list_all_tools().await.unwrap();
+    assert!(tools.iter().any(|tool| tool.name == "get_screen_context"));
+
+    let result = client
+        .call_tool(CallToolRequestParams::new("get_screen_context"))
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true), "absence is data: {result:?}");
+    let text = result.content[0].as_text().unwrap();
+    let response: serde_json::Value = serde_json::from_str(&text.text).unwrap();
+    assert_eq!(response["status"], "permission_denied");
+    assert_eq!(response["untrusted"], true);
+    let _ = client.cancel().await;
+}
+
+#[tokio::test]
+async fn get_screen_context_applies_guard_before_socket_release() {
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("mcp.sock");
+    let reg = PromptRegistry::new();
+    start_socket_server(
+        sock.clone(),
+        reg,
+        |_id, _req, _seq| {},
+        || {},
+        None,
+        120,
+        off_routing(),
+        screen_context(
+            ScreenContextStatus::Ok,
+            CaptureConfig {
+                denylist_bundles: vec!["com.apple.Notes".into()],
+                ..Default::default()
+            },
+        ),
+    )
+    .await
+    .unwrap();
+
+    let stream = tokio::net::UnixStream::connect(&sock).await.unwrap();
+    let client = ().serve(stream).await.unwrap();
+    let result = client
+        .call_tool(CallToolRequestParams::new("get_screen_context"))
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true));
+    let text = result.content[0].as_text().unwrap();
+    let response: serde_json::Value = serde_json::from_str(&text.text).unwrap();
+    assert_eq!(response["status"], "blocked");
+    assert_eq!(response["blocked_reason"], "denied_bundle");
+    assert!(response["app_name"].is_null());
+    assert!(response["visible_text"].is_null());
+    let _ = client.cancel().await;
+}
+
+#[tokio::test]
 async fn ask_user_over_socket_resolves() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("mcp.sock");
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, None, 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, None, 120, off_routing(), default_screen_context())
         .await
         .unwrap();
 
@@ -56,7 +172,7 @@ async fn ask_user_with_invalid_a2ui_errors_without_registering_prompt() {
     let dir = tempfile::tempdir().unwrap();
     let sock = dir.path().join("mcp.sock");
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, None, 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, None, 120, off_routing(), default_screen_context())
         .await
         .unwrap();
 
@@ -108,7 +224,7 @@ async fn answered_ask_writes_history_row() {
     let db = Db::open(&db_path).unwrap();
 
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing(), default_screen_context())
         .await
         .unwrap();
 
@@ -161,7 +277,7 @@ async fn ask_sequence_runs_questions_in_order_and_records_each() {
     let db = Db::open(&db_path).unwrap();
 
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing(), default_screen_context())
         .await
         .unwrap();
 
@@ -233,7 +349,7 @@ async fn ask_sequence_timeout_ends_run_early() {
     let db = Db::open(&db_path).unwrap();
 
     let reg = PromptRegistry::new();
-    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing())
+    start_socket_server(sock.clone(), reg.clone(), |_id, _req, _seq| {}, || {}, Some(db.clone()), 120, off_routing(), default_screen_context())
         .await
         .unwrap();
 
@@ -330,6 +446,7 @@ async fn suppressed_notify_skips_display_but_prompt_still_registers() {
         None,
         120,
         off_routing(),
+        default_screen_context(),
     )
     .await
     .unwrap();
