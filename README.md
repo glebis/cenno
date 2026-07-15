@@ -96,7 +96,7 @@ Once installed it activates on its own whenever a task calls for asking the user
 - **Focus-preserving**: the panel is a non-activating macOS panel — it floats above your work but never grabs your keyboard. You answer when you glance at it, not when it interrupts you.
 - **Structured answers**: agents get typed results (text / choice / scale / confirm), not parsed strings.
 - **Respectful by policy**: pause it from the tray (15 min → until tomorrow), and it stays quiet automatically while the screen it lives on is in fullscreen. Suppressed prompts queue and replay; agents just see their normal timeout.
-- **Your data stays yours**: every outcome lands in a local SQLite file (`0600` permissions, never leaves the machine) and exports as JSON/CSV.
+- **Local, inspectable storage**: every outcome lands in a local SQLite file (`0600` permissions) and exports as JSON/CSV.
 
 ---
 
@@ -138,11 +138,19 @@ cenno export --since 2026-06-01
 Every prompt outcome — answered or timed out — is recorded in
 `~/Library/Application Support/app.cenno/cenno.db`: question, input kind, flow, status, answer, how it was answered, response time, timestamps. `cenno export` dumps it; an empty history exports as `[]`.
 
-**Privacy:** all data is local; cenno makes no network connections on its own. The one exception is explicitly user-initiated: **Check for updates…** in the tray menu contacts GitHub releases (and downloads the update if you confirm). Answers are stored in plaintext inside your user-only (`0600`) database — FileVault covers it at rest.
+**Privacy:** answers and captured context are stored locally in the user-only
+(`0600`) database — FileVault covers it at rest. Screen capture adds no cenno
+network path, but captured context is returned to the requesting agent and may
+reach that agent's model provider. Separately, the optional CloudKit companion
+relay, user-initiated **Check for updates…**, and optional one-time voice-model
+download can use the network. See [SECURITY.md](SECURITY.md) for the exact
+boundaries.
 
 ## Tray menu
 
 ```
+Screen context allowed       ✓ (global kill switch; shows active reads)
+──────────────
 Pause for ▸  15 min · 30 min · 1 h · 2 h · 5 h · 8 h · Until tomorrow
 Resume now
 ──────────────
@@ -152,6 +160,10 @@ Launch at login            ✓ (default on)
 Check for updates…
 Quit cenno
 ```
+
+- **Screen context allowed** is cenno's own capture indicator because
+  Accessibility reads have no macOS recording indicator. Turning it off is a
+  persisted global kill switch; passive sampling remains off by default.
 
 - **Until tomorrow** = the next 5:00 AM, so a late-night pause survives the midnight boundary.
 - **Fullscreen quiet mode** only considers the screen the panel lives on; a fullscreen app on another display doesn't silence prompts. Suppressed prompts reappear on resume, toggle, pause expiry, or the next prompt.

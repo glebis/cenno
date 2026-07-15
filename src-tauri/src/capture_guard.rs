@@ -140,9 +140,11 @@ impl Drop for ActiveCapture {
 pub fn guard(
     input: CaptureInput,
     policy: &CaptureConfig,
-    capture_enabled: bool,
+    state: &CaptureState,
 ) -> Result<GuardedCapture, CaptureBlocked> {
-    if !capture_enabled {
+    // Re-check immediately before release/storage. A read may have begun
+    // while enabled and then been stopped from the tray while in flight.
+    if !state.is_enabled() {
         return Err(CaptureBlocked::CaptureDisabled);
     }
 
@@ -227,6 +229,10 @@ mod tests {
         }
     }
 
+    fn state(enabled: bool) -> CaptureState {
+        CaptureState::new(enabled, |_| {})
+    }
+
     #[test]
     fn disabled_precedes_denylist_and_redaction() {
         let cfg = CaptureConfig {
@@ -234,7 +240,11 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            guard(input("com.secret", "x.test", "sk-secret"), &cfg, false),
+            guard(
+                input("com.secret", "x.test", "sk-secret"),
+                &cfg,
+                &state(false)
+            ),
             Err(CaptureBlocked::CaptureDisabled)
         );
     }
@@ -247,14 +257,18 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            guard(input("com.secret", "safe.test", "do not leak"), &cfg, true),
+            guard(
+                input("com.secret", "safe.test", "do not leak"),
+                &cfg,
+                &state(true)
+            ),
             Err(CaptureBlocked::DeniedBundle)
         );
         assert_eq!(
             guard(
                 input("com.safe", "mail.private.example", "do not leak"),
                 &cfg,
-                true
+                &state(true)
             ),
             Err(CaptureBlocked::DeniedHost)
         );
@@ -264,7 +278,7 @@ mod tests {
     fn redacts_high_confidence_secrets_and_marks_output_untrusted() {
         let cfg = CaptureConfig::default();
         let raw = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature AKIAABCDEFGHIJKLMNOP sk-abcdefghijklmnopqrstuvwxyz123456";
-        let guarded = guard(input("com.safe", "safe.test", raw), &cfg, true).unwrap();
+        let guarded = guard(input("com.safe", "safe.test", raw), &cfg, &state(true)).unwrap();
         let text = guarded.captured_content.unwrap();
         assert!(!text.contains("AKIA"));
         assert!(!text.contains("eyJhbGci"));
@@ -281,7 +295,12 @@ mod tests {
             ..Default::default()
         };
         let raw = "ask-item sk-example short token AKIAABCDEFGHIJKLMNOP";
-        let guarded = guard(input("com.safe", "notprivate.example", raw), &cfg, true).unwrap();
+        let guarded = guard(
+            input("com.safe", "notprivate.example", raw),
+            &cfg,
+            &state(true),
+        )
+        .unwrap();
         assert_eq!(guarded.captured_content.as_deref(), Some(raw));
         assert_eq!(guarded.redaction_count, 0);
     }
@@ -314,5 +333,20 @@ mod tests {
         assert!(state.is_active());
         drop(second);
         assert!(!state.is_active());
+    }
+
+    #[test]
+    fn toggling_off_during_read_blocks_the_final_guard() {
+        let state = state(true);
+        let _lease = state.begin().unwrap();
+        state.set_enabled(false);
+        assert_eq!(
+            guard(
+                input("com.safe", "safe.test", "private"),
+                &CaptureConfig::default(),
+                &state
+            ),
+            Err(CaptureBlocked::CaptureDisabled)
+        );
     }
 }

@@ -11,10 +11,13 @@ relevant logs with private paths redacted.
 
 ## Threat Model
 
-cenno is a local-first Tauri 2 menu-bar app. It makes no network connections
-on its own; the one exception is the explicitly user-initiated update check.
-All answer history stays on disk. The attack surface is the local machine,
-the MCP socket, and agent-supplied prompt content.
+cenno is a local-first Tauri 2 menu-bar app. Answer history and captured screen
+context are stored locally. Network-capable features are separately bounded:
+the optional CloudKit companion relay, the explicitly user-initiated update
+check, and an optional one-time SpeechTranscriber model download. Screen
+capture adds no new cenno network path. The attack surface is the local
+machine, the MCP socket, agent-supplied prompt content, and untrusted screen
+content returned to an agent.
 
 ### MCP Unix Socket (`mcp.sock`)
 
@@ -40,8 +43,30 @@ the MCP socket, and agent-supplied prompt content.
 ### History database
 
 - `~/Library/Application Support/app.cenno/cenno.db`, created with `0600`
-  permissions. Answers are stored in plaintext; FileVault covers data at
-  rest. Nothing is transmitted anywhere.
+permissions. Answers are stored in plaintext; FileVault covers data at rest.
+
+### Screen capture and context
+
+- Screen text can be attacker-controlled. cenno returns it as
+  `captured_content` with `untrusted: true`; agents must treat it as quoted
+  data, never instructions.
+- Before return or storage, the Rust capture guard checks the global switch,
+  exact bundle-id and host/subdomain denials, then redacts high-confidence
+  private-key, AWS-key, JWT, and `sk-` token shapes.
+- Accessibility reads have no macOS recording indicator, so cenno shows its
+  own tray state and provides a persisted global off switch. Passive sampling
+  is off by default.
+- Accessibility and Screen Recording are separate, lazily requested macOS
+  permissions. A denial is a normal typed outcome, not permission to bypass
+  the guard.
+
+Pattern redaction is deliberately conservative and cannot catch every secret.
+Visible private content remains capturable outside denied apps and hosts.
+Captured context is delivered to the requesting agent and may reach that
+agent's model provider; cenno cannot control the agent's network or retention
+policy. The precise claim is: cenno processes and stores captured context
+locally, and screen capture adds no cenno network path — not that screen
+content can never leave the machine.
 
 ### Update channel
 
