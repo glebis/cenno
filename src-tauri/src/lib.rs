@@ -10,6 +10,7 @@ pub mod protocol;
 pub mod registry;
 pub mod relay;
 pub mod routing;
+pub mod screen_context;
 pub mod supertonic;
 pub mod suppress;
 pub mod tray;
