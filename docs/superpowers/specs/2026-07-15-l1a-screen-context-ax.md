@@ -23,8 +23,9 @@ AX comes back empty.
 
 - cenno's MCP server (`src-tauri/src/mcp.rs`, rmcp 1.7) exposes `ask_user` and
   `ask_sequence`. Tools return `CallToolResult`; `Result::Err(String)` becomes
-  an `is_error` result via rmcp's `IntoCallToolResult`. Adding a tool is a
-  well-worn path (`list_tools` + `call_tool` already switch on tool name).
+  an `is_error` result via rmcp's `IntoCallToolResult`. New tools are registered
+  through `#[tool_router]` + `#[tool]`; `list_tools`/`call_tool` already delegate
+  generically to that router.
 - cenno already reads the window graph: `suppress.rs` calls
   `CGWindowListCopyWindowInfo` for fullscreen detection. That gives window
   bounds/titles/layer — **not** content. AX is the tier above it (semantic
@@ -121,7 +122,8 @@ CallToolResult (text content, structured JSON)
   focus a native app (Notes) with selected text → assert `selected_text` and
   `window_title` come back; focus a browser → `url` best-effort populated;
   focus an Electron/canvas app → `status:"ax_unavailable"` (proving the L1b
-  hand-off contract). Confirm zero network calls (the app makes none).
+  hand-off contract). Confirm the screen-context path adds no cenno network
+  call; document that the requesting agent may transmit returned context.
 
 ## Out of scope
 
@@ -136,10 +138,10 @@ CallToolResult (text content, structured JSON)
 
 1. **Default `max_chars`.** 8 KiB balances usefulness vs. token cost; revisit
    once real agent usage exists.
-2. **Visible-text strategy per role.** `AXValue` works for text areas;
-   documents may need `AXStringForRange` over the visible range; some apps
-   expose neither. Proposed: try value → visible-range → concatenated
-   `AXStaticText` children (bounded), then give up and set `visible_text: null`.
+2. **Visible-text strategy per role.** Resolved for L1a: try `AXValue` on the
+   focused element, then `AXVisibleCharacterRange` → `AXStringForRange`. Do not
+   traverse static-text children; if both direct reads are empty, return null
+   (and `ax_unavailable` when no other semantic content exists).
 3. **Should `blocked` reveal which rule matched?** Leaning yes (a short
    `blocked_reason`) so the user understands why a read was declined, but it
    must not leak denylisted content.
