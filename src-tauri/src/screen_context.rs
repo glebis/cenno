@@ -1,6 +1,9 @@
 //! Guarded screen-context service and injectable AX reader boundary.
 
-use std::sync::Arc;
+use std::{
+    ffi::{c_char, c_void, CStr},
+    sync::Arc,
+};
 
 use crate::{
     capture_guard::{self, CaptureBlocked, CaptureInput, CaptureSource, CaptureState},
@@ -13,6 +16,80 @@ use crate::{
 
 pub trait ScreenContextReader: Send + Sync {
     fn read(&self, request: &ScreenContextRequest) -> Result<RawScreenContext, String>;
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SwiftScreenContextReader;
+
+type ScreenContextCallback = extern "C" fn(*mut c_void, *const c_char);
+
+#[cfg(target_os = "macos")]
+extern "C" {
+    fn cenno_screen_context_read(
+        include_visible_text: i32,
+        max_chars: u32,
+        ctx: *mut c_void,
+        callback: ScreenContextCallback,
+    ) -> i32;
+}
+
+extern "C" fn screen_context_callback(ctx: *mut c_void, json: *const c_char) {
+    if ctx.is_null() || json.is_null() {
+        return;
+    }
+    let output = unsafe { &mut *(ctx.cast::<Option<String>>()) };
+    *output = Some(
+        unsafe { CStr::from_ptr(json) }
+            .to_string_lossy()
+            .into_owned(),
+    );
+}
+
+fn decode_raw_json(json: &str) -> Result<RawScreenContext, String> {
+    serde_json::from_str(json).map_err(|e| format!("invalid Swift screen-context JSON: {e}"))
+}
+
+impl ScreenContextReader for SwiftScreenContextReader {
+    fn read(&self, request: &ScreenContextRequest) -> Result<RawScreenContext, String> {
+        #[cfg(target_os = "macos")]
+        {
+            let mut output: Option<String> = None;
+            let code = unsafe {
+                cenno_screen_context_read(
+                    i32::from(request.include_visible_text()),
+                    request.bounded_max_chars(),
+                    (&mut output as *mut Option<String>).cast(),
+                    screen_context_callback,
+                )
+            };
+            if code != 0 {
+                return Err(format!(
+                    "Swift screen-context reader failed with code {code}"
+                ));
+            }
+            let json = output.ok_or_else(|| {
+                "Swift screen-context reader returned without a callback".to_string()
+            })?;
+            return decode_raw_json(&json);
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = request;
+            Ok(RawScreenContext {
+                status: ScreenContextStatus::AxUnavailable,
+                app_name: None,
+                bundle_id: None,
+                window_title: None,
+                url: None,
+                host: None,
+                focused_role: None,
+                selected_text: None,
+                visible_text: None,
+                truncated: false,
+            })
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -271,5 +348,15 @@ mod tests {
             Some(ScreenContextBlockedReason::CaptureDisabled)
         );
         assert!(response.visible_text.is_none());
+    }
+
+    #[test]
+    fn swift_json_decodes_into_raw_contract() {
+        let raw = decode_raw_json(
+            r#"{"status":"ok","app_name":"Notes","bundle_id":"com.apple.Notes","window_title":"N","url":null,"host":null,"focused_role":"AXTextArea","selected_text":"chosen","visible_text":"body","truncated":false}"#,
+        ).unwrap();
+        assert_eq!(raw.status, ScreenContextStatus::Ok);
+        assert_eq!(raw.bundle_id.as_deref(), Some("com.apple.Notes"));
+        assert_eq!(raw.selected_text.as_deref(), Some("chosen"));
     }
 }
