@@ -176,9 +176,86 @@ pub struct SeqMeta {
     pub last: bool,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ScreenContextRequest {
+    pub include_visible_text: Option<bool>,
+    pub max_chars: Option<u32>,
+}
+
+impl ScreenContextRequest {
+    pub fn include_visible_text(&self) -> bool { self.include_visible_text.unwrap_or(true) }
+    pub fn bounded_max_chars(&self) -> u32 { self.max_chars.unwrap_or(8000).clamp(1, 8000) }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenContextStatus { Ok, PermissionDenied, AxUnavailable, Blocked }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenContextBlockedReason { CaptureDisabled, DeniedBundle, DeniedHost }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RawScreenContext {
+    pub status: ScreenContextStatus,
+    pub app_name: Option<String>,
+    pub bundle_id: Option<String>,
+    pub window_title: Option<String>,
+    pub url: Option<String>,
+    pub host: Option<String>,
+    pub focused_role: Option<String>,
+    pub selected_text: Option<String>,
+    pub visible_text: Option<String>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
+pub struct ScreenContextResponse {
+    pub status: ScreenContextStatus,
+    pub app_name: Option<String>,
+    pub bundle_id: Option<String>,
+    pub window_title: Option<String>,
+    pub url: Option<String>,
+    pub focused_role: Option<String>,
+    pub selected_text: Option<String>,
+    pub visible_text: Option<String>,
+    pub truncated: bool,
+    pub blocked_reason: Option<ScreenContextBlockedReason>,
+    pub redaction_count: usize,
+    pub untrusted: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn screen_context_request_defaults_and_clamps_cost() {
+        let default: ScreenContextRequest = serde_json::from_str("{}").unwrap();
+        assert!(default.include_visible_text());
+        assert_eq!(default.bounded_max_chars(), 8000);
+
+        let zero: ScreenContextRequest = serde_json::from_str(r#"{"max_chars":0}"#).unwrap();
+        assert_eq!(zero.bounded_max_chars(), 1);
+        let huge: ScreenContextRequest = serde_json::from_str(r#"{"max_chars":50000}"#).unwrap();
+        assert_eq!(huge.bounded_max_chars(), 8000);
+    }
+
+    #[test]
+    fn screen_context_statuses_are_typed_success_shapes() {
+        let response = ScreenContextResponse {
+            status: ScreenContextStatus::PermissionDenied,
+            app_name: None, bundle_id: None, window_title: None, url: None,
+            focused_role: None, selected_text: None, visible_text: None,
+            truncated: false, blocked_reason: None, redaction_count: 0,
+            untrusted: true,
+        };
+        let json = serde_json::to_value(response).unwrap();
+        assert_eq!(json["status"], "permission_denied");
+        assert_eq!(json["untrusted"], true);
+        assert!(json["blocked_reason"].is_null());
+    }
 
     #[test]
     fn sequence_request_roundtrips() {
