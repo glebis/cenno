@@ -123,8 +123,7 @@ impl CennoServer {
         Parameters(params): Parameters<ScreenContextRequest>,
     ) -> Result<String, String> {
         let response = self.screen_context.read_guarded(&params)?;
-        serde_json::to_string(&response)
-            .map_err(|e| format!("serializing screen context: {e}"))
+        serde_json::to_string(&response).map_err(|e| format!("serializing screen context: {e}"))
     }
 
     #[tool(
@@ -351,6 +350,9 @@ impl ServerHandler for CennoServer {
 /// Removes a stale (non-connectable) socket file first; errors if a live
 /// server already listens there. Returns once the listener is bound, so
 /// callers can connect immediately after this resolves.
+// The socket boundary owns the app's existing policy services and callbacks.
+// Keeping them explicit prevents accidentally creating a second capture state.
+#[allow(clippy::too_many_arguments)]
 pub async fn start_socket_server(
     sock_path: PathBuf,
     registry: PromptRegistry,

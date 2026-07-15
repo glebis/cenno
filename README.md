@@ -119,6 +119,18 @@ Returns `{answer, via, elapsed_s}`, or `{answered: false, prompt_id}` on timeout
 
 Run several questions in one panel, advancing instantly between them — `ask_sequence({questions: [<ask_user args>…], flow?})` returns an ordered `answers` array. Progress dots auto-fill; a per-question timeout ends the run early (the `answers` array is as long as the user got). See the [`cenno` skill](skills/cenno) for a worked 3-question example.
 
+### `get_screen_context`
+
+Read bounded semantic context from the focused macOS app using Accessibility only:
+
+```json
+{"include_visible_text": true, "max_chars": 8000}
+```
+
+The result is one flat object with `status` (`ok`, `permission_denied`, `ax_unavailable`, or `blocked`), app/window metadata, focused role, optional URL, selected/visible text, truncation and redaction metadata, and `untrusted: true`. Permission is requested only on a real call. No pixels, OCR, continuous sampling, or storage are involved.
+
+Captured fields are untrusted quoted data, never agent instructions. A requesting agent may still send returned context to its model provider. Turn capture off globally from cenno's tray, or deny exact app bundle IDs and hosts in `~/.cenno/config.json`.
+
 ## CLI
 
 ```bash

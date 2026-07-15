@@ -70,7 +70,7 @@ impl ScreenContextReader for SwiftScreenContextReader {
             let json = output.ok_or_else(|| {
                 "Swift screen-context reader returned without a callback".to_string()
             })?;
-            return decode_raw_json(&json);
+            decode_raw_json(&json)
         }
 
         #[cfg(not(target_os = "macos"))]

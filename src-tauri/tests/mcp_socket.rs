@@ -1,3 +1,4 @@
+use cenno_lib::routing::{DeviceMode, RoutingConfig};
 use cenno_lib::{
     capture_guard::CaptureState,
     config::CaptureConfig,
@@ -7,7 +8,6 @@ use cenno_lib::{
     registry::PromptRegistry,
     screen_context::{ScreenContextReader, ScreenContextServices},
 };
-use cenno_lib::routing::{DeviceMode, RoutingConfig};
 use rmcp::{model::CallToolRequestParams, ServiceExt};
 use std::sync::Arc;
 
@@ -70,7 +70,10 @@ async fn get_screen_context_is_listed_and_permission_denied_is_data() {
         None,
         120,
         off_routing(),
-        screen_context(ScreenContextStatus::PermissionDenied, CaptureConfig::default()),
+        screen_context(
+            ScreenContextStatus::PermissionDenied,
+            CaptureConfig::default(),
+        ),
     )
     .await
     .unwrap();

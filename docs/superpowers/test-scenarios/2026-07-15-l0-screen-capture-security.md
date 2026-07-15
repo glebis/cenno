@@ -4,6 +4,10 @@ Use these scenarios for L0 itself and rerun them whenever L1a, L1b, or L2 adds
 a new capture or storage path. A capture feature is not releasable if it cannot
 identify the guard call that satisfies each applicable scenario.
 
+L1a's Accessibility-specific matrix is in
+[`2026-07-15-l1a-screen-context-ax.md`](2026-07-15-l1a-screen-context-ax.md).
+Run this shared L0 matrix alongside it and alongside every later capture path.
+
 ## Automated policy scenarios
 
 | Scenario | Input/state | Expected evidence |
