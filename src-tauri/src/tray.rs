@@ -15,6 +15,7 @@ use tauri::{
 
 use tauri::Manager as _;
 
+use crate::capture_guard::{CaptureSnapshot, CaptureState};
 use crate::db::Db;
 use crate::suppress::SuppressionState;
 
@@ -22,6 +23,8 @@ use crate::suppress::SuppressionState;
 /// `refresh_pending_item` can update its label/enabled state after the menu
 /// is built (registry changes arrive from arbitrary threads).
 pub struct PendingMenuItem(MenuItem<tauri::Wry>);
+
+pub struct CaptureMenuItem(CheckMenuItem<tauri::Wry>);
 
 /// Label + enabled state for the show-pending item given the number of
 /// answerable prompts. Disabled with an explicit "No pending prompt" when
@@ -42,8 +45,13 @@ fn pending_item_state(count: usize) -> (String, bool) {
 pub fn refresh_pending_item(app: &AppHandle) {
     let app = app.clone();
     let _ = app.clone().run_on_main_thread(move || {
-        let Some(item) = app.try_state::<PendingMenuItem>() else { return };
-        let count = app.state::<crate::registry::PromptRegistry>().pending().len();
+        let Some(item) = app.try_state::<PendingMenuItem>() else {
+            return;
+        };
+        let count = app
+            .state::<crate::registry::PromptRegistry>()
+            .pending()
+            .len();
         let (label, enabled) = pending_item_state(count);
         if let Err(e) = item.0.set_text(&label) {
             eprintln!("cenno: failed to update show_pending label: {e}");
@@ -54,10 +62,35 @@ pub fn refresh_pending_item(app: &AppHandle) {
     });
 }
 
+fn capture_item_state(snapshot: CaptureSnapshot) -> (&'static str, bool) {
+    match (snapshot.enabled, snapshot.active) {
+        (false, _) => ("Screen context off", false),
+        (true, true) => ("Reading screen context…", true),
+        (true, false) => ("Screen context allowed", true),
+    }
+}
+
+pub fn refresh_capture_item(app: &AppHandle, snapshot: CaptureSnapshot) {
+    let app = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        let Some(item) = app.try_state::<CaptureMenuItem>() else {
+            return;
+        };
+        let (label, checked) = capture_item_state(snapshot);
+        if let Err(e) = item.0.set_text(label) {
+            eprintln!("cenno: failed to update capture label: {e}");
+        }
+        if let Err(e) = item.0.set_checked(checked) {
+            eprintln!("cenno: failed to update capture checked state: {e}");
+        }
+    });
+}
+
 /// Settings keys shared with the startup loader in lib.rs.
 pub const SETTING_PAUSE_UNTIL: &str = "pause_until";
 pub const SETTING_HIDE_IN_FULLSCREEN: &str = "hide_in_fullscreen";
 pub const SETTING_LAUNCH_AT_LOGIN: &str = "launch_at_login";
+pub const SETTING_CAPTURE_ENABLED: &str = "capture_enabled";
 
 /// (menu id, label, minutes) for the fixed pause durations.
 const PAUSE_ITEMS: &[(&str, &str, i64)] = &[
@@ -82,6 +115,7 @@ pub fn setup_tray(
     suppress: SuppressionState,
     db: Option<Db>,
     launch_at_login: bool,
+    capture_state: CaptureState,
 ) -> tauri::Result<()> {
     // Template icon: ship the @2x (44px) bytes; macOS downscales to menu-bar
     // size crisply on retina. icon_as_template(true) tells AppKit to treat
@@ -97,7 +131,9 @@ pub fn setup_tray(
     let pause_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = pause_items
         .iter()
         .map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
-        .chain(std::iter::once(&pause_tomorrow as &dyn tauri::menu::IsMenuItem<tauri::Wry>))
+        .chain(std::iter::once(
+            &pause_tomorrow as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
+        ))
         .collect();
     let pause_menu = Submenu::with_id_and_items(app, "pause_for", "Pause for", true, &pause_refs)?;
 
@@ -127,8 +163,18 @@ pub fn setup_tray(
         None::<&str>,
     )?;
 
-    let settings =
-        MenuItem::with_id(app, "open_settings", "cenno settings…", true, None::<&str>)?;
+    let (capture_label, capture_checked) = capture_item_state(capture_state.snapshot());
+    let capture_enabled = CheckMenuItem::with_id(
+        app,
+        "capture_enabled",
+        capture_label,
+        true,
+        capture_checked,
+        None::<&str>,
+    )?;
+    app.manage(CaptureMenuItem(capture_enabled.clone()));
+
+    let settings = MenuItem::with_id(app, "open_settings", "cenno settings…", true, None::<&str>)?;
 
     // Manual recovery: bring a parked (suppressed or hidden) prompt back on
     // screen. NOT for dismissed/answered/timed-out prompts — those ended their
@@ -139,8 +185,13 @@ pub fn setup_tray(
     let show_pending = MenuItem::with_id(app, "show_pending", &label, enabled, None::<&str>)?;
     app.manage(PendingMenuItem(show_pending.clone()));
 
-    let check_updates =
-        MenuItem::with_id(app, "check_updates", "Check for updates…", true, None::<&str>)?;
+    let check_updates = MenuItem::with_id(
+        app,
+        "check_updates",
+        "Check for updates…",
+        true,
+        None::<&str>,
+    )?;
 
     let quit = MenuItem::with_id(app, "quit", "Quit cenno", true, None::<&str>)?;
 
@@ -149,6 +200,8 @@ pub fn setup_tray(
         &[
             &settings,
             &show_pending,
+            &PredefinedMenuItem::separator(app)?,
+            &capture_enabled,
             &PredefinedMenuItem::separator(app)?,
             &pause_menu,
             &resume,
@@ -165,6 +218,7 @@ pub fn setup_tray(
     // it back. Keep a handle alive inside the closure for that.
     let hide_fullscreen_handle = hide_fullscreen.clone();
     let launch_login_handle = launch_login.clone();
+    let capture_enabled_handle = capture_enabled.clone();
 
     TrayIconBuilder::with_id("cenno-tray")
         .icon(icon)
@@ -194,6 +248,15 @@ pub fn setup_tray(
             }
 
             match id {
+                "capture_enabled" => {
+                    let checked = capture_enabled_handle.is_checked().unwrap_or(false);
+                    capture_state.set_enabled(checked);
+                    persist(
+                        SETTING_CAPTURE_ENABLED,
+                        if checked { "true" } else { "false" },
+                    );
+                    eprintln!("cenno: screen context allowed = {checked}");
+                }
                 "pause_tomorrow" => {
                     let until = suppress.pause_until_tomorrow();
                     persist(SETTING_PAUSE_UNTIL, &until.to_rfc3339());
@@ -212,7 +275,10 @@ pub fn setup_tray(
                 "hide_fullscreen" => {
                     let checked = hide_fullscreen_handle.is_checked().unwrap_or(true);
                     suppress.set_hide_in_fullscreen(checked);
-                    persist(SETTING_HIDE_IN_FULLSCREEN, if checked { "true" } else { "false" });
+                    persist(
+                        SETTING_HIDE_IN_FULLSCREEN,
+                        if checked { "true" } else { "false" },
+                    );
                     eprintln!("cenno: hide_in_fullscreen = {checked}");
                     if !checked {
                         // Quiet mode just turned off — surface whatever queued.
@@ -223,15 +289,21 @@ pub fn setup_tray(
                     let checked = launch_login_handle.is_checked().unwrap_or(true);
                     use tauri_plugin_autostart::ManagerExt as _;
                     let autolaunch = app.autolaunch();
-                    let result =
-                        if checked { autolaunch.enable() } else { autolaunch.disable() };
+                    let result = if checked {
+                        autolaunch.enable()
+                    } else {
+                        autolaunch.disable()
+                    };
                     if let Err(e) = result {
                         let verb = if checked { "enable" } else { "disable" };
                         eprintln!("cenno: failed to {verb} launch at login: {e}");
                     }
                     // Persist regardless: the setting records intent, and the
                     // startup reconcile self-heals a failed plugin call.
-                    persist(SETTING_LAUNCH_AT_LOGIN, if checked { "true" } else { "false" });
+                    persist(
+                        SETTING_LAUNCH_AT_LOGIN,
+                        if checked { "true" } else { "false" },
+                    );
                     eprintln!("cenno: launch_at_login = {checked}");
                 }
                 "open_settings" => {
@@ -267,14 +339,49 @@ pub fn setup_tray(
 
 #[cfg(test)]
 mod tests {
-    use super::pending_item_state;
+    use super::{capture_item_state, pending_item_state};
+    use crate::capture_guard::CaptureSnapshot;
 
     /// Empty queue → disabled item that says so; one prompt → the classic
     /// label; several → the label carries the count.
     #[test]
     fn pending_item_state_reflects_queue_depth() {
-        assert_eq!(pending_item_state(0), ("No pending prompt".to_string(), false));
-        assert_eq!(pending_item_state(1), ("Show pending prompt".to_string(), true));
-        assert_eq!(pending_item_state(3), ("Show pending prompts (3)".to_string(), true));
+        assert_eq!(
+            pending_item_state(0),
+            ("No pending prompt".to_string(), false)
+        );
+        assert_eq!(
+            pending_item_state(1),
+            ("Show pending prompt".to_string(), true)
+        );
+        assert_eq!(
+            pending_item_state(3),
+            ("Show pending prompts (3)".to_string(), true)
+        );
+    }
+
+    #[test]
+    fn capture_item_state_reflects_disabled_idle_and_active() {
+        assert_eq!(
+            capture_item_state(CaptureSnapshot {
+                enabled: false,
+                active: false
+            }),
+            ("Screen context off", false)
+        );
+        assert_eq!(
+            capture_item_state(CaptureSnapshot {
+                enabled: true,
+                active: false
+            }),
+            ("Screen context allowed", true)
+        );
+        assert_eq!(
+            capture_item_state(CaptureSnapshot {
+                enabled: true,
+                active: true
+            }),
+            ("Reading screen context…", true)
+        );
     }
 }

@@ -1,5 +1,6 @@
 pub mod a2ui_guard;
 pub mod bridge;
+pub mod capture_guard;
 pub mod cli;
 pub mod config;
 pub mod db;
@@ -9,8 +10,8 @@ pub mod protocol;
 pub mod registry;
 pub mod relay;
 pub mod routing;
-pub mod suppress;
 pub mod supertonic;
+pub mod suppress;
 pub mod tray;
 pub mod tts;
 pub mod updater;
@@ -52,7 +53,12 @@ fn pending_prompts(state: tauri::State<PromptRegistry>) -> Vec<PromptEvent> {
     state
         .pending()
         .into_iter()
-        .map(|(id, request, remaining_s)| PromptEvent { id, request, remaining_s, seq: None })
+        .map(|(id, request, remaining_s)| PromptEvent {
+            id,
+            request,
+            remaining_s,
+            seq: None,
+        })
         .collect()
 }
 
@@ -132,7 +138,11 @@ fn get_launch_at_login(app: tauri::AppHandle) -> bool {
 fn set_launch_at_login(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     use tauri_plugin_autostart::ManagerExt as _;
     let autolaunch = app.autolaunch();
-    let res = if enabled { autolaunch.enable() } else { autolaunch.disable() };
+    let res = if enabled {
+        autolaunch.enable()
+    } else {
+        autolaunch.disable()
+    };
     res.map_err(|e| format!("{e}"))
 }
 
@@ -148,7 +158,8 @@ fn set_dock_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> 
         } else {
             tauri::ActivationPolicy::Accessory
         };
-        app.set_activation_policy(policy).map_err(|e| format!("{e}"))?;
+        app.set_activation_policy(policy)
+            .map_err(|e| format!("{e}"))?;
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (app, visible);
@@ -199,7 +210,13 @@ fn apply_panel_layout(
 }
 
 #[tauri::command]
-fn answer_prompt(state: tauri::State<PromptRegistry>, id: String, answer: String, via: String, muted: Option<bool>) -> bool {
+fn answer_prompt(
+    state: tauri::State<PromptRegistry>,
+    id: String,
+    answer: String,
+    via: String,
+    muted: Option<bool>,
+) -> bool {
     let via = match via.as_str() {
         "voice_text" => Via::VoiceText,
         "choice" => Via::Choice,
@@ -320,12 +337,22 @@ fn panel_display_target(handle: &tauri::AppHandle) -> Option<crate::suppress::Re
         let scale = mon.scale_factor();
         let pos = mon.position().to_logical::<f64>(scale);
         let size = mon.size().to_logical::<f64>(scale);
-        return Some(crate::suppress::Rect { x: pos.x, y: pos.y, w: size.width, h: size.height });
+        return Some(crate::suppress::Rect {
+            x: pos.x,
+            y: pos.y,
+            w: size.width,
+            h: size.height,
+        });
     }
     let scale = win.scale_factor().ok()?;
     let pos = win.outer_position().ok()?.to_logical::<f64>(scale);
     let size = win.outer_size().ok()?.to_logical::<f64>(scale);
-    Some(crate::suppress::Rect { x: pos.x, y: pos.y, w: size.width, h: size.height })
+    Some(crate::suppress::Rect {
+        x: pos.x,
+        y: pos.y,
+        w: size.width,
+        h: size.height,
+    })
 }
 
 /// The production fullscreen check: scoped to the display the panel lives
@@ -357,9 +384,7 @@ fn pick_replay<T>(pending: Vec<(String, T, u64)>) -> Option<(String, T, u64)> {
 /// combo → None (caller logs and skips). Never panics — the combo comes from
 /// untrusted `~/.cenno/config.json`.
 #[cfg(desktop)]
-pub(crate) fn parse_reopen_shortcut(
-    combo: &str,
-) -> Option<tauri_plugin_global_shortcut::Shortcut> {
+pub(crate) fn parse_reopen_shortcut(combo: &str) -> Option<tauri_plugin_global_shortcut::Shortcut> {
     let combo = combo.trim();
     if combo.is_empty() {
         return None;
@@ -417,7 +442,12 @@ pub(crate) fn replay_pending(handle: &tauri::AppHandle, force: bool) {
     let registry = handle.state::<PromptRegistry>();
     if let Some((id, request, remaining_s)) = pick_replay(registry.pending()) {
         eprintln!("cenno: replaying pending prompt {id} ({remaining_s}s left)");
-        let payload = PromptEvent { id, request, remaining_s, seq: None };
+        let payload = PromptEvent {
+            id,
+            request,
+            remaining_s,
+            seq: None,
+        };
         if let Err(e) = handle.emit("prompt", payload) {
             eprintln!("cenno: failed to emit replayed prompt: {e}");
         }
@@ -697,6 +727,7 @@ pub fn run() {
             // into managed state; registered (fail-soft) just below. Takes effect
             // on launch; a changed combo applies after the next restart.
             let reopen_shortcut = user_config.shortcuts.reopen.clone();
+            let capture_enabled_default = user_config.capture.capture_enabled();
             app.manage(geometry);
             app.manage(user_config);
 
@@ -775,6 +806,33 @@ pub fn run() {
             };
             app.manage(suppress.clone());
 
+            // The tray kill switch overrides the config default once the user
+            // has changed it. The callback keeps the user-owned indicator
+            // truthful for overlapping capture leases.
+            let capture_enabled = match db
+                .as_ref()
+                .and_then(|db| db.get_setting(tray::SETTING_CAPTURE_ENABLED).ok().flatten())
+            {
+                Some(value) => value == "true",
+                None => {
+                    if let Some(db) = &db {
+                        if let Err(e) = db.set_setting(
+                            tray::SETTING_CAPTURE_ENABLED,
+                            if capture_enabled_default { "true" } else { "false" },
+                        ) {
+                            eprintln!("cenno: failed to seed capture_enabled: {e}");
+                        }
+                    }
+                    capture_enabled_default
+                }
+            };
+            let capture_handle = app.handle().clone();
+            let capture_state = crate::capture_guard::CaptureState::new(
+                capture_enabled,
+                move |snapshot| tray::refresh_capture_item(&capture_handle, snapshot),
+            );
+            app.manage(capture_state.clone());
+
             // Register the reopen-pending global shortcut now — AFTER both the
             // registry and SuppressionState are managed, so a hotkey press in
             // the startup window can't fire replay_pending() into unmanaged
@@ -797,7 +855,14 @@ pub fn run() {
             };
 
             // Tray icon + menu — always, in both windowed and --tray modes.
-            tray::setup_tray(app.handle(), suppress.clone(), db.clone(), launch_at_login)?;
+            tray::setup_tray(
+                app.handle(),
+                suppress.clone(),
+                db.clone(),
+                launch_at_login,
+                capture_state.clone(),
+            )?;
+            tray::refresh_capture_item(app.handle(), capture_state.snapshot());
 
             // Keep the tray's "Show pending prompt" item mirroring the
             // registry: enabled with a live label while something is
@@ -960,7 +1025,11 @@ mod tests {
     #[test]
     fn pick_replay_takes_front_of_policy_ordered_queue() {
         // pending() is pre-sorted by policy; replay takes the front entry.
-        let pending = vec![("p_10".to_string(), (), 9), ("p_2".to_string(), (), 5), ("p_9".to_string(), (), 1)];
+        let pending = vec![
+            ("p_10".to_string(), (), 9),
+            ("p_2".to_string(), (), 5),
+            ("p_9".to_string(), (), 1),
+        ];
         assert_eq!(pick_replay(pending).unwrap().0, "p_10");
         assert!(pick_replay::<()>(vec![]).is_none());
     }
@@ -1007,7 +1076,9 @@ mod tests {
         assert!(enabled);
         assert_eq!(applied.get(), Some(true), "OS autostart enabled");
         assert_eq!(
-            db.get_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN).unwrap().as_deref(),
+            db.get_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN)
+                .unwrap()
+                .as_deref(),
             Some("true"),
             "default written back so the settings row exists from first launch"
         );
@@ -1019,7 +1090,8 @@ mod tests {
         let db = crate::db::Db::open(&dir.path().join("t.db")).unwrap();
 
         // Stored OFF → disable on startup (reconciles a stale OS entry).
-        db.set_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN, "false").unwrap();
+        db.set_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN, "false")
+            .unwrap();
         let applied = std::cell::Cell::new(None);
         assert!(!reconcile_launch_at_login(Some(&db), |on| {
             applied.set(Some(on));
@@ -1027,13 +1099,16 @@ mod tests {
         }));
         assert_eq!(applied.get(), Some(false));
         assert_eq!(
-            db.get_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN).unwrap().as_deref(),
+            db.get_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN)
+                .unwrap()
+                .as_deref(),
             Some("false"),
             "stored setting not overwritten"
         );
 
         // Stored ON → enable (idempotent self-heal of a removed entry).
-        db.set_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN, "true").unwrap();
+        db.set_setting(crate::tray::SETTING_LAUNCH_AT_LOGIN, "true")
+            .unwrap();
         let applied = std::cell::Cell::new(None);
         assert!(reconcile_launch_at_login(Some(&db), |on| {
             applied.set(Some(on));
@@ -1061,15 +1136,21 @@ mod tests {
     fn should_display_clears_expired_pause_from_db() {
         let dir = tempfile::tempdir().unwrap();
         let db = crate::db::Db::open(&dir.path().join("t.db")).unwrap();
-        db.set_setting(crate::tray::SETTING_PAUSE_UNTIL, "2020-01-01T00:00:00Z").unwrap();
+        db.set_setting(crate::tray::SETTING_PAUSE_UNTIL, "2020-01-01T00:00:00Z")
+            .unwrap();
 
         let s = SuppressionState::new(false);
         s.restore_pause_until(chrono::Utc::now() - chrono::Duration::seconds(1));
 
-        assert!(should_display(&s, Some(&db), || false), "expired pause must not suppress");
+        assert!(
+            should_display(&s, Some(&db), || false),
+            "expired pause must not suppress"
+        );
         assert_eq!(s.snapshot().0, None, "in-memory pause cleared");
         assert_eq!(
-            db.get_setting(crate::tray::SETTING_PAUSE_UNTIL).unwrap().as_deref(),
+            db.get_setting(crate::tray::SETTING_PAUSE_UNTIL)
+                .unwrap()
+                .as_deref(),
             Some(""),
             "persisted pause cleared so a restart can't resurrect it"
         );
