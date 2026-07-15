@@ -1,7 +1,7 @@
 # L0 — Screen-capture security & threat model
 
 **Date:** 2026-07-15
-**Status:** Design — ready for review
+**Status:** Implemented and verified
 **Bead:** `cenno-jc6.7` (blocks `cenno-jc6.1` / L1a)
 **Scope:** Threat-model, consent, and data-handling policy for the whole
 context-awareness epic (`cenno-jc6`). No feature code ships here except the
@@ -127,15 +127,14 @@ Rust MCP boundary ──►  capture_guard.rs   ◄── ~/.cenno/config.json (
 - Network egress controls on the *agent* — cenno cannot police what the agent
   does with content; it can only label provenance and let the user say no.
 
-## Open questions
+## Resolved questions
 
-1. **Redaction aggressiveness.** High-confidence patterns only (few false
-   positives, misses novel secrets) vs. broader entropy-based scrubbing (safer,
-   noisier). Proposed: ship high-confidence patterns; make redaction strictness
-   a config knob.
-2. **Default denylist contents.** Which bundle-ids/hosts ship denied by default?
-   Proposed seed: known password managers (1Password, KeePassXC, Bitwarden),
-   Keychain Access, and a short banking-host list — user-extensible.
-3. **On-screen indicator obtrusiveness.** A persistent dot vs. a brief flash on
-   each capture. Proposed: brief flash on active capture + a steady tray glyph;
-   revisit if users want an always-on dot.
+1. **Redaction aggressiveness:** high-confidence patterns only: PEM private
+   keys, AWS access-key ids, JWTs, and long `sk-` tokens. Redaction can be
+   disabled explicitly; entropy heuristics are out of scope.
+2. **Default denylist:** 1Password, Bitwarden, KeePassXC, and Keychain Access
+   bundle identifiers. Hosts are user-owned configuration; cenno does not ship
+   a brittle or implicitly comprehensive banking-host list.
+3. **Indicator:** a checked tray item is steady while capture is allowed and
+   changes to `Reading screen context…` while one or more leases are active.
+   A floating dot remains a future UX option, not an L0 requirement.
