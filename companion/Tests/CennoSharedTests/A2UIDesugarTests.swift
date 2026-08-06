@@ -68,7 +68,8 @@ final class A2UIDesugarTests: XCTestCase {
         XCTAssertEqual(byId["input"]?["component"], .string("TextField"))
         XCTAssertEqual(byId["input"]?["value"], .object(["path": .string("/draft")]))
         XCTAssertEqual(byId["input"]?["submitAction"], submit)
-        XCTAssertNil(byId["input"]?["voice"])
+        // The mic is unconditional; `via` still reports the declared kind.
+        XCTAssertEqual(byId["input"]?["voice"], .bool(true))
         XCTAssertEqual(byId["send"]?["variant"], .string("quiet"))
         XCTAssertEqual(byId["send"]?["action"], submit)
         XCTAssertEqual(byId["sendLabel"]?["text"], .string("Send"))
@@ -85,12 +86,14 @@ final class A2UIDesugarTests: XCTestCase {
 
     func testChoice() {
         let (_, _, byId, col, dm) = parts(payload(kind: "choice", choices: ["Calm", "Tense"]))
-        XCTAssertEqual(col?["children"], .array(["title","body","choices"].map(JSONValue.string)))
+        XCTAssertEqual(col?["children"], .array(["title","body","choices","input","send"].map(JSONValue.string)))
         XCTAssertEqual(byId["choices"]?["options"], .array([
             .object(["label": .string("Calm"), "value": .string("Calm")]),
             .object(["label": .string("Tense"), "value": .string("Tense")])]))
         XCTAssertEqual(byId["choices"]?["selectAction"]?["event"]?["name"], .string("submit-choice"))
-        XCTAssertNil(byId["send"])
+        // Closed controls keep a free-form way out (typed or dictated).
+        XCTAssertEqual(byId["input"]?["voice"], .bool(true))
+        XCTAssertEqual(byId["send"]?["variant"], .string("quiet"))
         XCTAssertEqual(dm?["choice"], .array([]))
     }
 
@@ -106,36 +109,41 @@ final class A2UIDesugarTests: XCTestCase {
 
     func testScale() {
         let (_, _, byId, col, _) = parts(payload(kind: "scale"))
-        XCTAssertEqual(col?["children"], .array(["title","body","scale"].map(JSONValue.string)))
+        XCTAssertEqual(col?["children"], .array(["title","body","scale","input","send"].map(JSONValue.string)))
         XCTAssertEqual(byId["scale"]?["min"], .number(1))
         XCTAssertEqual(byId["scale"]?["max"], .number(7))
         XCTAssertEqual(byId["scale"]?["minLabel"], .string("not at all"))
         XCTAssertEqual(byId["scale"]?["maxLabel"], .string("completely"))
         XCTAssertEqual(byId["scale"]?["selectAction"]?["event"]?["name"], .string("submit-scale"))
-        XCTAssertNil(byId["send"])
+        // Closed controls keep a free-form way out (typed or dictated).
+        XCTAssertEqual(byId["input"]?["voice"], .bool(true))
+        XCTAssertEqual(byId["send"]?["variant"], .string("quiet"))
     }
 
     func testConfirm() {
         let (_, _, byId, col, _) = parts(payload(kind: "confirm"))
-        XCTAssertEqual(col?["children"], .array(["title","body","actions"].map(JSONValue.string)))
+        XCTAssertEqual(col?["children"], .array(["title","body","actions","input","send"].map(JSONValue.string)))
         XCTAssertEqual(byId["actions"]?["children"], .array([.string("yes"), .string("no")]))
         XCTAssertEqual(byId["yes"]?["variant"], .string("primary"))
         XCTAssertEqual(byId["yes"]?["action"]?["event"]?["context"]?["value"], .string("yes"))
         XCTAssertEqual(byId["no"]?["variant"], .string("borderless"))
         XCTAssertEqual(byId["yesLabel"]?["text"], .string("Yes"))
         XCTAssertEqual(byId["noLabel"]?["text"], .string("No"))
-        XCTAssertNil(byId["input"])
+        XCTAssertEqual(byId["input"]?["voice"], .bool(true))
     }
 
     func testNone() {
         let (_, _, byId, col, _) = parts(payload(kind: "none"))
-        XCTAssertEqual(col?["children"], .array([.string("title"), .string("body")]))
-        for id in ["input","send","choices","scale","actions","yes","no"] { XCTAssertNil(byId[id]) }
+        XCTAssertEqual(col?["children"],
+                       .array(["title","body","input","send"].map(JSONValue.string)))
+        XCTAssertEqual(byId["input"]?["label"], .string("Your reply"))
+        XCTAssertEqual(byId["input"]?["voice"], .bool(true))
+        for id in ["choices","scale","actions","yes","no"] { XCTAssertNil(byId[id]) }
     }
 
     func testProgressDotsAppended() {
         let (_, _, byId, col, _) = parts(payload(kind: "scale", progress: PromptProgress(step: 2, total: 5)))
-        XCTAssertEqual(col?["children"], .array(["title","body","scale","dots"].map(JSONValue.string)))
+        XCTAssertEqual(col?["children"], .array(["title","body","scale","input","send","dots"].map(JSONValue.string)))
         XCTAssertEqual(byId["dots"]?["step"], .number(2))
         XCTAssertEqual(byId["dots"]?["total"], .number(5))
     }

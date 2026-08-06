@@ -64,10 +64,71 @@ impl Default for InputSpec {
     }
 }
 
+/// Agents routinely double-escape newlines — writing `\\n` into a JSON string
+/// so the panel renders a literal backslash-n instead of a line break. The
+/// panel is the last stop before a human reads the text, so we repair it here
+/// rather than expecting every caller to get its escaping right. Only `\n`,
+/// `\r\n` and `\t` are unescaped; other backslash sequences are left alone.
+pub fn unescape_literals(s: &str) -> String {
+    if !s.contains('\\') {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek() {
+            Some('n') => {
+                chars.next();
+                out.push('\n');
+            }
+            Some('t') => {
+                chars.next();
+                out.push('\t');
+            }
+            // "\r\n" collapses to a single newline; a bare "\r" also becomes one.
+            Some('r') => {
+                chars.next();
+                if chars.peek() == Some(&'\\') {
+                    let mut probe = chars.clone();
+                    probe.next();
+                    if probe.peek() == Some(&'n') {
+                        chars.next();
+                        chars.next();
+                    }
+                }
+                out.push('\n');
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn de_unescaped<'de, D>(d: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(d)?;
+    Ok(unescape_literals(&s))
+}
+
+fn de_unescaped_opt<'de, D>(d: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(d)?;
+    Ok(s.map(|s| unescape_literals(&s)))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct AskRequest {
+    #[serde(deserialize_with = "de_unescaped")]
     pub title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_unescaped")]
     pub body_md: String,
     #[serde(default)]
     pub input: InputSpec,
@@ -94,7 +155,11 @@ pub struct AskRequest {
     /// Optional short spoken summary for sound-out (voice-out). When set, the
     /// webview speaks this instead of the title+body — agents write a concise,
     /// ear-friendly line. Absent → fall back to reading the prompt itself.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "de_unescaped_opt"
+    )]
     pub say: Option<String>,
     /// Open the panel silently regardless of urgency gating (voice-mute).
     /// The final mute state is echoed back on `Answered.muted`.
@@ -379,4 +444,23 @@ mod tests {
         let p = req.progress.unwrap();
         assert_eq!((p.step, p.total), (1, 1));
     }
+    #[test]
+    fn literal_backslash_escapes_in_body_become_real_whitespace() {
+        // The agent double-escaped: the JSON string literally contains
+        // backslash-n, so a naive renderer prints "\n" at the user.
+        let json = r#"{"title":"A\\nB","body_md":"one\\ntwo\\r\\nthree\\tfour","say":"x\\ny"}"#;
+        let req: AskRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.title, "A\nB");
+        assert_eq!(req.body_md, "one\ntwo\nthree\tfour");
+        assert_eq!(req.say.as_deref(), Some("x\ny"));
+    }
+
+    #[test]
+    fn real_newlines_and_other_escapes_survive_untouched() {
+        assert_eq!(unescape_literals("a\nb"), "a\nb");
+        assert_eq!(unescape_literals(r"C:\path"), r"C:\path");
+        assert_eq!(unescape_literals(r"\d+"), r"\d+");
+        assert_eq!(unescape_literals("no backslash"), "no backslash");
+    }
+
 }

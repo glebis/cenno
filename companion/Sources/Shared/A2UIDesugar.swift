@@ -56,6 +56,30 @@ public enum A2UIDesugar {
 
     private struct Input { let childIds: [String]; let components: [JSONValue]; let dataModel: JSONValue }
 
+    /// The free-form escape hatch appended to every closed control: a
+    /// voice-capable TextField + quiet Send, the same "input"/"send" pair the
+    /// text kinds render. A closed list of chips encodes the agent's framing of
+    /// the question, which is routinely narrower than reality — the user must
+    /// always be able to answer in their own words, typed or dictated.
+    private static func withFreeform(_ base: Input,
+                                     label: String = "Or answer in your own words") -> Input {
+        let submit = action("submit", binding("/draft"), "voice_text")
+        let field: [String: JSONValue] = [
+            "id": .string("input"), "component": .string("TextField"),
+            "label": .string(label),
+            "value": binding("/draft"), "voice": .bool(true),
+            "submitAction": submit]
+        var dataModel = base.dataModel
+        if case .object(var d) = dataModel {
+            d["draft"] = .string("")
+            dataModel = .object(d)
+        }
+        return Input(childIds: base.childIds + ["input", "send"],
+                     components: base.components + [.object(field)]
+                         + button("send", "Send", "quiet", submit),
+                     dataModel: dataModel)
+    }
+
     private static func desugarInput(_ req: PromptPayload) -> Input {
         switch req.input?.kind {
         case "choice":
@@ -66,25 +90,29 @@ public enum A2UIDesugar {
                 "options": .array(options), "value": binding("/choice"),
                 "selectAction": action("submit-choice", binding("/choice"), "choice")]
             if req.flow == "mood" { picker["variant"] = .string("words") }
-            return Input(childIds: ["choices"], components: [.object(picker)],
-                         dataModel: .object(["choice": .array([])]))
+            return withFreeform(Input(childIds: ["choices"], components: [.object(picker)],
+                                      dataModel: .object(["choice": .array([])])))
         case "scale":
-            return Input(childIds: ["scale"], components: [obj([
+            return withFreeform(Input(childIds: ["scale"], components: [obj([
                 "id": .string("scale"), "component": .string("Scale"),
                 "min": .number(1), "max": .number(7),
                 "minLabel": .string("not at all"), "maxLabel": .string("completely"),
                 "value": binding("/scale"),
                 "selectAction": action("submit-scale", binding("/scale"), "choice")])],
-                dataModel: .object([:]))
+                dataModel: .object([:])))
         case "confirm":
-            return Input(childIds: ["actions"],
+            return withFreeform(Input(childIds: ["actions"],
                 components: [obj(["id": .string("actions"), "component": .string("Row"),
                                   "children": .array([.string("yes"), .string("no")])])]
                     + button("yes", "Yes", "primary", action("submit-yes", .string("yes"), "choice"))
                     + button("no", "No", "borderless", action("submit-no", .string("no"), "choice")),
-                dataModel: .object([:]))
+                dataModel: .object([:])))
         case "none":
-            return Input(childIds: [], components: [], dataModel: .object([:]))
+            // Even a pure notification gets a way to talk back — a panel you
+            // can only stare at is the same closed shape as an option list
+            // with no "other".
+            return withFreeform(Input(childIds: [], components: [], dataModel: .object([:])),
+                                label: "Your reply")
         default:
             let kind = req.input?.kind
             let voice = (kind == "voice" || kind == "voice_text")
@@ -93,7 +121,10 @@ public enum A2UIDesugar {
                 "id": .string("input"), "component": .string("TextField"),
                 "label": .string("Your reply"), "value": binding("/draft"),
                 "submitAction": submit]
-            if voice { field["voice"] = .bool(true) }
+            // The mic is unconditional — dictation is offered on every field,
+            // not only when the agent thought to ask for `voice_text`. `via`
+            // still reports the kind the agent declared.
+            field["voice"] = .bool(true)
             return Input(childIds: ["input", "send"],
                          components: [.object(field)] + button("send", "Send", "quiet", submit),
                          dataModel: .object(["draft": .string("")]))

@@ -129,7 +129,11 @@ impl CennoServer {
     #[tool(
         description = "Ask the human user a question and wait for their answer. \
                        Returns JSON: {answer, via, elapsed_s} when answered, or \
-                       {answered: false, prompt_id} on timeout."
+                       {answered: false, prompt_id} on timeout. \
+                       Every panel — including choice, scale and confirm — also \
+                       renders a free-form text field with a mic, so the user can \
+                       always reply in their own words. Treat `choices` as \
+                       suggestions, and expect an answer that is not in the list."
     )]
     async fn ask_user(
         &self,

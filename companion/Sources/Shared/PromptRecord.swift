@@ -80,6 +80,73 @@ public struct PromptPayload: Codable, Sendable {
         case title, bodyMd = "body_md", input, choices, flow
         case timeoutS = "timeout_s", urgency, progress, a2ui
     }
+
+    /// Mirrors `unescape_literals` in src-tauri/src/protocol.rs: agents often
+    /// double-escape newlines, so the wire string carries a literal backslash-n
+    /// that would otherwise be shown to the human verbatim. Only `\n`, `\r\n`
+    /// and `\t` are repaired; other backslash sequences pass through.
+    static func unescapeLiterals(_ s: String) -> String {
+        guard s.contains("\\") else { return s }
+        var out = ""
+        out.reserveCapacity(s.count)
+        var i = s.startIndex
+        while i < s.endIndex {
+            let c = s[i]
+            guard c == "\\", s.index(after: i) < s.endIndex else {
+                out.append(c)
+                i = s.index(after: i)
+                continue
+            }
+            let next = s[s.index(after: i)]
+            switch next {
+            case "n":
+                out.append("\n")
+                i = s.index(i, offsetBy: 2)
+            case "t":
+                out.append("\t")
+                i = s.index(i, offsetBy: 2)
+            case "r":
+                out.append("\n")
+                i = s.index(i, offsetBy: 2)
+                // Collapse a following literal "\n" into the same break.
+                if s[i...].hasPrefix("\\n") { i = s.index(i, offsetBy: 2) }
+            default:
+                out.append(c)
+                i = s.index(after: i)
+            }
+        }
+        return out
+    }
+
+    /// Restated explicitly: the custom `init(from:)` below suppresses the
+    /// synthesized memberwise initializer.
+    public init(title: String, bodyMd: String?, input: InputSpec?, choices: [String]?,
+                flow: String?, timeoutS: Int?, urgency: String?,
+                progress: PromptProgress?, a2ui: JSONValue?) {
+        self.title = title
+        self.bodyMd = bodyMd
+        self.input = input
+        self.choices = choices
+        self.flow = flow
+        self.timeoutS = timeoutS
+        self.urgency = urgency
+        self.progress = progress
+        self.a2ui = a2ui
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = Self.unescapeLiterals(try c.decode(String.self, forKey: .title))
+        bodyMd = try c.decodeIfPresent(String.self, forKey: .bodyMd)
+            .map(Self.unescapeLiterals)
+        input = try c.decodeIfPresent(InputSpec.self, forKey: .input)
+        choices = try c.decodeIfPresent([String].self, forKey: .choices)
+        flow = try c.decodeIfPresent(String.self, forKey: .flow)
+        timeoutS = try c.decodeIfPresent(Int.self, forKey: .timeoutS)
+        urgency = try c.decodeIfPresent(String.self, forKey: .urgency)
+        progress = try c.decodeIfPresent(PromptProgress.self, forKey: .progress)
+        a2ui = try c.decodeIfPresent(JSONValue.self, forKey: .a2ui)
+    }
 }
 
 /// Named `PromptProgress` (not `Progress`) to avoid clashing with Foundation.Progress.
