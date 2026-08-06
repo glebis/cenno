@@ -27,7 +27,8 @@
  * voice-capable TextField submitting via "voice_text". The closed controls
  * (choice / scale / confirm / custom widgets) render it *below* their own
  * control as an escape hatch, so a user is never boxed into the agent's
- * option list. Only `kind: "none"` (pure notification) has no input at all.
+ * option list. Even `kind: "none"` (pure notification) gets one — a panel you
+ * can only stare at is as closed as an option list with no "other".
  *
  * Deviations from the original sketch, forced by the real catalog
  * (src/a2ui/catalog.tsx, `cenno:catalog/v1`):
