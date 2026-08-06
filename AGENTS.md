@@ -62,7 +62,7 @@ npx tauri build --no-bundle         # unsigned release binary → src-tauri/targ
 
 Full steps in [README.md → Releasing an update](README.md#releasing-an-update): bump versions in `src-tauri/tauri.conf.json` + `package.json`, build signed with the updater key, publish the DMG + `cenno.app.tar.gz` + `.sig` + `latest.json` on the GitHub release.
 
-Also bump the Homebrew cask after each release: `version` and `sha256` in [`glebis/homebrew-tap`](https://github.com/glebis/homebrew-tap) `Casks/cenno.rb` (sha256 of the new DMG).
+The Homebrew cask (`version` + DMG `sha256` in [`glebis/homebrew-tap`](https://github.com/glebis/homebrew-tap) `Casks/cenno.rb`) is bumped automatically by `scripts/release.sh` — it was forgotten by hand for two releases running. Set `SKIP_CASK_BUMP=1` to opt out; if the step warns, bump it manually.
 
 ## Conventions
 

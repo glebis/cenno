@@ -202,6 +202,42 @@ sleep 3
 curl -sL "https://github.com/$REPO/releases/latest/download/latest.json" \
   | node -e "const d=JSON.parse(require('fs').readFileSync(0));console.log('live version:',d.version)"
 
+# --- Bump the Homebrew cask -------------------------------------------------
+# glebis/homebrew-tap Casks/cenno.rb pins both the version and the DMG sha256,
+# so `brew install --cask cenno` keeps serving the OLD release until it is
+# bumped. Doing it by hand was forgotten for 0.3.1 AND 0.4.0 — Homebrew users
+# sat two releases behind — so it runs here, right after the release exists.
+# Skippable with SKIP_CASK_BUMP=1. Failures warn rather than abort: the GitHub
+# release is already live at this point and re-running would hit the "tag
+# already exists" guard.
+if [[ "${SKIP_CASK_BUMP:-0}" == "1" ]]; then
+  echo "==> SKIP_CASK_BUMP=1 — not bumping the Homebrew cask"
+else
+  echo "==> bumping Homebrew cask to $VERSION"
+  CASK_SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
+  TAP_DIR="$(mktemp -d)"
+  if gh repo clone glebis/homebrew-tap "$TAP_DIR/tap" -- -q 2>/dev/null &&
+     [[ -f "$TAP_DIR/tap/Casks/cenno.rb" ]]; then
+    # Anchored to the cask's own fields so nothing else in the file can match.
+    /usr/bin/sed -i '' \
+      -e "s|^  version \".*\"|  version \"$VERSION\"|" \
+      -e "s|^  sha256 \".*\"|  sha256 \"$CASK_SHA\"|" \
+      "$TAP_DIR/tap/Casks/cenno.rb"
+    if git -C "$TAP_DIR/tap" diff --quiet; then
+      echo "    cask already at $VERSION — nothing to do"
+    elif git -C "$TAP_DIR/tap" commit -qam "cenno $VERSION" &&
+         git -C "$TAP_DIR/tap" push -q; then
+      echo "    cask bumped to $VERSION ($CASK_SHA)"
+    else
+      echo "    warning: cask commit/push failed — bump Casks/cenno.rb by hand" >&2
+    fi
+  else
+    echo "    warning: could not clone glebis/homebrew-tap — bump Casks/cenno.rb" >&2
+    echo "    by hand: version $VERSION, sha256 $CASK_SHA" >&2
+  fi
+  rm -rf "$TAP_DIR"
+fi
+
 # --- Deploy the marketing site ----------------------------------------------
 # site/ (Astro, Vercel project 'cenno') resolves the download link + version
 # from the releases/latest API at BUILD time, so it must be redeployed AFTER the
