@@ -43,22 +43,31 @@ struct PromptView: View {
     private var inputControl: some View {
         let kind = prompt.payload.input?.kind ?? "none"
         switch kind {
+        // Closed controls each get the free-form escape hatch below them: a
+        // TextFieldLink opens the system input screen (keyboard + dictation),
+        // so the wearer can always answer in their own words rather than
+        // being boxed into the agent's options.
         case "confirm":
             ConfirmInput(prompt: prompt)
+            FreeformEscapeHatch(prompt: prompt)
         case "choice":
             ChoiceInput(prompt: prompt)
+            FreeformEscapeHatch(prompt: prompt)
         case "scale":
             ScaleInput(prompt: prompt)
+            FreeformEscapeHatch(prompt: prompt)
         case "text", "voice_text":
             TextInput(prompt: prompt, voice: kind == "voice_text")
         default:
-            // kind: none — auto-dismiss after showing
-            Color.clear.onAppear {
-                Task {
-                    try? await Task.sleep(for: .seconds(3))
-                    await relay.markTimedOut(promptID: prompt.id)
-                }
+            // kind: none — a notification, but not a one-way one: the wearer
+            // can reply in their own words. No auto-dismiss timer any more; it
+            // would fire out from under someone mid-dictation. Dismissal is
+            // explicit, and the prompt's own timeout still expires it.
+            FreeformEscapeHatch(prompt: prompt, label: "Reply")
+            Button("Dismiss") {
+                Task { await relay.markTimedOut(promptID: prompt.id) }
             }
+            .buttonStyle(.bordered)
         }
     }
 }
@@ -129,6 +138,32 @@ private struct ScaleInput: View {
             }
             .buttonStyle(.borderedProminent)
         }
+    }
+}
+
+/// Quiet "answer in your own words" affordance appended to every closed
+/// control. Deliberately `.bordered` (not prominent) so the primary control
+/// above stays the obvious path — this is the way out, not the default.
+private struct FreeformEscapeHatch: View {
+    let prompt: PromptRecord
+    var label: String = "Something else…"
+    @EnvironmentObject var relay: CloudKitRelay
+
+    var body: some View {
+        TextFieldLink(prompt: Text("Answer in your own words")) {
+            Text(label)
+                .font(.footnote)
+                .frame(maxWidth: .infinity)
+        } onSubmit: { result in
+            guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return }
+            Task {
+                await relay.submit(
+                    answer: .make(result, via: "voice_text", device: "watch"),
+                    for: prompt.id)
+            }
+        }
+        .buttonStyle(.bordered)
     }
 }
 

@@ -64,10 +64,71 @@ impl Default for InputSpec {
     }
 }
 
+/// Agents routinely double-escape newlines — writing `\\n` into a JSON string
+/// so the panel renders a literal backslash-n instead of a line break. The
+/// panel is the last stop before a human reads the text, so we repair it here
+/// rather than expecting every caller to get its escaping right. Only `\n`,
+/// `\r\n` and `\t` are unescaped; other backslash sequences are left alone.
+pub fn unescape_literals(s: &str) -> String {
+    if !s.contains('\\') {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek() {
+            Some('n') => {
+                chars.next();
+                out.push('\n');
+            }
+            Some('t') => {
+                chars.next();
+                out.push('\t');
+            }
+            // "\r\n" collapses to a single newline; a bare "\r" also becomes one.
+            Some('r') => {
+                chars.next();
+                if chars.peek() == Some(&'\\') {
+                    let mut probe = chars.clone();
+                    probe.next();
+                    if probe.peek() == Some(&'n') {
+                        chars.next();
+                        chars.next();
+                    }
+                }
+                out.push('\n');
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn de_unescaped<'de, D>(d: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(d)?;
+    Ok(unescape_literals(&s))
+}
+
+fn de_unescaped_opt<'de, D>(d: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(d)?;
+    Ok(s.map(|s| unescape_literals(&s)))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct AskRequest {
+    #[serde(deserialize_with = "de_unescaped")]
     pub title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "de_unescaped")]
     pub body_md: String,
     #[serde(default)]
     pub input: InputSpec,
@@ -94,7 +155,11 @@ pub struct AskRequest {
     /// Optional short spoken summary for sound-out (voice-out). When set, the
     /// webview speaks this instead of the title+body — agents write a concise,
     /// ear-friendly line. Absent → fall back to reading the prompt itself.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "de_unescaped_opt"
+    )]
     pub say: Option<String>,
     /// Open the panel silently regardless of urgency gating (voice-mute).
     /// The final mute state is echoed back on `Answered.muted`.
@@ -176,9 +241,86 @@ pub struct SeqMeta {
     pub last: bool,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ScreenContextRequest {
+    pub include_visible_text: Option<bool>,
+    pub max_chars: Option<u32>,
+}
+
+impl ScreenContextRequest {
+    pub fn include_visible_text(&self) -> bool { self.include_visible_text.unwrap_or(true) }
+    pub fn bounded_max_chars(&self) -> u32 { self.max_chars.unwrap_or(8000).clamp(1, 8000) }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenContextStatus { Ok, PermissionDenied, AxUnavailable, Blocked }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenContextBlockedReason { CaptureDisabled, DeniedBundle, DeniedHost }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RawScreenContext {
+    pub status: ScreenContextStatus,
+    pub app_name: Option<String>,
+    pub bundle_id: Option<String>,
+    pub window_title: Option<String>,
+    pub url: Option<String>,
+    pub host: Option<String>,
+    pub focused_role: Option<String>,
+    pub selected_text: Option<String>,
+    pub visible_text: Option<String>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
+pub struct ScreenContextResponse {
+    pub status: ScreenContextStatus,
+    pub app_name: Option<String>,
+    pub bundle_id: Option<String>,
+    pub window_title: Option<String>,
+    pub url: Option<String>,
+    pub focused_role: Option<String>,
+    pub selected_text: Option<String>,
+    pub visible_text: Option<String>,
+    pub truncated: bool,
+    pub blocked_reason: Option<ScreenContextBlockedReason>,
+    pub redaction_count: usize,
+    pub untrusted: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn screen_context_request_defaults_and_clamps_cost() {
+        let default: ScreenContextRequest = serde_json::from_str("{}").unwrap();
+        assert!(default.include_visible_text());
+        assert_eq!(default.bounded_max_chars(), 8000);
+
+        let zero: ScreenContextRequest = serde_json::from_str(r#"{"max_chars":0}"#).unwrap();
+        assert_eq!(zero.bounded_max_chars(), 1);
+        let huge: ScreenContextRequest = serde_json::from_str(r#"{"max_chars":50000}"#).unwrap();
+        assert_eq!(huge.bounded_max_chars(), 8000);
+    }
+
+    #[test]
+    fn screen_context_statuses_are_typed_success_shapes() {
+        let response = ScreenContextResponse {
+            status: ScreenContextStatus::PermissionDenied,
+            app_name: None, bundle_id: None, window_title: None, url: None,
+            focused_role: None, selected_text: None, visible_text: None,
+            truncated: false, blocked_reason: None, redaction_count: 0,
+            untrusted: true,
+        };
+        let json = serde_json::to_value(response).unwrap();
+        assert_eq!(json["status"], "permission_denied");
+        assert_eq!(json["untrusted"], true);
+        assert!(json["blocked_reason"].is_null());
+    }
 
     #[test]
     fn sequence_request_roundtrips() {
@@ -302,4 +444,23 @@ mod tests {
         let p = req.progress.unwrap();
         assert_eq!((p.step, p.total), (1, 1));
     }
+    #[test]
+    fn literal_backslash_escapes_in_body_become_real_whitespace() {
+        // The agent double-escaped: the JSON string literally contains
+        // backslash-n, so a naive renderer prints "\n" at the user.
+        let json = r#"{"title":"A\\nB","body_md":"one\\ntwo\\r\\nthree\\tfour","say":"x\\ny"}"#;
+        let req: AskRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.title, "A\nB");
+        assert_eq!(req.body_md, "one\ntwo\nthree\tfour");
+        assert_eq!(req.say.as_deref(), Some("x\ny"));
+    }
+
+    #[test]
+    fn real_newlines_and_other_escapes_survive_untouched() {
+        assert_eq!(unescape_literals("a\nb"), "a\nb");
+        assert_eq!(unescape_literals(r"C:\path"), r"C:\path");
+        assert_eq!(unescape_literals(r"\d+"), r"\d+");
+        assert_eq!(unescape_literals("no backslash"), "no backslash");
+    }
+
 }

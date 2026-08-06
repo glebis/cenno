@@ -32,8 +32,8 @@ function prompt(over: Partial<Prompt> = {}): Prompt {
 }
 
 /** Unpack the envelope into the parts the table tests assert on. */
-function parts(req: Prompt) {
-  const messages = desugar(req) as any[];
+function parts(req: Prompt, widgets?: Record<string, any>) {
+  const messages = desugar(req, widgets) as any[];
   const create = messages[0]?.createSurface;
   const components: AnyComponent[] =
     messages[1]?.updateComponents?.components ?? [];
@@ -93,7 +93,7 @@ describe("desugar mapping table", () => {
     expect(col.children).not.toContain("body");
   });
 
-  it("text: TextField (no voice) + quiet Send button, both firing submit {value, via:'text'}", () => {
+  it("text: TextField (mic always on) + quiet Send, both firing submit {value, via:'text'}", () => {
     const { byId, col, dataModel } = parts(prompt({ input: { kind: "text" } }));
     const submit = {
       event: {
@@ -107,7 +107,8 @@ describe("desugar mapping table", () => {
       value: { path: "/draft" },
       submitAction: submit,
     });
-    expect(byId.get("input").voice).toBeUndefined();
+    // The mic is unconditional; `via` still reports the declared kind.
+    expect(byId.get("input").voice).toBe(true);
     // Send is quiet text bottom-right (panel-free-text.png), not a primary
     // pill; the action is unchanged (still submit).
     expect(byId.get("send")).toMatchObject({
@@ -143,11 +144,11 @@ describe("desugar mapping table", () => {
     },
   );
 
-  it("choice: ChoicePicker with {label,value} options and submit-choice tap-to-answer; no send button", () => {
+  it("choice: ChoicePicker with {label,value} options and submit-choice tap-to-answer, plus the free-form escape hatch", () => {
     const { byId, col, dataModel } = parts(
       prompt({ input: { kind: "choice" }, choices: ["Calm", "Tense"] }),
     );
-    expect(col.children).toEqual(["title", "body", "choices"]);
+    expect(col.children).toEqual(["title", "body", "choices", "input", "send"]);
     expect(byId.get("choices")).toMatchObject({
       component: "ChoicePicker",
       options: [
@@ -162,7 +163,8 @@ describe("desugar mapping table", () => {
         },
       },
     });
-    expect(byId.has("send")).toBe(false);
+    // Send belongs to the free-form escape hatch, not the tap control.
+    expect(byId.get("send")).toMatchObject({ component: "Button" });
     expect(dataModel.choice).toEqual([]);
   });
 
@@ -191,9 +193,9 @@ describe("desugar mapping table", () => {
     expect(byId.get("choices")?.variant).toBeUndefined();
   });
 
-  it("scale: Scale 1..7 with end labels and submit-scale tap-to-answer; no send button", () => {
+  it("scale: Scale 1..7 with end labels and submit-scale tap-to-answer, plus the free-form escape hatch", () => {
     const { byId, col } = parts(prompt({ input: { kind: "scale" } }));
-    expect(col.children).toEqual(["title", "body", "scale"]);
+    expect(col.children).toEqual(["title", "body", "scale", "input", "send"]);
     expect(byId.get("scale")).toMatchObject({
       component: "Scale",
       min: 1,
@@ -208,14 +210,15 @@ describe("desugar mapping table", () => {
         },
       },
     });
-    expect(byId.has("send")).toBe(false);
+    // Send belongs to the free-form escape hatch, not the tap control.
+    expect(byId.get("send")).toMatchObject({ component: "Button" });
   });
 
   it("confirm: actions Row of Yes (primary, submit-yes) and No (borderless, submit-no); no text input", () => {
     const { byId, col } = parts(prompt({ input: { kind: "confirm" } }));
     // Row so the buttons hug their labels side by side (panel-reminder.png)
     // instead of stacking as full-width slabs (Task 9 visual QA).
-    expect(col.children).toEqual(["title", "body", "actions"]);
+    expect(col.children).toEqual(["title", "body", "actions", "input", "send"]);
     expect(byId.get("actions")).toMatchObject({
       component: "Row",
       children: ["yes", "no"],
@@ -238,13 +241,22 @@ describe("desugar mapping table", () => {
     });
     expect(byId.get("yesLabel")).toMatchObject({ text: "Yes" });
     expect(byId.get("noLabel")).toMatchObject({ text: "No" });
-    expect(byId.has("input")).toBe(false);
+    // Every closed control keeps a free-form way out (text or voice).
+    expect(byId.get("input")).toMatchObject({
+      component: "TextField",
+      voice: true,
+    });
   });
 
-  it("none: just title and body, no input components", () => {
+  it("none: no primary control, but still a free-form reply", () => {
     const { byId, col } = parts(prompt({ input: { kind: "none" } }));
-    expect(col.children).toEqual(["title", "body"]);
-    for (const id of ["input", "send", "choices", "scale", "actions", "yes", "no"]) {
+    expect(col.children).toEqual(["title", "body", "input", "send"]);
+    expect(byId.get("input")).toMatchObject({
+      component: "TextField",
+      label: "Your reply",
+      voice: true,
+    });
+    for (const id of ["choices", "scale", "actions", "yes", "no"]) {
       expect(byId.has(id)).toBe(false);
     }
   });
@@ -253,7 +265,7 @@ describe("desugar mapping table", () => {
     const { byId, col } = parts(
       prompt({ input: { kind: "scale" }, progress: { step: 2, total: 5 } }),
     );
-    expect(col.children).toEqual(["title", "body", "scale", "dots"]);
+    expect(col.children).toEqual(["title", "body", "scale", "input", "send", "dots"]);
     expect(byId.get("dots")).toMatchObject({
       component: "Dots",
       step: 2,
@@ -333,7 +345,7 @@ describe("desugar mapping table", () => {
     const byId = new Map(components.map((c: any) => [c.id, c]));
     const col = byId.get("col") as any;
     // The template's component is mounted in place of a built-in control.
-    expect(col.children).toEqual(["title", "body", "scale"]);
+    expect(col.children).toEqual(["title", "body", "scale", "input", "send"]);
     expect(byId.get("scale")).toMatchObject({ component: "Scale", min: 1, max: 5 });
   });
 
@@ -359,5 +371,38 @@ describe("desugar mapping table", () => {
         expect(["text", "choice", "voice_text"]).toContain(a.event.context.via);
       }
     }
+  });
+});
+
+describe("free-form invariant", () => {
+  it("every input kind renders a voice-capable free-form field", () => {
+    const kinds = ["text", "voice", "voice_text", "choice", "scale", "confirm", "none", "unknown-kind"];
+    for (const kind of kinds) {
+      const { byId } = parts(prompt({ input: { kind }, choices: ["a", "b"] }));
+      expect(byId.get("input"), `kind=${kind}`).toMatchObject({
+        component: "TextField",
+        voice: true,
+      });
+      expect(byId.get("send"), `kind=${kind}`).toMatchObject({
+        component: "Button",
+      });
+    }
+  });
+
+  it("a custom widget that brings its own input is left alone", () => {
+    const widgets = {
+      mywidget: {
+        childIds: ["input", "send"],
+        components: [
+          { id: "input", component: "TextField", label: "Custom", value: { path: "/draft" } },
+          { id: "send", component: "Button", variant: "quiet", child: "sendLabel" },
+          { id: "sendLabel", component: "Text", text: "Go" },
+        ],
+        dataModel: { draft: "" },
+      },
+    };
+    const { byId } = parts(prompt({ input: { kind: "mywidget" } }), widgets);
+    expect(byId.get("input")).toMatchObject({ label: "Custom" });
+    expect(byId.get("sendLabel")).toMatchObject({ text: "Go" });
   });
 });

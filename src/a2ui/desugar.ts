@@ -23,6 +23,13 @@
  *   → one element; Task 6 unwraps), /scale is a number (Task 6 stringifies
  *   it before answering — scale answers are the stringified numeral).
  *
+ * Free-form invariant: EVERY panel carries the "input"/"send" pair — a
+ * voice-capable TextField submitting via "voice_text". The closed controls
+ * (choice / scale / confirm / custom widgets) render it *below* their own
+ * control as an escape hatch, so a user is never boxed into the agent's
+ * option list. Even `kind: "none"` (pure notification) gets one — a panel you
+ * can only stare at is as closed as an option list with no "other".
+ *
  * Deviations from the original sketch, forced by the real catalog
  * (src/a2ui/catalog.tsx, `cenno:catalog/v1`):
  * - No Card component exists in the cenno catalog (the panel root owns the
@@ -92,6 +99,64 @@ export interface WidgetTemplate {
   dataModel?: Record<string, unknown>;
 }
 
+/**
+ * The free-form escape hatch: a voice-capable TextField + quiet Send, the
+ * same "input"/"send" pair the text kinds render.
+ *
+ * Every panel gets one. A closed list of chips encodes the agent's framing of
+ * the question, which is routinely narrower than reality — the user must
+ * always be able to answer in their own words, by typing or by dictating.
+ * `label` is shortened on closed kinds so the field reads as an alternative
+ * to the control above it rather than the main event.
+ */
+function freeform(label: string): {
+  childIds: string[];
+  components: A2uiComponent[];
+  dataModel: Record<string, unknown>;
+} {
+  const submit = submitAction("submit", { path: "/draft" }, "voice_text");
+  return {
+    childIds: ["input", "send"],
+    components: [
+      {
+        id: "input",
+        component: "TextField",
+        label,
+        value: { path: "/draft" },
+        voice: true,
+        submitAction: submit,
+      },
+      ...button("send", "Send", "quiet", submit),
+    ],
+    dataModel: { draft: "" },
+  };
+}
+
+/**
+ * Append the escape hatch to a closed control's components, unless the
+ * control already owns an "input" (a custom widget may define its own).
+ */
+function withFreeform(
+  base: {
+    childIds: string[];
+    components: A2uiComponent[];
+    dataModel: Record<string, unknown>;
+  },
+  label = "Or answer in your own words",
+): {
+  childIds: string[];
+  components: A2uiComponent[];
+  dataModel: Record<string, unknown>;
+} {
+  if (base.components.some((c) => c.id === "input")) return base;
+  const extra = freeform(label);
+  return {
+    childIds: [...base.childIds, ...extra.childIds],
+    components: [...base.components, ...extra.components],
+    dataModel: { ...base.dataModel, ...extra.dataModel },
+  };
+}
+
 /** Input-kind specific components + initial data model. */
 function desugarInput(
   req: Prompt,
@@ -107,11 +172,11 @@ function desugarInput(
   // template (a composition of built-in controls — no code).
   if (kind && widgets[kind]) {
     const t = widgets[kind];
-    return {
+    return withFreeform({
       childIds: t.childIds,
       components: t.components,
       dataModel: t.dataModel ?? {},
-    };
+    });
   }
   switch (kind) {
     case "choice": {
@@ -120,7 +185,7 @@ function desugarInput(
       // (panel-mood-checkin.png), not outline pills. Other flows omit the
       // variant and keep the default chip rendering.
       const wordsVariant = req.flow === "mood" ? { variant: "words" } : {};
-      return {
+      return withFreeform({
         childIds: ["choices"],
         components: [
           {
@@ -137,10 +202,10 @@ function desugarInput(
           },
         ],
         dataModel: { choice: [] },
-      };
+      });
     }
     case "scale":
-      return {
+      return withFreeform({
         childIds: ["scale"],
         components: [
           {
@@ -159,11 +224,11 @@ function desugarInput(
           },
         ],
         dataModel: {},
-      };
+      });
     case "confirm":
       // Buttons sit in a Row ("actions") so they hug their labels side by
       // side (panel-reminder.png) instead of stacking as full-width slabs.
-      return {
+      return withFreeform({
         childIds: ["actions"],
         components: [
           { id: "actions", component: "Row", children: ["yes", "no"] },
@@ -181,9 +246,16 @@ function desugarInput(
           ),
         ],
         dataModel: {},
-      };
+      });
     case "none":
-      return { childIds: [], components: [], dataModel: {} };
+      // Even a pure notification gets a way to talk back: a panel you can
+      // only stare at is the same closed shape as an option list with no
+      // "other". There is no primary control, so the field carries the
+      // ordinary reply label.
+      return withFreeform(
+        { childIds: [], components: [], dataModel: {} },
+        "Your reply",
+      );
     case "voice":
     case "voice_text": // serde rename: protocol's VoiceText is "voice_text"
     case "text":
@@ -207,7 +279,11 @@ function desugarInput(
             component: "TextField",
             label: "Your reply",
             value: { path: "/draft" },
-            ...(voice ? { voice: true } : {}),
+            // The mic is unconditional — dictation is offered on every field,
+            // not only when the agent thought to ask for `voice_text`. `via`
+            // still reports the panel kind the agent declared, so callers keep
+            // the distinction they asked for.
+            voice: true,
             submitAction: submit,
           },
           // Quiet text Send, bottom-right (panel-free-text.png) — not a

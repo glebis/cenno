@@ -10,6 +10,12 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(() => Promise.resolve()),
 }));
 
+// Every panel now carries the voice-capable free-form escape hatch, so the
+// dictation hook (src/voice.ts) subscribes on mount in every test.
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+}));
+
 const base: Prompt = {
   id: "p_1",
   title: "Check-in",
@@ -47,8 +53,9 @@ describe("PromptPanel", () => {
     render(<PromptPanel prompt={prompt} onAnswer={onAnswer} />);
     // Scope to the surface so the always-present chrome ✕ doesn't count.
     const surface = document.querySelector(".prompt-panel__content")!;
+    // Two chips plus the escape hatch's mic and Send.
     const chips = within(surface as HTMLElement).getAllByRole("button");
-    expect(chips).toHaveLength(2);
+    expect(chips).toHaveLength(4);
     expect(screen.getByRole("button", { name: "Deep work" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Email" }));
     expect(onAnswer).toHaveBeenCalledWith("p_2", "Email", "choice");
@@ -306,3 +313,26 @@ describe("PromptPanel", () => {
     });
   });
 });
+
+describe("free-form escape hatch", () => {
+  it("every closed panel offers a free-form text/voice answer", () => {
+    for (const kind of ["choice", "scale", "confirm"] as const) {
+      const onAnswer = vi.fn();
+      const { unmount } = render(
+        <PromptPanel
+          prompt={{ ...base, id: "p_free", input: { kind }, choices: ["a"] }}
+          onAnswer={onAnswer}
+        />,
+      );
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "in my own words" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+      expect(onAnswer).toHaveBeenCalledWith(
+        "p_free",
+        "in my own words",
+        "voice_text",
+      );
+      unmount();
+    }
+  });});

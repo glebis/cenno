@@ -1,8 +1,8 @@
 # L1a — `get_screen_context` MCP tool (Accessibility-only)
 
 **Date:** 2026-07-15
-**Status:** Design — ready for review
-**Bead:** `cenno-jc6.1` (blocked by `cenno-jc6.7` / L0; blocks `cenno-jc6.8` / L1b)
+**Status:** Implementation complete; installed-app AX scenarios pending user permission
+**Bead:** `cenno-jc6.1` (L0 prerequisite `cenno-jc6.7` complete; blocks `cenno-jc6.8` / L1b)
 **Scope:** One new MCP tool, `get_screen_context`, reading the macOS
 Accessibility API only. No pixel capture, no OCR — those are L1b. Depends on the
 L0 `capture_guard` chokepoint existing.
@@ -134,14 +134,14 @@ CallToolResult (text content, structured JSON)
 - **Forcing browser AX enhancement** for reliable URLs — deferred; L2 owns
   `site_host` and may use Apple Events.
 
-## Open questions
+## Resolved questions
 
-1. **Default `max_chars`.** 8 KiB balances usefulness vs. token cost; revisit
-   once real agent usage exists.
+1. **Default `max_chars`.** 8000 characters, clamped to `1..=8000`; revisit
+   only with evidence from real agent usage.
 2. **Visible-text strategy per role.** Resolved for L1a: try `AXValue` on the
    focused element, then `AXVisibleCharacterRange` → `AXStringForRange`. Do not
    traverse static-text children; if both direct reads are empty, return null
    (and `ax_unavailable` when no other semantic content exists).
-3. **Should `blocked` reveal which rule matched?** Leaning yes (a short
-   `blocked_reason`) so the user understands why a read was declined, but it
-   must not leak denylisted content.
+3. **Should `blocked` reveal which rule matched?** Yes: return only
+   `capture_disabled`, `denied_bundle`, or `denied_host` in `blocked_reason`;
+   all captured fields remain null.

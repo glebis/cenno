@@ -23,4 +23,20 @@ final class PromptPayloadDecodeTests: XCTestCase {
         XCTAssertNil(p.progress)
         XCTAssertNil(p.urgency)
     }
+    func testDoubleEscapedNewlinesBecomeRealWhitespace() throws {
+        // The agent wrote literal backslash-n into the JSON string; the panel
+        // must not show "\\n" to the human.
+        let json = #"{"title":"A\\nB","body_md":"one\\ntwo\\r\\nthree\\tfour"}"#
+        let p = try JSONDecoder().decode(PromptPayload.self, from: Data(json.utf8))
+        XCTAssertEqual(p.title, "A\nB")
+        XCTAssertEqual(p.bodyMd, "one\ntwo\nthree\tfour")
+    }
+
+    func testRealNewlinesAndOtherEscapesSurvive() throws {
+        let json = #"{"title":"A\nB","body_md":"C:\\path"}"#
+        let p = try JSONDecoder().decode(PromptPayload.self, from: Data(json.utf8))
+        XCTAssertEqual(p.title, "A\nB")
+        XCTAssertEqual(p.bodyMd, #"C:\path"#)
+    }
+
 }
