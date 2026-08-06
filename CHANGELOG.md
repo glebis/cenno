@@ -4,12 +4,19 @@ All notable changes to cenno are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
-## [0.4.0] — 2026-07-14
+## [0.4.0] — 2026-08-06
 
 > Includes everything staged under the never-published 0.3.2 bump.
 
 ### Added
 
+- **Every panel now takes a free-form answer.** Choice, scale, confirm and
+  custom-widget panels — and even pure notifications — render a voice-capable
+  text field below their own control, so you can always ignore the agent's
+  options and answer in your own words. On Mac, iPhone and Watch. The mic is
+  offered on every text field, not only when the agent asked for dictation.
+- **Screen context (L1a)** — cenno can read the focused window's accessibility
+  snapshot and expose it to agents through a guarded MCP tool.
 - **Voice-mute** — prompts can open silently (`--muted`), with an in-panel
   mute/unmute toggle; the final mute state is reported in the answer.
 
@@ -23,6 +30,10 @@ All notable changes to cenno are documented here. The format follows
 
 ### Fixed
 
+- **Sloppy agent formatting is repaired on the way in.** A body sent with
+  literal `\n` / `\t` escapes rendered those two characters verbatim in the
+  panel; they now become real whitespace. Windows paths and regexes
+  (`C:\path`, `\d+`) are left alone.
 - Tray: **"Show pending prompt"** is now truthful and functional.
 
 - **The panel no longer times out while you're typing — and never loses your
