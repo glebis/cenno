@@ -112,14 +112,22 @@ fi
 # (2) Live spawn test: actually launch the built binary and require it to stay
 #     alive. A restricted-entitlement / dyld / signature brick dies immediately
 #     (SIGKILL -> exit 137); a healthy tray app keeps running until we stop it.
+#     Run it under a throwaway HOME: on a dev machine the installed cenno is
+#     almost always running and owns ~/Library/.../app.cenno/mcp.sock, so a
+#     healthy build exits 0 ("another MCP server is already listening") and the
+#     gate reads that as a launch failure. An isolated HOME removes the
+#     contention while still exercising signature, dyld and AMFI. It must be
+#     SHORT — a long socket path trips SUN_LEN and reintroduces the same exit-0.
 echo "==> launch smoke-test (AMFI spawn check)"
-"$APP/Contents/MacOS/cenno" >/dev/null 2>&1 &
+SMOKE_HOME="$(mktemp -d /tmp/cenno-smoke.XXXX)"
+HOME="$SMOKE_HOME" "$APP/Contents/MacOS/cenno" >/dev/null 2>&1 &
 SMOKE_PID=$!
 ( sleep 4; kill -0 "$SMOKE_PID" 2>/dev/null && kill "$SMOKE_PID" 2>/dev/null ) &
 WATCH_PID=$!
 if wait "$SMOKE_PID" 2>/dev/null; then SMOKE_RC=0; else SMOKE_RC=$?; fi
 kill "$WATCH_PID" 2>/dev/null || true
 # rc 143 (SIGTERM from our watchdog) = it was alive at 4s => launched fine.
+rm -rf "$SMOKE_HOME"
 if [[ "$SMOKE_RC" == "143" ]]; then
   echo "    ok: app launched and stayed alive"
 else
