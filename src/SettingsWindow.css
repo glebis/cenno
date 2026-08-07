@@ -138,6 +138,22 @@ body,
   opacity: 1;
 }
 
+/* Four settings areas still fit when the window is resized to its minimum.
+   The saved affordance is transient, so it can give the navigation priority. */
+@media (max-width: 680px) {
+  .sw__top {
+    padding-right: 12px;
+  }
+
+  .sw__tab {
+    padding-inline: 8px;
+  }
+
+  .sw__saved {
+    display: none;
+  }
+}
+
 /* ── Body ── */
 .sw__body {
   flex: 1;

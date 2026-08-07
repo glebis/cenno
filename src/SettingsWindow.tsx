@@ -17,9 +17,10 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import DiskGuardianPrototype from "./diskGuardian/DiskGuardianPrototype";
 import "./SettingsWindow.css";
 
-type Tab = "settings" | "integration" | "about";
+type Tab = "settings" | "guardian" | "integration" | "about";
 
 /** Mirror of Rust supertonic::ModelStatus. */
 interface ModelStatus {
@@ -178,7 +179,7 @@ export default function SettingsWindow() {
           <span className="sw__title">cenno</span>
         </div>
         <nav className="sw__tabs">
-          {(["settings", "integration", "about"] as Tab[]).map((t) => (
+          {(["settings", "guardian", "integration", "about"] as Tab[]).map((t) => (
             <button
               key={t}
               className={`sw__tab${tab === t ? " sw__tab--active" : ""}`}
@@ -211,6 +212,7 @@ export default function SettingsWindow() {
         {tab === "integration" && (
           <IntegrationTab onCopy={copy} />
         )}
+        {tab === "guardian" && <DiskGuardianPrototype />}
         {tab === "about" && <AboutTab onOpen={openUrl} />}
       </main>
     </div>
