@@ -26,6 +26,10 @@ pub struct PendingMenuItem(MenuItem<tauri::Wry>);
 
 pub struct CaptureMenuItem(CheckMenuItem<tauri::Wry>);
 
+/// Read-only Disk Guardian status. It opens the existing settings window and
+/// never exposes an execution action from the tray.
+pub struct GuardianMenuItem(MenuItem<tauri::Wry>);
+
 /// Label + enabled state for the show-pending item given the number of
 /// answerable prompts. Disabled with an explicit "No pending prompt" when
 /// empty — a greyed-out truthful label instead of a silent no-op (cenno-74i).
@@ -82,6 +86,32 @@ pub fn refresh_capture_item(app: &AppHandle, snapshot: CaptureSnapshot) {
         }
         if let Err(e) = item.0.set_checked(checked) {
             eprintln!("cenno: failed to update capture checked state: {e}");
+        }
+    });
+}
+
+fn guardian_item_state(severity: Option<&str>) -> (&'static str, bool) {
+    match severity {
+        Some("healthy") => ("Disk Guardian: healthy", true),
+        Some("warning") => ("Disk Guardian: warning", true),
+        Some("critical") => ("Disk Guardian: critical", true),
+        Some("unknown") => ("Disk Guardian: unknown", true),
+        _ => ("Disk Guardian: unavailable", true),
+    }
+}
+
+pub fn refresh_guardian_item(app: &AppHandle, severity: Option<String>) {
+    let app = app.clone();
+    let _ = app.clone().run_on_main_thread(move || {
+        let Some(item) = app.try_state::<GuardianMenuItem>() else {
+            return;
+        };
+        let (label, enabled) = guardian_item_state(severity.as_deref());
+        if let Err(e) = item.0.set_text(label) {
+            eprintln!("cenno: failed to update Disk Guardian label: {e}");
+        }
+        if let Err(e) = item.0.set_enabled(enabled) {
+            eprintln!("cenno: failed to update Disk Guardian state: {e}");
         }
     });
 }
@@ -175,6 +205,15 @@ pub fn setup_tray(
     app.manage(CaptureMenuItem(capture_enabled.clone()));
 
     let settings = MenuItem::with_id(app, "open_settings", "cenno settings…", true, None::<&str>)?;
+    let (guardian_label, guardian_enabled) = guardian_item_state(None);
+    let guardian = MenuItem::with_id(
+        app,
+        "open_guardian",
+        guardian_label,
+        guardian_enabled,
+        None::<&str>,
+    )?;
+    app.manage(GuardianMenuItem(guardian.clone()));
 
     // Manual recovery: bring a parked (suppressed or hidden) prompt back on
     // screen. NOT for dismissed/answered/timed-out prompts — those ended their
@@ -199,6 +238,7 @@ pub fn setup_tray(
         app,
         &[
             &settings,
+            &guardian,
             &show_pending,
             &PredefinedMenuItem::separator(app)?,
             &capture_enabled,
@@ -309,6 +349,9 @@ pub fn setup_tray(
                 "open_settings" => {
                     crate::open_settings_window(app);
                 }
+                "open_guardian" => {
+                    crate::open_guardian_settings_window(app);
+                }
                 "show_pending" => {
                     // Re-show the front-of-queue parked prompt (restores its
                     // draft on the frontend). Explicit user gesture → force
@@ -339,7 +382,7 @@ pub fn setup_tray(
 
 #[cfg(test)]
 mod tests {
-    use super::{capture_item_state, pending_item_state};
+    use super::{capture_item_state, guardian_item_state, pending_item_state};
     use crate::capture_guard::CaptureSnapshot;
 
     /// Empty queue → disabled item that says so; one prompt → the classic
@@ -383,5 +426,15 @@ mod tests {
             }),
             ("Reading screen context…", true)
         );
+    }
+
+    #[test]
+    fn guardian_item_state_is_truthful_and_read_only() {
+        assert_eq!(guardian_item_state(Some("healthy")), ("Disk Guardian: healthy", true));
+        assert_eq!(guardian_item_state(Some("warning")), ("Disk Guardian: warning", true));
+        assert_eq!(guardian_item_state(Some("critical")), ("Disk Guardian: critical", true));
+        assert_eq!(guardian_item_state(Some("unknown")), ("Disk Guardian: unknown", true));
+        assert_eq!(guardian_item_state(None), ("Disk Guardian: unavailable", true));
+        assert_eq!(guardian_item_state(Some("forged")), ("Disk Guardian: unavailable", true));
     }
 }

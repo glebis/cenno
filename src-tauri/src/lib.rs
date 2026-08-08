@@ -5,6 +5,7 @@ pub mod cli;
 pub mod config;
 pub mod db;
 pub mod generation;
+pub mod guardian;
 pub mod mcp;
 pub mod protocol;
 pub mod registry;
@@ -165,6 +166,43 @@ fn set_dock_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> 
     #[cfg(not(target_os = "macos"))]
     let _ = (app, visible);
     Ok(())
+}
+
+/// Explicit user gesture from Guardian settings. Notification permission is
+/// never requested during background polling or app startup.
+#[tauri::command]
+fn guardian_request_notification_permission(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri::plugin::PermissionState;
+    use tauri_plugin_notification::NotificationExt as _;
+
+    let notifications = app.notification();
+    let state = notifications
+        .permission_state()
+        .map_err(|error| format!("could not read notification permission: {error}"))?;
+    let state = if matches!(
+        state,
+        PermissionState::Prompt | PermissionState::PromptWithRationale
+    ) {
+        notifications
+            .request_permission()
+            .map_err(|error| format!("could not request notification permission: {error}"))?
+    } else {
+        state
+    };
+    Ok(state == PermissionState::Granted)
+}
+
+fn guardian_transition_should_notify(
+    previous: Option<guardian::DiskSeverity>,
+    current: guardian::DiskSeverity,
+    enabled: bool,
+) -> bool {
+    enabled
+        && previous.is_some_and(|prior| prior != current)
+        && matches!(
+            current,
+            guardian::DiskSeverity::Warning | guardian::DiskSeverity::Critical
+        )
 }
 
 /// Apply the configured panel width and default position at startup. Width is
@@ -617,9 +655,47 @@ fn panel_ready(app: tauri::AppHandle) {
 /// distinct from the `main` NSPanel — labeled `settings`. The frontend
 /// branches on the window label to render the settings UI instead of the
 /// prompt panel. Idempotent: re-focuses an already-open window.
+const SETTINGS_SELECT_TAB_EVENT: &str = "settings:select-tab";
+
+#[derive(Clone, Copy)]
+enum SettingsTab {
+    Guardian,
+}
+
+impl SettingsTab {
+    fn id(self) -> &'static str {
+        match self {
+            Self::Guardian => "guardian",
+        }
+    }
+}
+
+fn settings_window_path(tab: Option<SettingsTab>) -> String {
+    match tab {
+        Some(tab) => format!("index.html?tab={}", tab.id()),
+        None => "index.html".to_owned(),
+    }
+}
+
 pub fn open_settings_window(app: &tauri::AppHandle) {
+    open_settings_window_at(app, None);
+}
+
+/// Open Settings directly on the read-only Guardian tab. The typed tab value
+/// is reflected in the initial URL and sent to an already-mounted window, so
+/// both cold and warm tray clicks behave identically.
+pub fn open_guardian_settings_window(app: &tauri::AppHandle) {
+    open_settings_window_at(app, Some(SettingsTab::Guardian));
+}
+
+fn open_settings_window_at(app: &tauri::AppHandle, tab: Option<SettingsTab>) {
     use tauri::Manager as _;
     if let Some(win) = app.get_webview_window("settings") {
+        if let Some(tab) = tab {
+            if let Err(e) = win.emit(SETTINGS_SELECT_TAB_EVENT, tab.id()) {
+                eprintln!("cenno: failed to select settings tab: {e}");
+            }
+        }
         let _ = win.show();
         let _ = win.set_focus();
         return;
@@ -627,7 +703,7 @@ pub fn open_settings_window(app: &tauri::AppHandle) {
     let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         "settings",
-        tauri::WebviewUrl::App("index.html".into()),
+        tauri::WebviewUrl::App(settings_window_path(tab).into()),
     )
     .title("cenno")
     .inner_size(760.0, 620.0)
@@ -657,6 +733,9 @@ pub fn open_settings_window(app: &tauri::AppHandle) {
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // Rust-owned only: JavaScript receives no general notification API.
+        // Permission is requested by one explicit typed settings command.
+        .plugin(tauri_plugin_notification::init())
         // GitHub-releases updater + the dialogs its tray-menu flow shows
         // (updater.rs). Endpoint/pubkey live in tauri.conf.json `plugins.updater`.
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -871,6 +950,68 @@ pub fn run() {
             )?;
             tray::refresh_capture_item(app.handle(), capture_state.snapshot());
 
+            // Disk Guardian is an optional, read-only companion. Poll its
+            // dedicated authenticated socket for the tray label; absence or a
+            // malformed response never affects Cenno's prompt service. This
+            // path cannot submit commands, approvals, roles, or filesystem
+            // paths to Guardian.
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut previous = None;
+                    loop {
+                        let severity = match guardian::guardian_get_status().await {
+                            Ok(status) => {
+                                let current = status.evaluation.severity;
+                                let notifications_enabled =
+                                    crate::config::Config::load().guardian.notifications_enabled();
+                                if guardian_transition_should_notify(
+                                    previous,
+                                    current,
+                                    notifications_enabled,
+                                ) {
+                                    use tauri::plugin::PermissionState;
+                                    use tauri_plugin_notification::NotificationExt as _;
+
+                                    let notifications = handle.notification();
+                                    if notifications.permission_state().ok()
+                                        == Some(PermissionState::Granted)
+                                    {
+                                        let label = match current {
+                                            guardian::DiskSeverity::Warning => "warning",
+                                            guardian::DiskSeverity::Critical => "critical",
+                                            _ => unreachable!("notification gate limits severity"),
+                                        };
+                                        if let Err(error) = notifications
+                                            .builder()
+                                            .title("Disk Guardian")
+                                            .body(format!(
+                                                "Disk space is {label}. Open Cenno for details."
+                                            ))
+                                            .show()
+                                        {
+                                            eprintln!(
+                                                "cenno: failed to show Disk Guardian notification: {error}"
+                                            );
+                                        }
+                                    }
+                                }
+                                previous = Some(current);
+                                Some(match current {
+                                    guardian::DiskSeverity::Healthy => "healthy".to_owned(),
+                                    guardian::DiskSeverity::Warning => "warning".to_owned(),
+                                    guardian::DiskSeverity::Critical => "critical".to_owned(),
+                                    guardian::DiskSeverity::Unknown => "unknown".to_owned(),
+                                })
+                            }
+                            Err(_) => None,
+                        };
+                        tray::refresh_guardian_item(&handle, severity);
+                        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    }
+                });
+            }
+
             // Keep the tray's "Show pending prompt" item mirroring the
             // registry: enabled with a live label while something is
             // answerable, disabled "No pending prompt" otherwise. The watcher
@@ -984,7 +1125,16 @@ pub fn run() {
             tts::tts_model_status,
             tts::tts_download_model,
             tts::list_audio_outputs,
-            tts::tts_delete_model
+            tts::tts_delete_model,
+            guardian::guardian_get_status,
+            guardian::guardian_get_diagnostics,
+            guardian::guardian_get_runs,
+            guardian::guardian_get_security_status,
+            guardian::guardian_get_monitoring_policy,
+            guardian::guardian_update_monitoring_policy,
+            guardian::guardian_start_scan,
+            guardian::guardian_cancel_run,
+            guardian_request_notification_permission
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -993,6 +1143,27 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_window_path_only_encodes_typed_tabs() {
+        assert_eq!(settings_window_path(None), "index.html");
+        assert_eq!(
+            settings_window_path(Some(SettingsTab::Guardian)),
+            "index.html?tab=guardian"
+        );
+    }
+
+    #[test]
+    fn guardian_notifications_require_opt_in_and_a_real_pressure_transition() {
+        use crate::guardian::DiskSeverity::{Critical, Healthy, Warning};
+
+        assert!(!guardian_transition_should_notify(None, Critical, true));
+        assert!(!guardian_transition_should_notify(Some(Healthy), Warning, false));
+        assert!(!guardian_transition_should_notify(Some(Warning), Warning, true));
+        assert!(guardian_transition_should_notify(Some(Healthy), Warning, true));
+        assert!(guardian_transition_should_notify(Some(Warning), Critical, true));
+        assert!(!guardian_transition_should_notify(Some(Critical), Healthy, true));
+    }
 
     #[cfg(desktop)]
     #[test]

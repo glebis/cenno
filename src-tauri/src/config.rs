@@ -129,6 +129,23 @@ pub struct CaptureConfig {
     pub redaction: Option<bool>,
 }
 
+/// Cenno-owned presentation preferences for the read-only Disk Guardian
+/// integration. Risk thresholds remain owned by Guardian and are deliberately
+/// absent from this config.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GuardianConfig {
+    /// Notify only when an already-observed severity changes into warning or
+    /// critical. Off by default until the user explicitly opts in.
+    pub notifications_enabled: Option<bool>,
+}
+
+impl GuardianConfig {
+    pub fn notifications_enabled(&self) -> bool {
+        self.notifications_enabled.unwrap_or(false)
+    }
+}
+
 impl CaptureConfig {
     pub fn capture_enabled(&self) -> bool {
         self.enabled.unwrap_or(true)
@@ -154,6 +171,8 @@ pub struct Config {
     pub shortcuts: ShortcutsConfig,
     /// Screen-context capture, denylist, and redaction policy.
     pub capture: CaptureConfig,
+    /// Local presentation preference only; never Guardian policy.
+    pub guardian: GuardianConfig,
     /// Cross-device prompt routing policy (which companion devices receive
     /// prompts and how). See `crate::routing`.
     pub routing: crate::routing::RoutingConfig,
@@ -275,6 +294,19 @@ mod tests {
         let json = serde_json::to_string(&cfg).unwrap();
         let round: Config = serde_json::from_str(&json).unwrap();
         assert_eq!(round.capture.denylist_bundles, ["com.example.Secret"]);
+    }
+
+    #[test]
+    fn guardian_notifications_are_explicit_opt_in_and_round_trip() {
+        let default: Config = serde_json::from_str("{}").unwrap();
+        assert!(!default.guardian.notifications_enabled());
+
+        let enabled: Config =
+            serde_json::from_str(r#"{"guardian":{"notifications_enabled":true}}"#).unwrap();
+        assert!(enabled.guardian.notifications_enabled());
+        let json = serde_json::to_string(&enabled).unwrap();
+        let round_trip: Config = serde_json::from_str(&json).unwrap();
+        assert!(round_trip.guardian.notifications_enabled());
     }
 
     #[test]
