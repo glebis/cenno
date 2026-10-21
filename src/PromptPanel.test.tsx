@@ -398,3 +398,69 @@ describe("answer encoding through the real panel", () => {
     expect(JSON.parse(answer)).toEqual({ useful: 3 });
   });
 });
+
+describe("multi-selection flattening", () => {
+  // Taking ctx.value[0] discarded every selection but the first: a
+  // multipleSelection panel answered "a" whether one option was picked or
+  // three. The guard rejects commas in option VALUES for exactly this reason
+  // (a2ui_guard.rs: check_no_comma_values), so the join here is unambiguous.
+  const multiPrompt = (values: string[], seed: string[]): Prompt => ({
+    ...base,
+    id: "p_multi",
+    a2ui: [
+      {
+        version: "v0.9",
+        createSurface: { surfaceId: "main", catalogId: "cenno:catalog/v1" },
+      },
+      {
+        version: "v0.9",
+        updateComponents: {
+          surfaceId: "main",
+          components: [
+            { id: "root", component: "Column", children: ["p"] },
+            {
+              id: "p",
+              component: "ChoicePicker",
+              displayStyle: "checkbox",
+              variant: "multipleSelection",
+              options: values.map((v) => ({ label: v, value: v })),
+              value: { path: "/pick" },
+              selectAction: {
+                event: {
+                  name: "submit-pick",
+                  context: { value: { path: "/pick" }, via: "choice" },
+                },
+              },
+            },
+          ],
+        },
+      },
+      {
+        version: "v0.9",
+        updateDataModel: {
+          surfaceId: "main",
+          path: "/pick",
+          value: seed,
+        },
+      },
+    ],
+  });
+
+  it("joins several selections instead of keeping only the first", () => {
+    const onAnswer = vi.fn();
+    render(<PromptPanel prompt={multiPrompt(["a", "b", "c"], ["a"])} onAnswer={onAnswer} />);
+    // First is pre-seeded by the data model; add the other two.
+    fireEvent.click(screen.getByRole("checkbox", { name: "b" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "c" }));
+    const [, answer, via] = onAnswer.mock.calls.at(-1)!;
+    expect(via).toBe("choice");
+    expect(answer.split(",").sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("still answers a single selection as a bare token, not a 1-item join", () => {
+    const onAnswer = vi.fn();
+    render(<PromptPanel prompt={multiPrompt(["only"], [])} onAnswer={onAnswer} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "only" }));
+    expect(onAnswer.mock.calls.at(-1)![1]).toBe("only");
+  });
+});

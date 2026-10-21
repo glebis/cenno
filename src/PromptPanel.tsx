@@ -155,8 +155,17 @@ export default function PromptPanel({
             ctx?.via === "choice" || ctx?.via === "voice_text"
               ? ctx.via
               : "text";
-          // /choice binding arrives as a 1-element array; unwrap it.
-          const raw = Array.isArray(ctx?.value) ? ctx.value[0] : ctx?.value;
+          // A binding that resolves to an array is either a single choice
+          // (ChoicePicker/Scale always bind arrays) or a real multi-selection.
+          // Unwrap the 1-element case so the answer stays a plain token; JOIN
+          // the multi-element case. Taking only `[0]` here silently discarded
+          // every selection but the first — a multi-select panel answered "v1"
+          // whether the user picked one option or three.
+          const raw = Array.isArray(ctx?.value)
+            ? ctx.value.length === 1
+              ? ctx.value[0]
+              : ctx.value.map((v) => (v == null ? "" : String(v))).join(",")
+            : ctx?.value;
           // /scale arrives as a number; stringify. null/undefined → "" (ack).
           const answer = raw == null ? "" : String(raw);
           onAnswerRef.current(promptIdRef.current, answer, via);
