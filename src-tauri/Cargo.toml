@@ -1,6 +1,6 @@
 [package]
 name = "cenno"
-version = "0.4.0"
+version = "0.4.1"
 description = "Agent UX runtime — agents ask, you answer"
 authors = ["Gleb Kalinin <glebis@gmail.com>"]
 license = "Apache-2.0"
@@ -87,3 +87,13 @@ swift-rs = "1.0.6"
 [dev-dependencies]
 tempfile = "3"
 
+
+# Cargo's release profile also applies to build scripts and proc-macros, which
+# rustc must dlopen at COMPILE time. Stripping them produces Mach-O whose
+# LINKEDIT string pool is not 8-byte aligned (rust-lang/rust#157750, fixed in
+# rustc 1.98); macOS 27's dyld refuses to load such an image and rustc reports
+# the failure as `E0463: can't find crate for <some_derive>`, which points at
+# dependency resolution instead of at the linker. Build-time artifacts never
+# enter the bundle, so not stripping them costs no size in the shipped app.
+[profile.release.build-override]
+strip = false
