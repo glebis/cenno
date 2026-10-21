@@ -40,3 +40,4 @@ companion/build/
 
 # Local release env loader (identifiers only; password typed live, never stored)
 scripts/.release-env.local.sh
+.beads.gate.lock
