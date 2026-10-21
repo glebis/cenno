@@ -1054,12 +1054,33 @@ describe("ImageChoiceView", () => {
         onSelect={onSelect}
       />,
     );
-    // The verdict and the reason are separate nodes now (glyph + "failed to
-    // load" + reason), so assert both halves rather than one joined string.
-    expect(await screen.findByText("failed to load")).toBeTruthy();
-    expect(screen.getByText("file not found: /x/a.png")).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: /broken/ }));
+    // The tile names the FILE and nothing else: the verdict is already carried
+    // by the glyph, and stacking it pushed the one important line out of a
+    // small box. The full loader string stays in `title`.
+    expect(await screen.findByText("a.png")).toBeTruthy();
+    expect(screen.queryByText(/file not found/)).toBeNull();
+    const tile = screen.getByRole("radio", { name: /broken/ });
+    expect(tile.querySelector(".cenno-ichoice__error")!.getAttribute("title")).toBe(
+      "file not found: /x/a.png",
+    );
+    fireEvent.click(tile);
     expect(onSelect).toHaveBeenCalledWith("broken");
+  });
+
+  // A data: URI failure has no file to name, so the verdict is all a tile can
+  // say — without it the tile would be a bare glyph.
+  it("shows the verdict when a failure has no file name", async () => {
+    vi.mocked(invoke).mockRejectedValue("could not decode: (no path) — the bytes are not an image");
+    render(
+      <ImageChoiceView
+        options={[{ value: "bad", label: "bad", image: "/x/a.png" }]}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(
+      await screen.findByText((_, el) => el?.className === "cenno-ichoice__error-status"
+        && /could not decode/.test(el.textContent ?? "")),
+    ).toBeTruthy();
   });
 
   it("applies the adaptive column count and 1fr tracks so tiles compress instead of collapsing", () => {

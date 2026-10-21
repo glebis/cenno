@@ -1046,18 +1046,27 @@
   line-height: 1;
 }
 
-.cenno-ichoice__error-label {
+/* The file name leads: it is the answer to "which picture is missing?", which
+   is the question a failed tile actually raises. Clamped to one line with the
+   full name in the tile's title, so a very long path cannot push the glyph out
+   of the box. */
+.cenno-ichoice__error-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
 }
 
-/* The reason keeps its whole string: "file not found" and "failed to decode"
-   describe different fixes, and truncating it is what makes a failure
-   undiagnosable. It is clamped by the TILE's overflow, not by its own line
-   clamp, so the box grows to fit rather than cutting the sentence. */
-.cenno-ichoice__error-reason {
+.cenno-ichoice__error-status {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--cenno-text-dim);
-  overflow-wrap: anywhere;
 }
+
+
 
 /* Selection mark, top-right, over the image. Round for one answer, square for
    several — the shape alone says which answer you will get. */

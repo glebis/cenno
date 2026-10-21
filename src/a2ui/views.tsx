@@ -743,6 +743,39 @@ export function imageChoiceColumns(n: number): number {
 }
 
 /**
+ * Split a loader failure into the two things a tile can show at 58px: the FILE
+ * it could not read, and the short verdict about it.
+ *
+ * `load_image` returns `"<verdict>: <path> — <hint for the agent>"`. The hint is
+ * written for an agent to act on and is far too long for a tile, while the file
+ * name is the one fact the user needs ("which picture is missing?"). So the
+ * basename leads, the verdict is secondary, and the full string stays in the
+ * tile's `title` and on `Image`'s own error line.
+ *
+ * A failure with no file (a malformed `data:` URI, a decode failure) yields
+ * `{ name: null, status: <whatever was said> }`.
+ */
+function splitImageFailure(reason: string): {
+  name: string | null;
+  status: string;
+} {
+  const head = reason.split(" — ")[0];
+  const cut = head.indexOf(": ");
+  if (cut === -1) return { name: null, status: head };
+  const verdict = head.slice(0, cut).trim();
+  const rawPath = head.slice(cut + 2).trim();
+  // Only a value that LOOKS like a path is one. `load_image` always reports
+  // absolute paths, so anything without a "/" is the tail of a message about
+  // something else ("malformed data: URI …") and naming it would put the word
+  // "URI" on the tile as if it were a file.
+  if (!rawPath.includes("/")) return { name: null, status: head };
+  const name = rawPath.split("/").filter(Boolean).pop();
+  return name
+    ? { name, status: verdict }
+    : { name: null, status: verdict || rawPath };
+}
+
+/**
  * One tile of an `ImageChoice` grid: a square preview with a selection mark and
  * the label UNDER it.
  *
@@ -804,6 +837,7 @@ function ImageChoiceTile({
   }, [option.image]);
 
   const label = option.label ?? option.value;
+  const failure = splitImageFailure(reason);
 
   return (
     <button
@@ -832,14 +866,24 @@ function ImageChoiceTile({
           />
         ) : state === "error" ? (
           <span className="cenno-ichoice__error" title={reason}>
-            {/* A glyph carries the verdict at a glance; the reason is the
-                detail behind it. The ✕ is `aria-hidden` because the reason
-                text next to it already says the same thing in words. */}
+            {/* Glyph first: at 58px the ✕ is what makes a failed tile readable
+                at a glance. It is `aria-hidden` because the words beside it
+                say the same thing. */}
             <span className="cenno-ichoice__error-glyph" aria-hidden="true">
               ✕
             </span>
-            <span className="cenno-ichoice__error-label">failed to load</span>
-            <span className="cenno-ichoice__error-reason">{reason}</span>
+            {/* The FILE NAME is the whole message when there is one: "which
+                picture is missing" is the question the user actually has, and
+                every verdict ("file not found", "not readable", "too large")
+                only repeats what the ✕ already said. The verdict appears only
+                when no file can be named (a malformed data: URI, a decode
+                failure) — otherwise the tile stacks three lines of text in
+                space for one. The full reason stays in `title`. */}
+            {failure.name ? (
+              <span className="cenno-ichoice__error-name">{failure.name}</span>
+            ) : (
+              <span className="cenno-ichoice__error-status">{failure.status}</span>
+            )}
           </span>
         ) : (
           <span className="cenno-image-box__loading" aria-hidden="true" />
