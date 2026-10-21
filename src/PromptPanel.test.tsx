@@ -400,6 +400,63 @@ describe("answer encoding through the real panel", () => {
     expect(answer).not.toContain("[object Object]");
     expect(JSON.parse(answer)).toEqual({ useful: 3 });
   });
+
+  // Rating one row and then another is the whole point of the component. If
+  // Done's single `setValue(all)` does not land before `selectAction` resolves
+  // its {path} context, the answer carries only the LAST row — the panel looks
+  // right and quietly loses every earlier rating.
+  it("delivers every rated row, not just the last one", () => {
+    const onAnswer = vi.fn();
+    const prompt: Prompt = {
+      ...base,
+      id: "p_matrix2",
+      a2ui: [
+        {
+          version: "v0.9",
+          createSurface: { surfaceId: "main", catalogId: "cenno:catalog/v1" },
+        },
+        {
+          version: "v0.9",
+          updateComponents: {
+            surfaceId: "main",
+            components: [
+              { id: "root", component: "Column", children: ["m"] },
+              {
+                id: "m",
+                component: "RatingMatrix",
+                mode: "matrix",
+                rows: [
+                  { value: "pace", label: "Pace" },
+                  { value: "useful", label: "Usefulness" },
+                ],
+                min: 1,
+                max: 3,
+                value: { path: "/items" },
+                selectAction: {
+                  event: {
+                    name: "submit-matrix",
+                    context: { value: { path: "/items" }, via: "choice" },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        {
+          version: "v0.9",
+          updateDataModel: { surfaceId: "main", path: "/items", value: {} },
+        },
+      ],
+    };
+    render(<PromptPanel prompt={prompt} onAnswer={onAnswer} />);
+
+    fireEvent.click(screen.getAllByRole("radio", { name: "1" })[0]); // pace 1
+    fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]); // useful 3
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(onAnswer.mock.calls[0][1])).toEqual({ pace: 1, useful: 3 });
+  });
 });
 
 describe("multi-selection flattening", () => {
