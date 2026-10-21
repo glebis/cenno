@@ -111,6 +111,11 @@ share the row model, the caps, and the answer encoding.
   (pointer) or Enter (keyboard), matching `SliderView`'s existing contract in
   `src/a2ui/views.tsx:290`.
 
+**A header numeral click sets every row** (`setAll`): rating several items on the
+same scale is the common case, and doing it row by row is the tedium the
+component exists to remove. Rows stay individually adjustable afterwards, and
+the header numerals are buttons with `aria-label="Set every row to N"`.
+
 **Neither mode answers from a row gesture.** Both accumulate into the bound
 object and a `Done` button (`doneLabel` overrides its text) fires
 `selectAction` with every rated row. Answering on the first row tap closed the

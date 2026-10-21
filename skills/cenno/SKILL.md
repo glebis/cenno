@@ -515,6 +515,7 @@ Use this instead of firing N scale prompts when the user must judge several item
 }
 ```
 
+- **Clicking a column numeral rates every row at once** — three items on the same scale is the common case. Rows stay individually adjustable afterwards.
 - **Nothing answers until the user presses `Done`.** Both modes accumulate, then the `Done` button (rename it with `doneLabel`) submits every rated row at once. Rating some rows and skipping others is a valid partial answer; `Done` is disabled only when nothing has been rated.
 - **The answer is JSON keyed by row `value`**: `{"answer":"{\"pace\":4,\"useful\":3}","via":"choice"}` — parse the `answer` string, don't string-match it. Only the rows the user actually touched appear.
 - Caps: **≤3 rows, ≤7 points** (the 7-point cap applies to `matrix` only; sliders are continuous). `rows[].value` is required and is what comes back; `label` is display-only.
