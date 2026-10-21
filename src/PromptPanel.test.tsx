@@ -336,3 +336,65 @@ describe("free-form escape hatch", () => {
       unmount();
     }
   });});
+
+describe("answer encoding through the real panel", () => {
+  // The unit tests for RatingMatrix bind a value and assert the VIEW's
+  // callback — they never exercise `String(raw)` in PromptPanel, which is what
+  // actually reaches the agent. Task 7's worker found that the matrix answer
+  // arrived as "[object Object]" while every view-level test still passed, so
+  // this test exists to make that class of bug impossible to ship silently.
+  it("delivers a matrix answer as JSON an agent can parse, not [object Object]", () => {
+    const onAnswer = vi.fn();
+    const prompt: Prompt = {
+      ...base,
+      id: "p_matrix",
+      a2ui: [
+        {
+          version: "v0.9",
+          createSurface: { surfaceId: "main", catalogId: "cenno:catalog/v1" },
+        },
+        {
+          version: "v0.9",
+          updateComponents: {
+            surfaceId: "main",
+            components: [
+              { id: "root", component: "Column", children: ["m"] },
+              {
+                id: "m",
+                component: "RatingMatrix",
+                mode: "matrix",
+                rows: [
+                  { value: "pace", label: "Pace" },
+                  { value: "useful", label: "Usefulness" },
+                ],
+                min: 1,
+                max: 3,
+                value: { path: "/items" },
+                selectAction: {
+                  event: {
+                    name: "submit-matrix",
+                    context: { value: { path: "/items" }, via: "choice" },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        {
+          version: "v0.9",
+          updateDataModel: { surfaceId: "main", path: "/items", value: {} },
+        },
+      ],
+    };
+    render(<PromptPanel prompt={prompt} onAnswer={onAnswer} />);
+
+    // Second numeral of the second row = "useful" 3.
+    fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]);
+
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+    const [, answer, via] = onAnswer.mock.calls[0];
+    expect(via).toBe("choice");
+    expect(answer).not.toContain("[object Object]");
+    expect(JSON.parse(answer)).toEqual({ useful: 3 });
+  });
+});
