@@ -726,6 +726,157 @@
   padding-bottom: 4px;
 }
 
+/* ---- rating matrix: several items rated in one panel ---- */
+
+/* The label column is a fixed 96px and right-aligned so the numeral rows and
+   the header numerals line up in one vertical grid; without it a long row
+   label would push that row's scale out of step with its neighbours. */
+.cenno-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cenno-space-1);
+}
+
+.cenno-matrix__row {
+  display: flex;
+  align-items: center;
+  gap: var(--cenno-space-2);
+}
+
+.cenno-matrix__label {
+  flex: none;
+  font-size: var(--cenno-type-body);
+  line-height: var(--cenno-font-leading-body);
+  color: var(--cenno-text);
+}
+
+/* The fixed, right-aligned label column exists in matrix mode only: it is what
+   keeps every row's numerals on one vertical grid. Sliders mode keeps the
+   label hugging its own text (`.cenno-matrix__slider`), because there is no
+   column of numerals to align with. */
+.cenno-matrix__row .cenno-matrix__label {
+  width: 96px;
+  text-align: end;
+  /* A long label wraps inside its 96px column rather than widening the row. */
+  overflow-wrap: anywhere;
+}
+
+/* Header numerals: caption size, dim, tabular — the ScaleView end-label
+   treatment. aria-hidden in the view: each target below carries its own
+   numeral, so a screen reader must not read the scale twice. */
+.cenno-matrix__row--head {
+  padding-bottom: var(--cenno-space-1);
+}
+
+.cenno-matrix__row--head .cenno-matrix__nums {
+  border-bottom: 1px solid var(--cenno-line);
+}
+
+.cenno-matrix__headnum {
+  flex: 1 1 0;
+  max-width: 44px;
+  text-align: center;
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-font-leading-caption);
+  color: var(--cenno-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* flex 1 so the numerals share the width left over by the label column
+   (the guard caps them at 7); max-width keeps them from drifting apart into
+   a sparse row when there are only 3. */
+.cenno-matrix__nums {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--cenno-space-1);
+}
+
+/* The button is the tap target (44px tall, full share of the row); the circle
+   inside is the 28px numeral target, the .cenno-scale__num shape shrunk to
+   fit 7 of them beside a label without leaving the panel. */
+.cenno-matrix__dot {
+  appearance: none;
+  flex: 1 1 0;
+  max-width: 44px;
+  min-width: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.cenno-matrix__dotnum {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 1px solid var(--cenno-line);
+  border-radius: 50%;
+  color: var(--cenno-text);
+  font-size: var(--cenno-type-caption);
+  font-variant-numeric: tabular-nums;
+  /* Unselected numerals are near-invisible: the dot is a target, not a
+     readout — the header numerals carry the scale. */
+  opacity: 0;
+}
+
+/* Hover and selection reveal the numeral, so the scale is legible without
+   counting dots. */
+.cenno-matrix__dot:hover .cenno-matrix__dotnum {
+  opacity: 1;
+}
+
+.cenno-matrix__dot.is-selected .cenno-matrix__dotnum {
+  border-color: var(--cenno-text);
+  background: var(--cenno-text);
+  color: var(--cenno-surface);
+  opacity: 1;
+}
+
+/* Keyboard focus lands on the button; the ring belongs on the circle. */
+.cenno-matrix__dot:focus-visible {
+  outline: none;
+}
+
+.cenno-matrix__dot:focus-visible .cenno-matrix__dotnum {
+  outline: 1px solid var(--cenno-text);
+  outline-offset: 3px;
+}
+
+/* ---- rating matrix: sliders mode ---- */
+
+.cenno-matrix--sliders {
+  gap: var(--cenno-space-2);
+}
+
+.cenno-matrix__slider {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Label left, live number right: the readout is what makes a slider
+   answerable without eyeballing the thumb position. */
+.cenno-matrix__slider-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cenno-space-2);
+}
+
+.cenno-matrix__readout {
+  flex: none;
+  font-size: var(--cenno-type-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--cenno-text);
+}
+
 /* ---- dots pagination ---- */
 
 .cenno-dots {

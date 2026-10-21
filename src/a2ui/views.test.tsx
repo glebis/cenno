@@ -16,6 +16,7 @@ import {
   DateTimeView,
   ImageView,
   TableView,
+  MatrixView,
 } from "./views";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -525,6 +526,7 @@ describe("cennoCatalog", () => {
       "DateTimeInput",
       "Dots",
       "Image",
+      "RatingMatrix",
       "Row",
       "Scale",
       "Slider",
@@ -854,6 +856,49 @@ describe("TableView", () => {
   it("marks a dense table so the rows tighten without losing the hairlines", () => {
     const { container } = render(<TableView columns={columns} rows={rows} dense />);
     expect(container.querySelector(".cenno-table")?.className).toContain("is-dense");
+  });
+});
+
+describe("MatrixView", () => {
+  const rows = [
+    { value: "pace", label: "Pace" },
+    { value: "useful", label: "Usefulness" },
+  ];
+
+  it("renders one row of numeral targets per item in matrix mode", () => {
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3} onSelect={vi.fn()} />);
+    expect(screen.getAllByRole("radiogroup")).toHaveLength(2);
+    expect(screen.getAllByRole("radio")).toHaveLength(6);
+  });
+
+  it("reports the row value with the chosen number", () => {
+    const onSelect = vi.fn();
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3} onSelect={onSelect} />);
+    fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]);
+    expect(onSelect).toHaveBeenCalledWith("useful", 3);
+  });
+
+  it("marks the bound values as checked", () => {
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      value={{ pace: 2 }} onSelect={vi.fn()} />);
+    expect(screen.getAllByRole("radio")[1].getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("renders a labelled slider per item in sliders mode", () => {
+    const onSelect = vi.fn();
+    render(<MatrixView rows={rows} mode="sliders" min={0} max={10}
+      minLabel="low" maxLabel="high" onSelect={onSelect} />);
+    const sliders = screen.getAllByRole("slider");
+    expect(sliders).toHaveLength(2);
+    fireEvent.change(sliders[0], { target: { value: "7" } });
+    expect(onSelect).toHaveBeenCalledWith("pace", 7);
+  });
+
+  it("shows end labels once, shared by every row", () => {
+    render(<MatrixView rows={rows} mode="sliders" min={0} max={10}
+      minLabel="not at all" maxLabel="completely" onSelect={vi.fn()} />);
+    expect(screen.getAllByText("not at all")).toHaveLength(1);
+    expect(screen.getAllByText("completely")).toHaveLength(1);
   });
 });
 

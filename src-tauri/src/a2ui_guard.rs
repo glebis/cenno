@@ -21,6 +21,7 @@
 //! `Image.url`, which rejects remote URLs and data URIs the webview cannot
 //! render (see `check_image_url`), and `ChoicePicker.displayStyle`, which must
 //! be one of the two styles the catalog can render.
+//! `Table` and `RatingMatrix` are capped, because a panel is small and fixed.
 
 use serde_json::Value;
 
@@ -36,6 +37,15 @@ pub const MAX_TABLE_COLUMNS: usize = 4;
 /// Maximum `Table.rows` (a panel's height is clamped to 240-560px by
 /// `resize_panel`).
 pub const MAX_TABLE_ROWS: usize = 12;
+
+/// Maximum `RatingMatrix.rows` (a panel's height is clamped to 240-560px by
+/// `resize_panel`; more items belong in `ask_sequence`).
+pub const MAX_MATRIX_ROWS: usize = 3;
+/// Maximum points on a `RatingMatrix` scale (`max - min + 1`), matrix mode
+/// only. Past 7 numeral targets the row stops fitting beside the label column
+/// in a ~320-420px panel. Sliders mode renders a continuous range per row and
+/// is deliberately uncapped.
+pub const MAX_MATRIX_POINTS: i64 = 7;
 
 const MESSAGE_KEYS: [&str; 3] = ["createSurface", "updateComponents", "updateDataModel"];
 
@@ -291,6 +301,108 @@ fn check_component(component: &Value) -> Result<(), String> {
                         ));
                     }
                 }
+            }
+            Ok(())
+        }
+        Some("RatingMatrix") => {
+            // Several items rated in one panel. Both caps are layout limits, not
+            // data limits: the panel is ~320-420px wide and its height is
+            // clamped to 240-560px, so a 4th row or an 8th point would clip.
+            // More items belong in `ask_sequence`, which the errors say.
+            let label = component_label(obj, "RatingMatrix");
+            let rows = obj.get("rows").and_then(Value::as_array).ok_or_else(|| {
+                format!(
+                    "{label}: RatingMatrix.rows must be an array of row objects \
+                     ({{ \"value\": \"pace\", \"label\": \"Pace\" }}), got {}",
+                    obj.get("rows").map_or("nothing", type_name)
+                )
+            })?;
+            if rows.is_empty() {
+                return Err(format!(
+                    "{label}: has 0 rows; a rating matrix needs at least 1 row — add a \
+                     row object ({{ \"value\": … }}) or drop the component"
+                ));
+            }
+            if rows.len() > MAX_MATRIX_ROWS {
+                return Err(format!(
+                    "{label}: has {} rows; the maximum is {MAX_MATRIX_ROWS} — ask about \
+                     the rest with a follow-up prompt, or use ask_sequence to walk through \
+                     them one at a time",
+                    rows.len()
+                ));
+            }
+            for (i, row) in rows.iter().enumerate() {
+                let Some(row_obj) = row.as_object() else {
+                    return Err(format!(
+                        "{label}: row {i} must be an object with a \"value\", got {}",
+                        type_name(row)
+                    ));
+                };
+                match row_obj.get("value").and_then(Value::as_str) {
+                    Some(value) if !value.trim().is_empty() => {}
+                    Some(_) => {
+                        return Err(format!(
+                            "{label}: row {i} has an empty \"value\"; it is the key this \
+                             row's answer is filed under — give it a non-empty name like \
+                             \"pace\""
+                        ))
+                    }
+                    None => {
+                        return Err(format!(
+                            "{label}: row {i} has no \"value\"; it is the key this row's \
+                             answer is filed under — add one, e.g. \
+                             {{ \"value\": \"pace\", \"label\": \"Pace\" }}"
+                        ))
+                    }
+                }
+            }
+            match obj.get("mode").and_then(Value::as_str) {
+                Some("matrix" | "sliders") => {}
+                Some(other) => {
+                    return Err(format!(
+                        "{label}.mode must be \"matrix\" or \"sliders\", got \"{other}\" \
+                         — \"matrix\" for a row of discrete numeral targets, \"sliders\" \
+                         for a continuous range per row"
+                    ))
+                }
+                None => {
+                    return Err(format!(
+                        "{label}: RatingMatrix.mode must be \"matrix\" or \"sliders\", got \
+                         {} — \"matrix\" for a row of discrete numeral targets, \"sliders\" \
+                         for a continuous range per row",
+                        obj.get("mode").map_or("nothing", type_name)
+                    ))
+                }
+            }
+            // The scale is the other layout limit, and it applies to
+            // `matrix` ONLY: 7 numeral targets is what fits beside the 96px
+            // label column. `sliders` renders one continuous range per row, so
+            // 0-10 is a normal request there and must not be rejected.
+            let number = |key: &str| obj.get(key).and_then(Value::as_i64);
+            let (Some(min), Some(max)) = (number("min"), number("max")) else {
+                return Err(format!(
+                    "{label}: RatingMatrix needs integer \"min\" and \"max\" scale bounds \
+                     (e.g. 1 and 5), got min {} / max {}",
+                    obj.get("min").map_or("nothing", type_name),
+                    obj.get("max").map_or("nothing", type_name)
+                ));
+            };
+            if max < min {
+                return Err(format!(
+                    "{label}: has min {min} above max {max} — swap them so the scale runs \
+                     low to high"
+                ));
+            }
+            let points = max - min + 1;
+            if obj.get("mode").and_then(Value::as_str) == Some("matrix")
+                && points > MAX_MATRIX_POINTS
+            {
+                return Err(format!(
+                    "{label}: has {points} points from min {min} to max {max}; the maximum \
+                     is {MAX_MATRIX_POINTS} for mode \"matrix\" — narrow the scale, switch to \
+                     mode \"sliders\" for a continuous range, or use ask_sequence to ask about \
+                     each item on its own"
+                ));
             }
             Ok(())
         }
@@ -1050,5 +1162,107 @@ mod tests {
             "id": "c", "component": "Table", "columns": [], "rows": [] })))
         .unwrap_err();
         assert!(err.contains("at least 1 column"), "{err}");
+    }
+
+    // ---- RatingMatrix caps (Task 7) ----
+
+    fn matrix(extra: Value) -> Result<(), String> {
+        let mut base = json!({
+            "id": "items", "component": "RatingMatrix",
+            "mode": "matrix",
+            "rows": [{ "value": "pace", "label": "Pace" }],
+            "min": 1, "max": 3,
+        });
+        if let (Some(base), Some(extra)) = (base.as_object_mut(), extra.as_object()) {
+            for (k, v) in extra {
+                base.insert(k.clone(), v.clone());
+            }
+        }
+        validate_a2ui(&envelope_with(base))
+    }
+
+    #[test]
+    fn matrix_at_the_caps_passes() {
+        let rows: Vec<Value> = (0..3)
+            .map(|i| json!({ "value": format!("r{i}"), "label": format!("R{i}") }))
+            .collect();
+        matrix(json!({ "rows": rows, "min": 1, "max": 7 })).unwrap();
+    }
+
+    #[test]
+    fn matrix_over_three_rows_rejects_pointing_at_ask_sequence() {
+        let rows: Vec<Value> = (0..4)
+            .map(|i| json!({ "value": format!("r{i}") }))
+            .collect();
+        let err = matrix(json!({ "rows": rows })).unwrap_err();
+        assert!(err.contains("4 rows") && err.contains("maximum is 3"), "{err}");
+        assert!(err.contains("ask_sequence"), "must name the alternative: {err}");
+        assert!(err.contains("items"), "must name the node: {err}");
+    }
+
+    #[test]
+    fn matrix_with_more_than_seven_points_rejects() {
+        let err = matrix(json!({ "min": 1, "max": 8 })).unwrap_err();
+        assert!(err.contains("8 points"), "{err}");
+        assert!(err.contains("maximum is 7"), "{err}");
+        assert!(err.contains("ask_sequence"), "must name the alternative: {err}");
+    }
+
+    #[test]
+    fn matrix_with_seven_points_is_the_boundary_and_passes() {
+        matrix(json!({ "min": 0, "max": 6 })).unwrap();
+    }
+
+    #[test]
+    fn matrix_mode_outside_the_enum_rejects_naming_both_values() {
+        let err = matrix(json!({ "mode": "stars" })).unwrap_err();
+        assert!(err.contains("\"stars\""), "must quote the value: {err}");
+        assert!(
+            err.contains("\"matrix\"") && err.contains("\"sliders\""),
+            "must give the fix: {err}"
+        );
+    }
+
+    #[test]
+    fn matrix_missing_mode_rejects() {
+        let err = matrix(json!({ "mode": null })).unwrap_err();
+        assert!(err.contains("RatingMatrix.mode"), "{err}");
+    }
+
+    #[test]
+    fn matrix_row_without_a_value_rejects_naming_the_row() {
+        let err = matrix(json!({ "rows": [{ "label": "Pace" }, { "value": "useful" }] }))
+            .unwrap_err();
+        assert!(err.contains("row 0"), "{err}");
+        assert!(err.contains("no \"value\""), "{err}");
+    }
+
+    #[test]
+    fn matrix_row_with_an_empty_value_rejects() {
+        let err = matrix(json!({ "rows": [{ "value": "   " }] })).unwrap_err();
+        assert!(err.contains("empty \"value\""), "{err}");
+    }
+
+    #[test]
+    fn matrix_with_zero_rows_rejects() {
+        let err = matrix(json!({ "rows": [] })).unwrap_err();
+        assert!(err.contains("at least 1 row"), "{err}");
+    }
+
+    #[test]
+    fn matrix_with_min_above_max_rejects() {
+        let err = matrix(json!({ "min": 5, "max": 1 })).unwrap_err();
+        assert!(err.contains("min 5 above max 1"), "{err}");
+    }
+
+    #[test]
+    fn matrix_without_scale_bounds_rejects_naming_them() {
+        let err = matrix(json!({ "min": null, "max": null })).unwrap_err();
+        assert!(err.contains("min") && err.contains("max"), "{err}");
+    }
+
+    #[test]
+    fn matrix_sliders_mode_passes() {
+        matrix(json!({ "mode": "sliders", "min": 0, "max": 10 })).unwrap();
     }
 }

@@ -15,6 +15,8 @@
  * - `Dots`   — step pagination (no standard progress/pagination API)
  * - `Table`  — display-only rows (no Table exists in any A2UI v0.9 catalog;
  *   input cells are out of scope because every answer flattens to a string)
+ * - `RatingMatrix` — several items rated in one panel, matrix or sliders
+ *   (ChoicePicker and Slider both answer a single question)
  *
  * Adapters are intentionally untested here; they are covered by the Task 6
  * renderer integration.
@@ -28,6 +30,8 @@ import {
   DynamicBooleanSchema,
   DynamicNumberSchema,
   DynamicStringSchema,
+  DataBindingSchema,
+  FunctionCallSchema,
 } from "@a2ui/web_core/v0_9";
 import {
   BASIC_FUNCTIONS,
@@ -53,6 +57,7 @@ import {
   DateTimeView,
   ImageView,
   TableView,
+  MatrixView,
   type TextRole,
 } from "./views";
 
@@ -525,6 +530,162 @@ export const CennoTable = createComponentImplementation(
 );
 
 /* ------------------------------------------------------------------ */
+/* RatingMatrix — custom: several items rated in one panel             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * No standard A2UI component rates several items at once (Slider and
+ * ChoicePicker are both single-question), so this is a cenno custom type
+ * alongside Scale, Table and Dots. One component with `mode` picking the
+ * presentation: both modes are the same data (a set of keyed numbers), and two
+ * components would duplicate the caps and the styling.
+ *
+ * `value` binds to the data model as an object keyed by row value (not an
+ * array): each row writes `path + "/" + row.value`, so reordering rows cannot
+ * corrupt an answer. The object is what makes the answer self-describing —
+ * `{"pace":4,"usefulness":3}` — instead of a position-dependent list.
+ *
+ * It is written as JSON TEXT, not as a live object, because that is exactly
+ * what the answer path forwards: PromptPanel delivers `String(raw)`
+ * (src/PromptPanel.tsx:161), so a live object would reach the agent as
+ * "[object Object]" (verified against a real payload through the real
+ * catalog). The text form is what the design doc promises the agent, and it
+ * parses with one JSON.parse on the agent side.
+ *
+ * Caps (3 rows, 7 points) live in the guard (src-tauri/src/a2ui_guard.rs),
+ * which returns an actionable error pointing at `ask_sequence` before a
+ * payload ever reaches this schema.
+ *
+ * `value` is spelled out as `Record<string, number> | string | DataBinding |
+ * FunctionCall` rather than `DynamicValueSchema`: the binder derives the type
+ * of `setValue` from the union minus its dynamic arms, and DynamicValueSchema's
+ * remaining arms are scalars/arrays, so an object write would not typecheck.
+ */
+const RatingMatrixValueSchema = z.union([
+  z.record(z.number()),
+  z.string(),
+  DataBindingSchema,
+  FunctionCallSchema,
+]);
+
+/**
+ * The bound value as a row->number map. Accepts the JSON text the adapter
+ * writes, plus a real object (a payload may pre-seed one, and an echoed
+ * `updateDataModel` keeps that shape). Anything else degrades to empty rather
+ * than throwing inside the surface.
+ */
+function parseMatrixValue(bound: unknown): Record<string, number> {
+  const value: Record<string, number> = {};
+  const source =
+    typeof bound === "string"
+      ? (() => {
+          try {
+            return JSON.parse(bound) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : bound;
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return value;
+  }
+  for (const [key, n] of Object.entries(source)) {
+    if (typeof n === "number") value[key] = n;
+  }
+  return value;
+}
+
+export const RatingMatrixApi = {
+  name: "RatingMatrix",
+  schema: z
+    .object({
+      ...CommonProps,
+      mode: z
+        .enum(["matrix", "sliders"])
+        .describe(
+          "'matrix' = one row of numeral targets per item (discrete points, " +
+            "one tap answers the row); 'sliders' = one labelled slider per item.",
+        ),
+      rows: z
+        .array(
+          z
+            .object({
+              value: z
+                .string()
+                .describe(
+                  "The key this row's answer is filed under; returned to the " +
+                    "agent, never displayed.",
+                ),
+              label: DynamicStringSchema.optional().describe(
+                "Display name for the row; falls back to the row value.",
+              ),
+            })
+            .strict(),
+        )
+        .min(1)
+        .describe("Items to rate, at most 3 (a panel fits 240-560px)."),
+      min: DynamicNumberSchema.describe("Lowest point on the scale."),
+      max: DynamicNumberSchema.describe(
+        "Highest point on the scale; at most 7 points from min to max.",
+      ),
+      minLabel: DynamicStringSchema.optional().describe(
+        "Caption under the low end (e.g. 'not at all').",
+      ),
+      maxLabel: DynamicStringSchema.optional().describe(
+        "Caption under the high end (e.g. 'completely').",
+      ),
+      value: RatingMatrixValueSchema.optional().describe(
+        "Object binding keyed by row value, e.g. {\"path\": \"/items\"}. " +
+          "Each row writes its own key beneath it.",
+      ),
+      selectAction: ActionSchema.optional().describe(
+        "Action fired after a row is answered. Its context should carry " +
+          "{ value: <the same path as `value`>, via: \"choice\" }.",
+      ),
+    })
+    .strict(),
+};
+
+export const CennoRatingMatrix = createComponentImplementation(
+  RatingMatrixApi,
+  ({ props }) => {
+    const value = parseMatrixValue(props.value);
+    return (
+      <MatrixView
+        rows={(props.rows ?? []).map((row) => ({
+          value: row.value,
+          label: typeof row.label === "string" ? row.label : row.value,
+        }))}
+        mode={props.mode}
+        min={typeof props.min === "number" ? props.min : 1}
+        max={typeof props.max === "number" ? props.max : 5}
+        minLabel={typeof props.minLabel === "string" ? props.minLabel : undefined}
+        maxLabel={typeof props.maxLabel === "string" ? props.maxLabel : undefined}
+        value={value}
+        onSelect={(key, n) => {
+          // Spread, not a positional array: the object is keyed by row value, so
+          // a reordered row list still maps onto the right answer.
+          props.setValue(JSON.stringify({ ...value, [key]: n }));
+          // Sliders must not ANSWER while the thumb is still moving — that is
+          // SliderView's change/commit split (src/a2ui/views.tsx:473), so in
+          // sliders mode the action waits for onCommit below. A matrix tap is
+          // the whole gesture, so it answers immediately.
+          if (props.mode !== "sliders") props.selectAction?.();
+        }}
+        onCommit={
+          props.mode === "sliders"
+            ? (key, n) => {
+                props.setValue(JSON.stringify({ ...value, [key]: n }));
+                props.selectAction?.();
+              }
+            : undefined
+        }
+      />
+    );
+  },
+);
+
+/* ------------------------------------------------------------------ */
 /* Dots — custom: EMA step pagination                                  */
 /* ------------------------------------------------------------------ */
 
@@ -564,6 +725,7 @@ export const cennoCatalog = new Catalog(
     CennoImage,
     CennoScale,
     CennoTable,
+    CennoRatingMatrix,
     CennoDots,
   ],
   BASIC_FUNCTIONS,

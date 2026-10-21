@@ -834,6 +834,145 @@ export function TableView({
   );
 }
 
+/**
+ * Multi-item evaluation: one row per item, `mode` picks the presentation.
+ *
+ * `matrix` gives each row its own radiogroup of numeral targets so one tap
+ * answers that row; the numerals themselves only show on hover/select, which
+ * is why the shared header row exists — the scale is readable without
+ * counting dots. Header numerals are `aria-hidden` because each target
+ * carries its own `aria-label`, so a screen reader says "Usefulness, 3"
+ * rather than reading every numeral twice.
+ *
+ * `sliders` reuses SliderView per row with the row label as the slider's
+ * accessible name. It deliberately does NOT get `minLabel`/`maxLabel`: those
+ * describe the scale, not the row, so they render once under the whole stack
+ * instead of under all three sliders.
+ *
+ * In sliders mode `onSelect` fires on every move (the readout must track the
+ * thumb) while `onCommit` fires on release/Enter — SliderView's own contract,
+ * so a drag does not answer the prompt on its first pixel of travel. Matrix
+ * mode has no such split: one tap is the whole gesture, so it reports through
+ * `onSelect` only.
+ *
+ * Answers are `(row.value, n)` — the row VALUE, never the label (labels are
+ * display only) — so the bound object stays stable when rows are reordered.
+ */
+export function MatrixView({
+  rows,
+  mode,
+  min,
+  max,
+  minLabel,
+  maxLabel,
+  value,
+  onSelect,
+  onCommit,
+}: {
+  rows: { value: string; label: string }[];
+  mode: "matrix" | "sliders";
+  min: number;
+  max: number;
+  minLabel?: string;
+  maxLabel?: string;
+  value?: Record<string, number>;
+  onSelect: (key: string, n: number) => void;
+  /** Sliders mode: the commit gesture (release/Enter). Defaults to onSelect. */
+  onCommit?: (key: string, n: number) => void;
+}) {
+  const steps: number[] = [];
+  for (let n = min; n <= max; n++) steps.push(n);
+  // Readout state for sliders mode; the bound value wins when the host echoes
+  // it, the draft keeps the number live when it does not (SliderView's own
+  // contract).
+  const [draft, setDraft] = useState<Record<string, number>>({});
+
+  if (mode === "sliders") {
+    return (
+      <div className="cenno-matrix cenno-matrix--sliders">
+        {rows.map((row) => {
+          const current = value?.[row.value] ?? draft[row.value];
+          return (
+            <div className="cenno-matrix__slider" key={row.value}>
+              <div className="cenno-matrix__slider-head">
+                <span className="cenno-matrix__label">{row.label}</span>
+                <span className="cenno-matrix__readout">
+                  {current ?? Math.round((min + max) / 2)}
+                </span>
+              </div>
+              <SliderView
+                min={min}
+                max={max}
+                value={value?.[row.value]}
+                label={row.label}
+                onChange={(n) => {
+                  setDraft((d) => ({ ...d, [row.value]: n }));
+                  onSelect(row.value, n);
+                }}
+                onCommit={(n) => (onCommit ?? onSelect)(row.value, n)}
+              />
+            </div>
+          );
+        })}
+        {(minLabel || maxLabel) && (
+          <div className="cenno-slider__labels" aria-hidden="true">
+            <span className="cenno-slider__label">{minLabel}</span>
+            <span className="cenno-slider__label">{maxLabel}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // The header numerals only earn their space while the targets still fit on
+  // the panel's width; past the guard's 7-value cap they would be a second set
+  // of numbers the user has to align by eye.
+  const showHeader = steps.length <= 7;
+  return (
+    <div className="cenno-matrix">
+      {showHeader && (
+        <div className="cenno-matrix__row cenno-matrix__row--head" aria-hidden="true">
+          <span className="cenno-matrix__label" />
+          <div className="cenno-matrix__nums">
+            {steps.map((n) => (
+              <span className="cenno-matrix__headnum" key={n}>
+                {n}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {rows.map((row) => (
+        <div className="cenno-matrix__row" key={row.value}>
+          <span className="cenno-matrix__label">{row.label}</span>
+          <div
+            className="cenno-matrix__nums"
+            role="radiogroup"
+            aria-label={row.label}
+          >
+            {steps.map((n) => {
+              const selected = value?.[row.value] === n;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={String(n)}
+                  className={`cenno-matrix__dot${selected ? " is-selected" : ""}`}
+                  onClick={() => onSelect(row.value, n)}
+                >
+                  <span className="cenno-matrix__dotnum">{n}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** EMA step pagination: 6px dots, active full white, inactive 40%. */
 export function DotsView({ step, total }: { step: number; total: number }) {
   return (
