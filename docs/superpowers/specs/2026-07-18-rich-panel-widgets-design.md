@@ -1,11 +1,11 @@
-# Rich panel widgets — tables, choice presentations, multi-item evaluation, images
+# Rich panel widgets — tables, choice presentations, multi-item evaluation, images, image choice
 
 Date: 2026-07-18
 Status: draft, awaiting review
 
 ## Problem
 
-`cenno:catalog/v1` cannot express four things agents routinely need:
+`cenno:catalog/v1` cannot express five things agents routinely need:
 
 1. **Tabular data.** No Table component exists in A2UI v0.9 (verified against
    `@a2ui/web_core` 0.10.7 and 0.14.0 — the stock catalog is Text, Image,
@@ -27,6 +27,11 @@ Status: draft, awaiting review
    (`src-tauri/tauri.conf.json:26`) is `img-src 'self' data:`, so remote URLs
    and local file paths render as a silent blank box, and `a2ui_guard.rs`
    validates nothing about image URLs.
+5. **Choosing between images.** The user asked for images to also work as a
+   choice — "select from up to 10 images, adaptive layout for each number".
+   `ChoicePicker` options are strictly `{label, value}` in every published
+   release of `@a2ui/web_core`, so there is no place to put a picture, and the
+   chips layout cannot show one anyway.
 
 ## Decisions
 
@@ -41,6 +46,10 @@ Status: draft, awaiting review
 | Table column cap | **Hard cap at 4** | Panels are ~320–420px. A 5th column forces horizontal scroll in a floating panel that must not be scrolled. The guard rejects with an actionable error. |
 | Image error verbosity | **Name the reason in the panel** | A silent blank is the bug being fixed; "image failed to load" alone doesn't tell the agent what to change. The panel line is caption-size and dim — it does not compete with the question. |
 | Combined panel height | **Matrix capped at 3 rows** | `resize_panel` clamps to 240–560px. A table plus a longer matrix exceeds that and scrolls. More items belong in `ask_sequence`. |
+| Images as a choice | **New `ImageChoice` component**, not an extension of `ChoicePicker` | An option whose type depends on its content is a renderer nobody can predict. `ChoicePicker` options are strictly `{label, value}` in every release, and keeping them so means a shipped payload can't silently change shape. |
+| `ImageChoice` variants | **Both** `mutuallyExclusive` + `multipleSelection` | "Keep which of these?" is the real multi-image case, and the selection-mark shape already distinguishes the two (round vs square). |
+| `ImageChoice` geometry | **Square tiles, `cover` by default, `fit:"contain"` opt-in** | Cover keeps an even grid with no letterbox bars at every count; `contain` is one enum away for agents judging screenshots or UI diffs where cropping destroys the comparison. |
+| `ImageChoice` count | **Hard cap at 10** | Below ~58px a tile stops being a thumb you can judge. Ten also bounds the payload: ~25 KB per tile inside the existing 256 KiB envelope. |
 
 ## Components
 
@@ -187,6 +196,70 @@ the panel never jumps:
 The view never throws: a broken image degrades to the error line and the prompt
 stays answerable.
 
+### 5. `ImageChoice` — custom (new)
+
+Select from up to 10 images. A deliberate new component rather than an extra
+field on `ChoicePicker` (see Decisions): the shape of the option decides the
+shape of the renderer.
+
+**Schema:**
+
+```jsonc
+{
+  "component": "ImageChoice",
+  "id": "pick",
+  "options": [
+    { "value": "v2", "label": "v2 · quiet", "image": "data:image/png;base64,…" }
+  ],
+  "variant": "mutuallyExclusive",   // | "multipleSelection"
+  "fit": "cover",                    // | "contain"
+  "columns": 4                       // optional override; default is the adaptive table
+}
+```
+
+`options[]` is `{value, label?, image}` — `value` is returned, `label` is
+display-only and sits **under** the tile, never over it. `image` accepts
+exactly what hardened `Image` accepts (`data:` URI or a local path), through
+the same `resolveImageUrl` helper and the same `load_image` command.
+
+**Adaptive layout.** Column count is a lookup, not `auto-fill`:
+
+| n | columns | rows | tile @340px panel |
+|---|---|---|---|
+| 1 | 1 | 1 | ~300px |
+| 2 | 2 | 1 | ~155px |
+| 3 | 3 | 1 | ~100px |
+| 4 | 2 | 2 | ~155px |
+| 5 | 3 | 2 | ~100px |
+| 6 | 3 | 2 | ~100px |
+| 7 | 4 | 2 | ~75px |
+| 8 | 4 | 2 | ~75px |
+| 9 | 3 | 3 | ~100px |
+| 10 | 5 | 2 | ~58px |
+
+The rule behind the table: keep tiles ≥ ~58px and never leave a final row with
+a single orphan tile. This is why 5 is 3+2 rather than 4+1, 7 is 4+3 rather
+than 3+3+1, and 9 is 3×3 rather than 4+4+1 — 3×3 also keeps tiles bigger than
+a 5-column layout would. Ten tiles at 5 columns is ~140px of tile height,
+which fits the 560px clamp next to a question and labels.
+
+**Selection.** Top-right mark: a filled circle for `mutuallyExclusive`, a filled
+square for `multipleSelection` — the same visual language as radios vs
+checkboxes, so the mark shape alone says which answer you will get. Selected
+tile gets a solid border in `--cenno-text`; unselected is `1px transparent` so
+the grid never shifts on select.
+
+**Failure states.** A tile whose image fails keeps its box (dashed
+`--cenno-line` border, caption-size dim reason) and **stays selectable** — a
+missing preview is not a missing option. This matters for the agent-judging
+-images case: a 404 preview must not silently delete a candidate from the
+comparison.
+
+**Answer.** `mutuallyExclusive` → the one `value`, unwrapped by the existing
+`src/PromptPanel.tsx:151` path. `multipleSelection` → values joined with `,`
+through the same array flattening `ChoicePicker` already relies on. `via` is
+`"choice"`. No change to `protocol.rs`.
+
 ## Boundary validation (`src-tauri/src/a2ui_guard.rs`)
 
 The guard grows from "is this a well-formed envelope" to "could this render".
@@ -200,6 +273,10 @@ New checks, each with an error naming the limit and the fix:
   `{"data"}`; `data:` URIs must match
   `^data:image/(png|jpeg|gif|webp);base64,`.
 - `ChoicePicker`: `displayStyle` in `{"chips","checkbox"}` when present.
+- `ImageChoice`: `options.len() in 1..=10`, every option has a non-empty
+  `value` and an `image` that passes the same scheme/data-URI check as `Image`,
+  `variant` in `{"mutuallyExclusive","multipleSelection"}`, `fit` in
+  `{"cover","contain"}` when present, `columns` in `1..=5` when present.
 
 Validation walks `updateComponents.components`, keying on the `component`
 string. Components not in the catalog are left to the renderer, as today.
@@ -211,9 +288,9 @@ so tables cost almost nothing against them; a matrix is likewise one component.
 
 | file | change |
 |---|---|
-| `src/a2ui/views.tsx` | add `CheckListView`, `MatrixView`, `TableView`; harden `ImageView` |
-| `src/a2ui/views.test.tsx` | tests for each new view + image three-state behaviour |
-| `src/a2ui/catalog.tsx` | honour `displayStyle`; add `TableApi`, `RatingMatrixApi` + adapters |
+| `src/a2ui/views.tsx` | add `CheckListView`, `MatrixView`, `TableView`, `ImageChoiceView`; harden `ImageView` |
+| `src/a2ui/views.test.tsx` | tests for each new view + image three-state behaviour + adaptive column lookup |
+| `src/a2ui/catalog.tsx` | honour `displayStyle`; add `TableApi`, `RatingMatrixApi`, `ImageChoiceApi` + adapters |
 | `src/a2ui/catalog.css` | styles for the list, matrix, slider rows, table, image states |
 | `src/a2ui/image.ts` | new — URL classification + `load_image` invocation + memo |
 | `src-tauri/src/image.rs` | new — the loader command |
@@ -228,7 +305,9 @@ so tables cost almost nothing against them; a matrix is likewise one component.
 - `npx vitest run` — view-level: radio semantics (`role="radio"` +
   `aria-checked`), checkbox toggle, matrix row selection reporting a keyed
   object, slider-row commit on release/Enter, table alignment classes, image
-  loading/ok/error transitions with a mocked `invoke`.
+  loading/ok/error transitions with a mocked `invoke`, `ImageChoice` column
+  lookup for every n in 1..=10, round-vs-square mark by variant, multi-select
+  answer joined with `,`, and a failed tile remaining selectable.
 - `cargo test` in `src-tauri/` — guard rejects oversized tables, too many
   matrix rows, a `https:` image, a malformed `data:` URI, an unknown
   `displayStyle`; `load_image` rejects a missing file, a non-image extension, a
@@ -248,6 +327,11 @@ so tables cost almost nothing against them; a matrix is likewise one component.
   tested explicitly. If that proves fragile, the fallback is a visually hidden
   native `<input type=radio>` behind the drawn mark — same look, real
   semantics.
+- **`ImageChoice` is the biggest height consumer.** Ten tiles at 5 columns is
+  ~140px, and a prompt with a long question, a caption line, and buttons still
+  fits — but 10 tiles plus a table in the same surface will clamp and scroll.
+  The guard caps `options.len()` at 10; compositions that stack widgets are the
+  agent's choice and the existing clamp is the backstop.
 - **`load_image` is a file-read primitive reachable from the webview.** It is
   bounded (one path, image extensions only, size cap, magic-byte sniff) but it
   is still a new read surface. It is only reachable from the panel webview,
@@ -259,5 +343,7 @@ so tables cost almost nothing against them; a matrix is likewise one component.
 
 - Input cells in tables, sorting, filtering, column resize.
 - Remote image fetching, including an opt-in config flag.
-- More than 3 matrix rows or more than 4 table columns.
+- More than 3 matrix rows, more than 4 table columns, more than 10 image
+  options.
+- Zoom/lightbox on an image tile, image reordering, upload-from-panel.
 - Any change to the answer contract (`{answer, via, elapsed_s}` is untouched).
