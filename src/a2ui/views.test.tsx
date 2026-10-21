@@ -897,6 +897,27 @@ describe("MatrixView", () => {
     expect(onDone).toHaveBeenCalledWith({ pace: 3, useful: 2 });
   });
 
+  // Rating every row on the same point is the common case; doing it row by
+  // row is exactly the tedium the matrix exists to remove.
+  it("a header click sets every row to that column", () => {
+    const onDone = vi.fn();
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      onSelect={vi.fn()} onDone={onDone} />);
+    fireEvent.click(screen.getByRole("button", { name: "Set every row to 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({ pace: 2, useful: 2 });
+  });
+
+  it("a header click still leaves rows individually adjustable", () => {
+    const onDone = vi.fn();
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      onSelect={vi.fn()} onDone={onDone} />);
+    fireEvent.click(screen.getByRole("button", { name: "Set every row to 2" }));
+    fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({ pace: 2, useful: 3 });
+  });
+
   it("keeps Done disabled until at least one row is rated", () => {
     render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
       onSelect={vi.fn()} onDone={vi.fn()} />);

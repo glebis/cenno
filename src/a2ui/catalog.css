@@ -773,13 +773,31 @@
 }
 
 .cenno-matrix__headnum {
+  appearance: none;
   flex: 1 1 0;
   max-width: 44px;
+  /* Zero vertical padding but a real 24px target: the header row sits tight
+     above the first item, so a taller button would push the grid down. */
+  padding: 2px 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--cenno-radius-control);
   text-align: center;
   font-size: var(--cenno-type-caption);
   line-height: var(--cenno-font-leading-caption);
   color: var(--cenno-text-dim);
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.cenno-matrix__headnum:hover {
+  color: var(--cenno-text);
+  background: color-mix(in srgb, var(--cenno-text) 10%, transparent);
+}
+
+.cenno-matrix__headnum:focus-visible {
+  outline: 1px solid var(--cenno-text);
+  outline-offset: 1px;
 }
 
 /* flex 1 so the numerals share the width left over by the label column
@@ -817,27 +835,31 @@
   width: 28px;
   height: 28px;
   flex: none;
-  border: 1px solid var(--cenno-line);
+  /* Transparent, never `none`: the border must occupy its 1px in the
+     un-hovered state too, or revealing it on hover shifts the numeral and
+     nudges the whole row. */
+  border: 1px solid transparent;
   border-radius: 50%;
-  color: var(--cenno-text);
+  /* Visible without hover, but quiet — the numerals read as a scale you can
+     scan against, not as a row of buttons competing with the labels. 32% is
+     the floor: past that the scale stops being scannable at rest, which is the
+     whole reason the numerals are shown at all. */
+  color: color-mix(in srgb, var(--cenno-text) 32%, transparent);
   font-size: var(--cenno-type-caption);
   font-variant-numeric: tabular-nums;
-  /* Unselected numerals are near-invisible: the dot is a target, not a
-     readout — the header numerals carry the scale. */
-  opacity: 0;
 }
 
-/* Hover and selection reveal the numeral, so the scale is legible without
-   counting dots. */
+/* Hover reveals the target's outline and full-strength numeral, so the tap
+   point is obvious without the resting state shouting. */
 .cenno-matrix__dot:hover .cenno-matrix__dotnum {
-  opacity: 1;
+  border-color: var(--cenno-line);
+  color: var(--cenno-text);
 }
 
 .cenno-matrix__dot.is-selected .cenno-matrix__dotnum {
   border-color: var(--cenno-text);
   background: var(--cenno-text);
   color: var(--cenno-surface);
-  opacity: 1;
 }
 
 /* Keyboard focus lands on the button; the ring belongs on the circle. */

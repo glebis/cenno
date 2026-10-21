@@ -1146,16 +1146,32 @@ export function MatrixView({
   // the panel's width; past the guard's 7-value cap they would be a second set
   // of numbers the user has to align by eye.
   const showHeader = steps.length <= 7;
+  // A header click sets EVERY row to that column: rating three items on the
+  // same scale is the common case, and doing it three times by hand is the
+  // tedium the matrix exists to remove. Individual rows stay independently
+  // adjustable afterwards.
+  const setAll = (n: number) => {
+    const next: Record<string, number> = {};
+    for (const row of rows) next[row.value] = n;
+    setDraft((d) => ({ ...d, ...next }));
+    for (const row of rows) onSelect(row.value, n);
+  };
   return (
     <div className="cenno-matrix">
       {showHeader && (
-        <div className="cenno-matrix__row cenno-matrix__row--head" aria-hidden="true">
+        <div className="cenno-matrix__row cenno-matrix__row--head">
           <span className="cenno-matrix__label" />
           <div className="cenno-matrix__nums">
             {steps.map((n) => (
-              <span className="cenno-matrix__headnum" key={n}>
+              <button
+                key={n}
+                type="button"
+                className="cenno-matrix__headnum"
+                aria-label={`Set every row to ${n}`}
+                onClick={() => setAll(n)}
+              >
                 {n}
-              </span>
+              </button>
             ))}
           </div>
         </div>
