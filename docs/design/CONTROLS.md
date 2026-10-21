@@ -31,8 +31,11 @@ views.tsx    — plain React, no A2UI imports; styled by catalog.css
    catalog components by name. Only touched when the *simple* form should
    emit the new control; raw `a2ui` payloads reach the catalog directly.
 4. **`src-tauri/src/a2ui_guard.rs`** — Rust-side boundary validation of raw
-   payloads (envelope shape, catalog id, size caps). It does **not** whitelist
-   component names, so a new control normally needs no Rust changes.
+   payloads (envelope shape, catalog id, size caps, and per-component rules
+   for the props whose invalid values would render *nothing* rather than
+   something wrong: image URLs, caps that force scrolling, enums). It does
+   **not** whitelist component names — an unknown name is left to the
+   renderer — but a control with such a prop DOES need a guard arm.
 
 ## House rules
 
