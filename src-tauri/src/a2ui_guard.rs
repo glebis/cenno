@@ -17,9 +17,10 @@
 //! be an object carrying a components array — payloads violating any of
 //! these render nothing on the web side.
 //!
-//! Component props are then checked one type at a time in `check_component`;
-//! today only `Image.url`, which rejects remote URLs and data URIs the webview
-//! cannot render (see `check_image_url`).
+//! Component props are then checked one type at a time in `check_component`:
+//! `Image.url`, which rejects remote URLs and data URIs the webview cannot
+//! render (see `check_image_url`), and `ChoicePicker.displayStyle`, which must
+//! be one of the two styles the catalog can render.
 
 use serde_json::Value;
 
@@ -123,6 +124,36 @@ fn check_component(component: &Value) -> Result<(), String> {
                 )
             })?;
             check_image_url(url).map_err(|err| format!("{label}: {err}"))
+        }
+        Some("ChoicePicker") => {
+            // `displayStyle` picks the rendering: chips (cenno's default and
+            // every payload shipped before the list view existed) or the
+            // radio/checkbox list. The upstream zod schema only admits those
+            // two, and the webview silently drops a component it cannot parse
+            // — so an unknown value would blank the options instead of telling
+            // the agent. `displayStyle` is a plain enum, NOT a DynamicString: a
+            // data-model binding ({"path": …}) is equally unparseable, so it is
+            // rejected here too rather than left to blank the panel.
+            let Some(style) = obj.get("displayStyle") else {
+                return Ok(());
+            };
+            let label = obj.get("id").and_then(Value::as_str).map_or_else(
+                || "ChoicePicker".to_string(),
+                |id| format!("ChoicePicker \"{id}\""),
+            );
+            match style.as_str() {
+                Some("chips" | "checkbox") => Ok(()),
+                Some(value) => Err(format!(
+                    "{label}.displayStyle must be \"chips\" or \"checkbox\", got \"{value}\" \
+                     — omit it to keep chips"
+                )),
+                None => Err(format!(
+                    "{label}.displayStyle must be \"chips\" or \"checkbox\", got {} \
+                     — it takes a literal string, never a data-model binding; omit it \
+                     to keep chips",
+                    type_name(style)
+                )),
+            }
         }
         _ => Ok(()),
     }
@@ -604,5 +635,65 @@ mod tests {
         ]);
         let err = validate_a2ui(&payload).unwrap_err();
         assert!(err.contains("256 KiB"), "must state the limit: {err}");
+    }
+
+    // ---- ChoicePicker.displayStyle (Task 5) ----
+
+    #[test]
+    fn choice_picker_unknown_display_style_rejects() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "ChoicePicker", "displayStyle": "radio",
+            "options": [{ "label": "a", "value": "a" }] })))
+        .unwrap_err();
+        assert!(err.contains("displayStyle"), "{err}");
+        assert!(err.contains("chips") && err.contains("checkbox"), "{err}");
+    }
+
+    #[test]
+    fn choice_picker_display_style_error_names_the_value_and_the_node() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "mood", "component": "ChoicePicker", "displayStyle": "CHECKBOX",
+            "options": [{ "label": "a", "value": "a" }] })))
+        .unwrap_err();
+        // The offending value is quoted back so the agent can grep for it.
+        assert!(err.contains("\"CHECKBOX\""), "must quote the value: {err}");
+        assert!(err.contains("mood"), "must name the node: {err}");
+    }
+
+    #[test]
+    fn choice_picker_non_string_display_style_rejects() {
+        // `displayStyle` is a plain enum, not a DynamicString: a data-model
+        // binding is as unparseable as a boolean, and both blank the panel.
+        for bad in [
+            json!(true),
+            json!(1),
+            json!(["chips"]),
+            json!({ "path": "/style" }),
+        ] {
+            let err = validate_a2ui(&envelope_with(json!({
+                "id": "c", "component": "ChoicePicker", "displayStyle": bad,
+                "options": [{ "label": "a", "value": "a" }] })))
+            .unwrap_err();
+            assert!(
+                err.contains("displayStyle"),
+                "{bad} must be rejected: {err}"
+            );
+            assert!(err.contains("chips") && err.contains("checkbox"), "{err}");
+        }
+    }
+
+    #[test]
+    fn choice_picker_known_display_styles_and_omission_pass() {
+        for style in ["chips", "checkbox"] {
+            validate_a2ui(&envelope_with(json!({
+                "id": "c", "component": "ChoicePicker", "displayStyle": style,
+                "options": [{ "label": "a", "value": "a" }] })))
+            .unwrap();
+        }
+        // Omitted displayStyle keeps chips — the shipped payload shape.
+        validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "ChoicePicker",
+            "options": [{ "label": "a", "value": "a" }] })))
+        .unwrap();
     }
 }

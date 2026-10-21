@@ -7,6 +7,8 @@ import {
   TextView,
   ScaleView,
   ChipsView,
+  CheckListView,
+  ChoicePickerView,
   TextFieldView,
   ButtonView,
   DotsView,
@@ -153,6 +155,248 @@ describe("ChipsView", () => {
     expect(
       screen.getByRole("button", { name: "Bad" }).getAttribute("aria-pressed"),
     ).toBe("false");
+  });
+});
+
+describe("CheckListView", () => {
+  const choices = [
+    { label: "Deep work", value: "deep" },
+    { label: "Meetings", value: "meet" },
+  ];
+
+  it("renders radios with aria-checked for a single-select list", () => {
+    render(
+      <CheckListView
+        choices={choices}
+        selected={["meet"]}
+        variant="single"
+        onSelect={vi.fn()}
+      />,
+    );
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(2);
+    expect(radios[1].getAttribute("aria-checked")).toBe("true");
+    expect(radios[0].getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("reports the value, not the label, on click", () => {
+    const onSelect = vi.fn();
+    render(
+      <CheckListView choices={choices} variant="single" onSelect={onSelect} />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Deep work" }));
+    expect(onSelect).toHaveBeenCalledWith("deep");
+  });
+
+  it("renders checkboxes and toggles independently in multi-select", () => {
+    const onSelect = vi.fn();
+    render(
+      <CheckListView
+        choices={choices}
+        selected={["deep"]}
+        variant="multiple"
+        onSelect={onSelect}
+      />,
+    );
+    expect(
+      screen.getAllByRole("checkbox")[0].getAttribute("aria-checked"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Meetings" }));
+    expect(onSelect).toHaveBeenCalledWith("meet");
+  });
+
+  it("moves selection with the arrow keys in a single-select list", () => {
+    const onSelect = vi.fn();
+    render(
+      <CheckListView choices={choices} variant="single" onSelect={onSelect} />,
+    );
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Deep work" }), {
+      key: "ArrowDown",
+    });
+    expect(onSelect).toHaveBeenCalledWith("meet");
+  });
+
+  it("selects the focused row on Space and Enter", () => {
+    const onSelect = vi.fn();
+    render(
+      <CheckListView choices={choices} variant="single" onSelect={onSelect} />,
+    );
+    const first = screen.getByRole("radio", { name: "Deep work" });
+    fireEvent.keyDown(first, { key: " " });
+    fireEvent.keyDown(first, { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledTimes(2);
+  });
+
+  it("wraps arrow navigation at both ends", () => {
+    const onSelect = vi.fn();
+    render(
+      <CheckListView choices={choices} variant="single" onSelect={onSelect} />,
+    );
+    // ArrowDown from the last row wraps to the first.
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Meetings" }), {
+      key: "ArrowDown",
+    });
+    expect(onSelect).toHaveBeenLastCalledWith("deep");
+    // ArrowUp from the first row wraps to the last.
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Deep work" }), {
+      key: "ArrowUp",
+    });
+    expect(onSelect).toHaveBeenLastCalledWith("meet");
+  });
+
+  it("moves focus without selecting in a multi-select list", () => {
+    const onSelect = vi.fn();
+    render(
+      <CheckListView
+        choices={choices}
+        variant="multiple"
+        onSelect={onSelect}
+      />,
+    );
+    const first = screen.getByRole("checkbox", { name: "Deep work" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("checkbox", { name: "Meetings" }),
+    );
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps a single tab stop in a single-select list", () => {
+    render(
+      <CheckListView
+        choices={choices}
+        selected={["meet"]}
+        variant="single"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getAllByRole("radio").map((r) => r.getAttribute("tabindex")),
+    ).toEqual(["-1", "0"]);
+  });
+
+  it("falls back to the first row as the tab stop when nothing is selected", () => {
+    render(
+      <CheckListView choices={choices} variant="single" onSelect={vi.fn()} />,
+    );
+    expect(
+      screen.getAllByRole("radio").map((r) => r.getAttribute("tabindex")),
+    ).toEqual(["0", "-1"]);
+  });
+
+  it("keeps every row tabbable in a multi-select list", () => {
+    render(
+      <CheckListView
+        choices={choices}
+        variant="multiple"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getAllByRole("checkbox").map((r) => r.getAttribute("tabindex")),
+    ).toEqual(["0", "0"]);
+  });
+
+  it("wraps the group in a radiogroup (single) or group (multiple)", () => {
+    const { unmount } = render(
+      <CheckListView
+        choices={choices}
+        variant="single"
+        label="How was today?"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("radiogroup", { name: "How was today?" }),
+    ).toBeTruthy();
+    unmount();
+    render(
+      <CheckListView
+        choices={choices}
+        variant="multiple"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("group")).toBeTruthy();
+  });
+
+  it("keeps a 44px tap target per row", () => {
+    const { container } = render(
+      <CheckListView choices={choices} variant="single" onSelect={vi.fn()} />,
+    );
+    expect(container.querySelectorAll(".cenno-checklist__row")).toHaveLength(2);
+  });
+});
+
+// displayStyle → view. `undefined` is what an omitted displayStyle parses to
+// (`.optional()` wraps `.default("checkbox")`, so the schema default never
+// materialises), and it must keep the shipped chip pills.
+describe("ChoicePickerView (displayStyle)", () => {
+  const choices = [
+    { label: "Deep work", value: "deep" },
+    { label: "Meetings", value: "meet" },
+  ];
+
+  it("keeps chips when displayStyle is omitted", () => {
+    const { container } = render(
+      <ChoicePickerView choices={choices} onSelect={vi.fn()} />,
+    );
+    expect(container.querySelector(".cenno-chips")).toBeTruthy();
+    expect(container.querySelector(".cenno-checklist")).toBeNull();
+  });
+
+  it("keeps chips for an explicit displayStyle 'chips'", () => {
+    const { container } = render(
+      <ChoicePickerView
+        choices={choices}
+        displayStyle="chips"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(container.querySelector(".cenno-chips")).toBeTruthy();
+    expect(container.querySelector(".cenno-checklist")).toBeNull();
+  });
+
+  it("renders the radio list for displayStyle 'checkbox'", () => {
+    render(
+      <ChoicePickerView
+        choices={choices}
+        displayStyle="checkbox"
+        variant="mutuallyExclusive"
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+  });
+
+  it("renders checkboxes for displayStyle 'checkbox' + multipleSelection", () => {
+    render(
+      <ChoicePickerView
+        choices={choices}
+        displayStyle="checkbox"
+        variant="multipleSelection"
+        selected={["deep"]}
+        onSelect={vi.fn()}
+      />,
+    );
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0].getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("keeps the words variant on chips even when displayStyle is 'checkbox'", () => {
+    render(
+      <ChoicePickerView
+        choices={choices}
+        displayStyle="checkbox"
+        variant="words"
+        onSelect={vi.fn()}
+      />,
+    );
+    const first = screen.getAllByRole("button")[0];
+    expect(first.className).toContain("cenno-word");
+    expect(first.className).not.toContain("cenno-checklist__row");
   });
 });
 

@@ -12,7 +12,12 @@
  * transparent — the panel root owns --cenno-surface.
  */
 import { useEffect, useRef, useState } from "react";
-import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
+import type {
+  AnchorHTMLAttributes,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent,
+  ReactNode,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ImageLoadError, resolveImageUrl } from "./image";
@@ -143,6 +148,194 @@ export function ChipsView({
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * Choice list — the `displayStyle: "checkbox"` rendering: one row per choice,
+ * each row a 44px tap target with a drawn mark (circle for single-select,
+ * square for multi-select) and its label.
+ *
+ * Same identity rule as ChipsView: the VALUE is what gets reported (labels
+ * may collide); `selected` carries every selected value and single-select
+ * callers pass a 1-element array.
+ *
+ * Keyboard is explicit, not inherited. The rows are `<button>` elements with a
+ * `role` override, so the browser hands them NONE of the native radio/checkbox
+ * behaviour — everything below is the ARIA pattern implemented by hand:
+ *
+ * - `ArrowUp`/`ArrowDown` move focus, wrapping at the ends. In single-select
+ *   they also select the neighbour, which is what makes the group a radiogroup
+ *   rather than a list of unrelated buttons.
+ * - `Space`/`Enter` select the focused row. A `role`-overridden `<button>` keeps
+ *   its native click-on-Enter/Space keydown synthesis, so both keys are handled
+ *   here with `preventDefault()` — that cancels the synthesised click and keeps
+ *   exactly one report per press (jsdom does not synthesise it at all, so the
+ *   double-fire would only ever show up in the real webview).
+ * - Single-select keeps ONE tab stop (the selected row, else the first) so Tab
+ *   skips past the group instead of walking every row; multi-select keeps every
+ *   row tabbable, as independent checkboxes should.
+ *
+ * `label` (optional) names the group: a `radiogroup`/`group` with no accessible
+ * name is announced as "group" by VoiceOver, which tells the user nothing.
+ */
+export function CheckListView({
+  choices,
+  selected = [],
+  variant = "single",
+  label,
+  onSelect,
+}: {
+  choices: { label: string; value: string }[];
+  selected?: string[];
+  variant?: "single" | "multiple";
+  /** Accessible name for the group (optional but recommended). */
+  label?: string;
+  onSelect: (value: string) => void;
+}) {
+  const multiple = variant === "multiple";
+  const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Tab stop for single-select: the selected row, falling back to the first
+  // so the group is always reachable with a single Tab.
+  const selectedIndex = choices.findIndex((c) => selected.includes(c.value));
+  const tabStop = selectedIndex === -1 ? 0 : selectedIndex;
+
+  const focusRow = (index: number) => {
+    const row = rowRefs.current[index];
+    if (!row) return;
+    row.focus();
+    // Single-select selects on focus move; multi-select only moves focus.
+    if (!multiple) onSelect(choices[index].value);
+  };
+
+  const onKeyDown = (index: number) => (e: ReactKeyboardEvent) => {
+    const last = choices.length - 1;
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        focusRow(index === last ? 0 : index + 1);
+        return;
+      case "ArrowUp":
+        e.preventDefault();
+        focusRow(index === 0 ? last : index - 1);
+        return;
+      case " ":
+      case "Enter":
+        // Do not double-fire: the native click path would report again.
+        e.preventDefault();
+        onSelect(choices[index].value);
+        return;
+      default:
+    }
+  };
+
+  return (
+    <div
+      className="cenno-checklist"
+      role={multiple ? "group" : "radiogroup"}
+      aria-label={label}
+    >
+      {choices.map(({ label: choiceLabel, value }, i) => {
+        const checked = selected.includes(value);
+        return (
+          <button
+            key={value}
+            ref={(el) => {
+              rowRefs.current[i] = el;
+            }}
+            type="button"
+            className="cenno-checklist__row"
+            role={multiple ? "checkbox" : "radio"}
+            aria-checked={checked}
+            // Single-select: one tab stop. Multi-select: every row tabbable.
+            tabIndex={multiple || i === tabStop ? 0 : -1}
+            onClick={() => onSelect(value)}
+            onKeyDown={onKeyDown(i)}
+          >
+            <span
+              className={
+                multiple
+                  ? "cenno-checklist__mark cenno-checklist__mark--box"
+                  : "cenno-checklist__mark"
+              }
+              aria-hidden="true"
+            >
+              {checked && (
+                <svg viewBox="0 0 18 18" focusable="false" aria-hidden="true">
+                  {multiple ? (
+                    <path
+                      d="M4 9.5 L7.5 13 L14 5.5"
+                      fill="none"
+                      stroke="var(--cenno-surface)"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ) : (
+                    <circle cx="9" cy="9" r="4" fill="var(--cenno-surface)" />
+                  )}
+                </svg>
+              )}
+            </span>
+            <span className="cenno-checklist__label">{choiceLabel}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The ChoicePicker render decision, kept out of the A2UI adapter so it can be
+ * tested without a surface.
+ *
+ * `displayStyle` reaches here exactly as the upstream zod schema parsed it:
+ * `.enum([...]).default("checkbox").optional()` — the `.optional()` wraps the
+ * `.default()`, so an OMITTED `displayStyle` parses to `undefined`, never to
+ * the schema's `"checkbox"` default. cenno therefore treats `undefined` and
+ * `"chips"` as chips: every payload shipped before this view existed keeps its
+ * exact pill appearance. Only an explicit `"checkbox"` opts into the list.
+ *
+ * The cenno `"words"` variant always stays on chips — a bare-word mood row
+ * must never turn into a list of rows.
+ */
+export function ChoicePickerView({
+  choices,
+  selected = [],
+  displayStyle,
+  variant,
+  label,
+  onSelect,
+}: {
+  choices: { label: string; value: string }[];
+  selected?: string[];
+  displayStyle?: "checkbox" | "chips";
+  /** Selection behaviour plus the cenno "words" display variant. */
+  variant?: "multipleSelection" | "mutuallyExclusive" | "words";
+  /** Accessible name for the list group (list rendering only). */
+  label?: string;
+  onSelect: (value: string) => void;
+}) {
+  const words = variant === "words";
+  if (displayStyle === "checkbox" && !words) {
+    return (
+      <CheckListView
+        choices={choices}
+        selected={selected}
+        variant={variant === "multipleSelection" ? "multiple" : "single"}
+        label={label}
+        onSelect={onSelect}
+      />
+    );
+  }
+  return (
+    <ChipsView
+      choices={choices}
+      selected={selected}
+      variant={words ? "words" : undefined}
+      onSelect={onSelect}
+    />
   );
 }
 

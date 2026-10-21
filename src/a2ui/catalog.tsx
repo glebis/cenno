@@ -43,7 +43,7 @@ import { createComponentImplementation } from "@a2ui/react/v0_9";
 import {
   TextView,
   ScaleView,
-  ChipsView,
+  ChoicePickerView,
   TextFieldView,
   ButtonView,
   DotsView,
@@ -254,10 +254,18 @@ export const CennoChoicePicker = createComponentImplementation(
       value: o.value,
     }));
     return (
-      <ChipsView
+      <ChoicePickerView
         choices={options}
         selected={values}
-        variant={props.variant === "words" ? "words" : undefined}
+        // `undefined` here is an OMITTED displayStyle (the upstream
+        // `.optional()` wraps `.default("checkbox")`, so the default never
+        // materialises). ChoicePickerView keeps chips for undefined/"chips".
+        displayStyle={props.displayStyle}
+        variant={props.variant}
+        // The schema's own `label` names the group in the list rendering
+        // (a radiogroup with no accessible name is announced as "group").
+        // Chips keep their existing markup and appearance, as shipped.
+        label={typeof props.label === "string" ? props.label : undefined}
         onSelect={(value) => {
           if (props.variant === "multipleSelection") {
             props.setValue(

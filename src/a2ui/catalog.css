@@ -129,6 +129,86 @@
   text-underline-offset: 4px;
 }
 
+/* ---- checklist: radio/checkbox rows (displayStyle "checkbox") ---- */
+/* One row per choice: 44px tall, drawn mark + label. The whole row is the
+   tap target, so selection never depends on hitting an 18px mark. */
+
+.cenno-checklist {
+  display: flex;
+  flex-direction: column;
+  /* A list can be long: keep it scrollable inside the panel height budget
+     rather than pushing the answer affordances off the bottom. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.cenno-checklist__row {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* >= 44px tap target; the row itself is the control */
+  min-height: 44px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--cenno-text);
+  font-size: var(--cenno-type-body);
+  line-height: var(--cenno-font-leading-body, 1.4);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cenno-checklist__row:focus-visible {
+  outline: 1px solid var(--cenno-text);
+  outline-offset: 2px;
+  border-radius: var(--cenno-radius-control);
+}
+
+.cenno-checklist__label {
+  /* long option text wraps inside the row instead of widening the panel */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The drawn mark: 18px circle (radio) or square (checkbox). The mark keeps the
+   label optically centered on the row, not on the mark. */
+.cenno-checklist__mark {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--cenno-line);
+  border-radius: var(--cenno-radius-pill);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.cenno-checklist__mark--box {
+  border-radius: 4px;
+}
+
+/* Checked: the mark inverts — filled with the text colour, the glyph drawn in
+   the surface colour so it reads on any flow background. */
+.cenno-checklist__row[aria-checked="true"] .cenno-checklist__mark {
+  border-color: var(--cenno-text);
+  background-color: var(--cenno-text);
+}
+
+.cenno-checklist__mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cenno-checklist__mark {
+    transition: none;
+  }
+}
+
 /* ---- scale: outlined circle targets (fullscreen-ema-1-scale.png) ---- */
 
 .cenno-scale {
