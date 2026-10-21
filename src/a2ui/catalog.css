@@ -686,8 +686,8 @@
 }
 
 .cenno-table__cell {
-  /* >=32px row height at 17px body / 1.4 leading; the panel has no zoom, so
-     rows never get tighter than that unless density is asked for. */
+  /* ~40px at 17px body / 1.4 leading + 2×8px. Never tighter than ~32px
+     except under `dense` (→ ~32px), because the panel has no zoom. */
   padding: var(--cenno-space-1) var(--cenno-space-1) var(--cenno-space-1) 0;
   text-align: start;
   vertical-align: baseline;
@@ -718,7 +718,8 @@
   padding-right: 0;
 }
 
-/* dense: half the vertical padding, still landing near 24px per row. */
+/* dense: half the vertical padding (~40px rows become ~32px, body 17px ×
+   1.4 leading + 2×4px). Never below that: the panel has no zoom. */
 .cenno-table.is-dense .cenno-table__head,
 .cenno-table.is-dense .cenno-table__cell {
   padding-top: 4px;

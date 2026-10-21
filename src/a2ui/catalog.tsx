@@ -13,6 +13,8 @@
  * - `Scale`  — EMA 1..N numeral row with end labels (SliderApi has no
  *   minLabel/maxLabel and renders a continuous range, not discrete targets)
  * - `Dots`   — step pagination (no standard progress/pagination API)
+ * - `Table`  — display-only rows (no Table exists in any A2UI v0.9 catalog;
+ *   input cells are out of scope because every answer flattens to a string)
  *
  * Adapters are intentionally untested here; they are covered by the Task 6
  * renderer integration.
@@ -50,6 +52,7 @@ import {
   SliderView,
   DateTimeView,
   ImageView,
+  TableView,
   type TextRole,
 } from "./views";
 
@@ -430,6 +433,98 @@ export const CennoScale = createComponentImplementation(
 );
 
 /* ------------------------------------------------------------------ */
+/* Table — custom: display-only rows with per-column alignment         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * No standard Table exists in any A2UI v0.9 basic catalog (verified against
+ * @a2ui/web_core 0.10.7 and 0.14.0), so this is a cenno custom type alongside
+ * Scale and Dots. Display-only: `rows` are literal cells, never bindings,
+ * because an answer must flatten to one string anyway. Caps (4 columns,
+ * 12 rows) live in the guard (src-tauri/src/a2ui_guard.rs), which returns an
+ * actionable error before a payload reaches this schema.
+ *
+ * Body cells widen the DynamicString union with `z.number()`, because the
+ * design doc allows a JSON number ("numbers may be sent as JSON numbers and
+ * are stringified on render", e.g. `["Pro", 9]`). Without it the zod parse
+ * would reject the table and the webview would silently drop it, while the
+ * guard accepts it.
+ */
+const TableCellSchema = z.union([DynamicStringSchema, z.number()]);
+
+export const TableApi = {
+  name: "Table",
+  schema: z
+    .object({
+      ...CommonProps,
+      header: DynamicBooleanSchema.optional().describe(
+        "Render the header row of column labels (default true). Set false " +
+          "for a legend-less key/value block.",
+      ),
+      columns: z
+        .array(
+          z
+            .object({
+              label: DynamicStringSchema.describe("Column header text."),
+              align: z
+                .enum(["start", "end"])
+                .optional()
+                .describe(
+                  "Cell alignment for the whole column: 'start' (default) " +
+                    "or 'end' for numbers, which also uses tabular numerals.",
+                ),
+            })
+            .strict(),
+        )
+        .min(1)
+        .describe("Column definitions, at most 4 (a panel is ~320-420px wide)."),
+      rows: z
+        .array(z.array(TableCellSchema))
+        .describe(
+          "Rows of literal cell strings, at most 12. One entry per column; a " +
+            "short row is padded with an em dash, a longer row is rejected. " +
+            "Numbers are allowed and are stringified on render.",
+        ),
+      dense: DynamicBooleanSchema.optional().describe(
+        "Tighten the vertical cell padding (default false).",
+      ),
+      caption: DynamicStringSchema.optional().describe(
+        "Accessible name for the table, rendered above it in caption size.",
+      ),
+    })
+    .strict(),
+};
+
+/**
+ * Cells take literal strings or JSON numbers (the design doc allows
+ * `["Pro", 9]` and stringifies numbers on render). Anything else — in
+ * practice a data-model binding, which the guard rejects — degrades to an
+ * empty string, so TableView renders its em dash instead of "[object
+ * Object]".
+ */
+function literal(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
+export const CennoTable = createComponentImplementation(
+  TableApi,
+  ({ props }) => (
+    <TableView
+      header={props.header !== false}
+      columns={(props.columns ?? []).map((col) => ({
+        label: literal(col.label),
+        align: col.align,
+      }))}
+      rows={(props.rows ?? []).map((row) => row.map(literal))}
+      dense={props.dense === true}
+      caption={typeof props.caption === "string" ? props.caption : undefined}
+    />
+  ),
+);
+
+/* ------------------------------------------------------------------ */
 /* Dots — custom: EMA step pagination                                  */
 /* ------------------------------------------------------------------ */
 
@@ -468,6 +563,7 @@ export const cennoCatalog = new Catalog(
     CennoDateTimeInput,
     CennoImage,
     CennoScale,
+    CennoTable,
     CennoDots,
   ],
   BASIC_FUNCTIONS,

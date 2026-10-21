@@ -681,7 +681,20 @@ export function ImageView({
 
   if (state === "error") {
     return (
-      <div className={box} data-testid="image-error" title={reason}>
+      <div
+        className={box}
+        data-testid="image-error"
+        title={reason}
+        // The description is dropped from the visible text on failure, so it
+        // must ride on the label: a screen-reader user still needs to know
+        // WHICH image failed. `role="img"` makes the box an accessible node.
+        role="img"
+        aria-label={
+          description
+            ? `${description}: image failed to load — ${reason}`
+            : `image failed to load — ${reason}`
+        }
+      >
         <span className="cenno-image-box__error">
           <span className="cenno-image-box__error-glyph" aria-hidden="true">
             ⚠
@@ -743,6 +756,81 @@ export function ButtonView({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Display-only table: real `<table>` semantics with an optional `<caption>`
+ * (which supplies the accessible name), a `columns`-driven header row, and
+ * one `<tr>` per record. No input cells, no sorting, no filtering — an
+ * answer must flatten to one string (protocol.rs), so an editable cell would
+ * need cell→binding validation for no gain.
+ *
+ * Design rules (TOKENS.md / the rich-panel spec): hairlines only — a bottom
+ * border per row, never an outer border, zebra striping, or a background; the
+ * header sits at caption size, dim, uppercase, with `.08em` tracking, the same
+ * treatment as the ScaleView end labels. Per-column `align` puts numbers in an
+ * `is-end` cell with tabular numerals, so digits line up.
+ *
+ * A row SHORTER than `columns` renders `—` for the missing cells rather than a
+ * hole; the guard allows short rows on purpose and rejects long ones (see the
+ * `Table` arm in a2ui_guard.rs). `header: false` drops the header row and keeps
+ * the body (a legend-less key/value block).
+ */
+export function TableView({
+  header = true,
+  columns,
+  rows,
+  dense = false,
+  caption,
+}: {
+  /** Render the header row (default true). */
+  header?: boolean;
+  columns: { label: string; align?: "start" | "end" }[];
+  rows: string[][];
+  /** Halve the vertical cell padding (~40px rows → ~32px); hairlines stay. */
+  dense?: boolean;
+  /** Accessible name for the table; rendered as a real `<caption>`. */
+  caption?: string;
+}) {
+  return (
+    <table className={`cenno-table${dense ? " is-dense" : ""}`}>
+      {caption && <caption className="cenno-table__caption">{caption}</caption>}
+      {header && (
+        <thead>
+          <tr>
+            {columns.map((col, i) => (
+              <th
+                key={i}
+                scope="col"
+                className={`cenno-table__head${col.align === "end" ? " is-end" : ""}`}
+              >
+                {col.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+      )}
+      <tbody>
+        {rows.map((row, r) => (
+          <tr key={r}>
+            {columns.map((col, c) => (
+              <td
+                key={c}
+                className={`cenno-table__cell${col.align === "end" ? " is-end" : ""}`}
+                // `overflow-wrap: break-word` inline as well as in catalog.css:
+                // a long unbroken token (a hash, a url) must wrap inside its
+                // column, never widen the panel.
+                style={{ overflowWrap: "break-word" }}
+              >
+                {/* A blank cell is the same hole as a missing one. */}
+                {row[c]?.trim() ? row[c] : "—"}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

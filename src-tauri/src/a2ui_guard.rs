@@ -30,6 +30,12 @@ pub const MAX_COMPONENTS: usize = 200;
 pub const MAX_BYTES: usize = 256 * 1024;
 /// The only catalog the webview registers (src/a2ui/catalog.tsx).
 pub const CATALOG_ID: &str = "cenno:catalog/v1";
+/// Maximum `Table.columns` (a panel is ~320-420px wide; a 5th column would
+/// force horizontal scroll in a surface that must not scroll).
+pub const MAX_TABLE_COLUMNS: usize = 4;
+/// Maximum `Table.rows` (a panel's height is clamped to 240-560px by
+/// `resize_panel`).
+pub const MAX_TABLE_ROWS: usize = 12;
 
 const MESSAGE_KEYS: [&str; 3] = ["createSurface", "updateComponents", "updateDataModel"];
 
@@ -154,6 +160,108 @@ fn check_component(component: &Value) -> Result<(), String> {
                     type_name(style)
                 )),
             }
+        }
+        Some("Table") => {
+            // Display-only tables are capped because a panel is ~320-420px
+            // wide and its height is clamped to 240-560px (resize_panel): a
+            // fifth column or a thirteenth row forces scrolling in a surface
+            // that must not scroll.
+            //
+            // Row-vs-header ASYMMETRY, deliberate: a row LONGER than `columns`
+            // has no meaning and is rejected; a row SHORTER than `columns` is
+            // allowed, because TableView pads the missing cells with an em
+            // dash (a ragged last row is a normal table shape, a bulging one
+            // is a bug). Do not "fix" one half without the other.
+            let label = obj
+                .get("id")
+                .and_then(Value::as_str)
+                .map_or_else(|| "Table".to_string(), |id| format!("Table \"{id}\""));
+            let columns = obj
+                .get("columns")
+                .and_then(Value::as_array)
+                .ok_or_else(|| {
+                    format!(
+                        "{label}: Table.columns must be an array of at least 1 column \
+                         object ({{ \"label\": … }}), got {}",
+                        obj.get("columns").map_or("nothing", type_name)
+                    )
+                })?;
+            if columns.is_empty() {
+                return Err(format!(
+                    "{label}: has 0 columns; a table needs at least 1 column — add a \
+                     column object ({{ \"label\": … }}) or drop the component"
+                ));
+            }
+            if columns.len() > MAX_TABLE_COLUMNS {
+                return Err(format!(
+                    "{label}: has {} columns; the maximum is {MAX_TABLE_COLUMNS} — split \
+                     it into two tables, or drop a column",
+                    columns.len()
+                ));
+            }
+            for (i, column) in columns.iter().enumerate() {
+                let Some(col) = column.as_object() else {
+                    return Err(format!(
+                        "{label}: column {i} must be an object with a \"label\", got {}",
+                        type_name(column)
+                    ));
+                };
+                match col.get("align") {
+                    None => {}
+                    Some(Value::String(value)) if value == "start" || value == "end" => {}
+                    Some(other) => {
+                        return Err(format!(
+                            "{label}: column {i} has align {other}; the allowed values are \
+                             \"start\" (default) and \"end\" for numbers — omit it or pick one"
+                        ))
+                    }
+                }
+            }
+
+            let rows = obj.get("rows").and_then(Value::as_array).ok_or_else(|| {
+                format!(
+                    "{label}: Table.rows must be an array of row arrays, got {}",
+                    obj.get("rows").map_or("nothing", type_name)
+                )
+            })?;
+            if rows.len() > MAX_TABLE_ROWS {
+                return Err(format!(
+                    "{label}: has {} rows; the maximum is {MAX_TABLE_ROWS} — split it into \
+                     two tables, or send the rest in a follow-up prompt",
+                    rows.len()
+                ));
+            }
+            for (r, row) in rows.iter().enumerate() {
+                let cells = row.as_array().ok_or_else(|| {
+                    format!(
+                        "{label}: row {r} must be an array of cell strings, got {}",
+                        type_name(row)
+                    )
+                })?;
+                if cells.len() > columns.len() {
+                    return Err(format!(
+                        "{label}: row {r} has {} cells but the header has {} columns; a row \
+                         must not be longer than the header — drop the extra cell(s) or add \
+                         the column (a SHORTER row is fine: missing cells render as an em \
+                         dash)",
+                        cells.len(),
+                        columns.len()
+                    ));
+                }
+                for (c, cell) in cells.iter().enumerate() {
+                    // Numbers are stringified on render (the spec allows
+                    // `["Pro", 9]`), so a scalar is fine; an object would be a
+                    // data-model binding the display-only table cannot resolve.
+                    if matches!(cell, Value::Object(_) | Value::Array(_)) {
+                        return Err(format!(
+                            "{label}: row {r} cell {c} is {}; cells hold literal strings \
+                             or numbers, not data-model bindings — inline the value",
+                            type_name(cell)
+                        ));
+                    }
+                }
+            }
+            Ok(())
         }
         _ => Ok(()),
     }
@@ -695,5 +803,103 @@ mod tests {
             "id": "c", "component": "ChoicePicker",
             "options": [{ "label": "a", "value": "a" }] })))
         .unwrap();
+    }
+
+    // ---- Table caps (Task 6) ----
+
+    #[test]
+    fn table_with_five_columns_rejects_naming_the_cap() {
+        let cols: Vec<Value> = (0..5)
+            .map(|i| json!({ "label": format!("c{i}") }))
+            .collect();
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Table", "columns": cols, "rows": [] })))
+        .unwrap_err();
+        assert!(
+            err.contains("5 columns") && err.contains("maximum is 4"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn table_row_longer_than_the_header_rejects() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Table",
+            "columns": [{ "label": "a" }, { "label": "b" }],
+            "rows": [["1", "2", "3"]] })))
+        .unwrap_err();
+        assert!(err.contains("row 0") && err.contains("3 cells"), "{err}");
+    }
+
+    #[test]
+    fn table_over_twelve_rows_rejects() {
+        let rows: Vec<Value> = (0..13).map(|i| json!([format!("{i}")])).collect();
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Table",
+            "columns": [{ "label": "n" }], "rows": rows })))
+        .unwrap_err();
+        assert!(err.contains("maximum is 12"), "{err}");
+    }
+
+    #[test]
+    fn table_row_long_error_names_the_row_and_the_header_width() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "plan", "component": "Table",
+            "columns": [{ "label": "a" }, { "label": "b" }],
+            "rows": [["1", "2"], ["1", "2", "3"]] })))
+        .unwrap_err();
+        // The SECOND row is the offender: naming the index is the fix.
+        assert!(err.contains("row 1"), "{err}");
+        assert!(err.contains("3 cells"), "{err}");
+        assert!(err.contains("2 columns"), "{err}");
+        assert!(err.contains("plan"), "must name the node: {err}");
+    }
+
+    #[test]
+    fn table_at_the_caps_passes() {
+        let cols: Vec<Value> = (0..4)
+            .map(|i| json!({ "label": format!("c{i}") }))
+            .collect();
+        let rows: Vec<Value> = (0..12)
+            .map(|i| json!([format!("{i}"), "b", "c", "d"]))
+            .collect();
+        validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Table", "columns": cols, "rows": rows })))
+        .unwrap();
+    }
+
+    #[test]
+    fn table_short_row_passes_because_the_renderer_pads_it() {
+        // Asymmetry by design: a row LONGER than the header has no meaning
+        // and is rejected; a row SHORTER than the header renders the missing
+        // cells as an em dash, so it is allowed.
+        validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Table",
+            "columns": [{ "label": "a" }, { "label": "b" }],
+            "rows": [["1"]] })))
+        .unwrap();
+    }
+
+    #[test]
+    fn table_align_outside_start_end_rejects() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Table",
+            "columns": [{ "label": "a", "align": "center" }],
+            "rows": [] })))
+        .unwrap_err();
+        assert!(err.contains("align"), "{err}");
+        assert!(err.contains("center"), "must quote the value: {err}");
+        assert!(
+            err.contains("start") && err.contains("end"),
+            "must give the fix: {err}"
+        );
+    }
+
+    #[test]
+    fn table_with_no_columns_rejects() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Table", "columns": [], "rows": [] })))
+        .unwrap_err();
+        assert!(err.contains("at least 1 column"), "{err}");
     }
 }

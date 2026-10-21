@@ -15,6 +15,7 @@ import {
   SliderView,
   DateTimeView,
   ImageView,
+  TableView,
 } from "./views";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -527,6 +528,7 @@ describe("cennoCatalog", () => {
       "Row",
       "Scale",
       "Slider",
+      "Table",
       "Text",
       "TextField",
     ]);
@@ -766,6 +768,52 @@ describe("ImageView states", () => {
   it("keeps a fixed box so the panel does not jump between states", async () => {
     const { container } = render(<ImageView url="/Users/x/a.png" variant="smallFeature" />);
     expect(container.querySelector(".cenno-image-box--smallFeature")).toBeTruthy();
+  });
+});
+
+describe("TableView", () => {
+  const columns = [
+    { label: "Plan", align: "start" as const },
+    { label: "Cost", align: "end" as const },
+  ];
+  const rows = [["free", "$0"], ["pro", "$20"]];
+
+  it("renders a real table with a header row and one row per record", () => {
+    render(<TableView columns={columns} rows={rows} caption="Plans compared" />);
+    expect(screen.getByRole("table", { name: "Plans compared" })).toBeTruthy();
+    expect(screen.getAllByRole("columnheader")).toHaveLength(2);
+    expect(screen.getAllByRole("row")).toHaveLength(3); // header + 2
+  });
+
+  it("applies per-column alignment so numbers line up", () => {
+    render(<TableView columns={columns} rows={rows} />);
+    expect(screen.getByRole("columnheader", { name: "Cost" }).className).toContain("is-end");
+  });
+
+  it("renders an em dash for a missing cell instead of a hole", () => {
+    render(<TableView columns={columns} rows={[["free"]]} />);
+    expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("wraps a long unbroken token instead of widening the panel", () => {
+    const long = "a".repeat(80);
+    const { container } = render(
+      <TableView columns={[{ label: "Hash" }]} rows={[[long]]} />,
+    );
+    expect(container.querySelector(".cenno-table")?.className).toContain("cenno-table");
+    expect(container.querySelector(".cenno-table__cell")?.getAttribute("style"))
+      .toContain("break-word");
+  });
+
+  it("drops the header row when header is false, keeping the body", () => {
+    render(<TableView header={false} columns={columns} rows={rows} />);
+    expect(screen.queryAllByRole("columnheader")).toHaveLength(0);
+    expect(screen.getAllByRole("row")).toHaveLength(2); // body only
+  });
+
+  it("marks a dense table so the rows tighten without losing the hairlines", () => {
+    const { container } = render(<TableView columns={columns} rows={rows} dense />);
+    expect(container.querySelector(".cenno-table")?.className).toContain("is-dense");
   });
 });
 
