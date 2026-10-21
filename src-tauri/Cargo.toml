@@ -66,6 +66,9 @@ rodio = { version = "0.19", default-features = false }
 # One-time, user-initiated Supertonic model download (settings). Blocking
 # client used on a spawn_blocking thread; rustls to avoid a system-OpenSSL dep.
 ureq = { version = "2", features = ["tls"], default-features = false }
+# Base64-encode a local image into a data: URI the release CSP (img-src 'self'
+# data:) can render — see image.rs.
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Swizzles the main window into a non-activating NSPanel. Rev is the tip of

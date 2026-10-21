@@ -5,6 +5,7 @@ pub mod cli;
 pub mod config;
 pub mod db;
 pub mod generation;
+pub mod image;
 pub mod mcp;
 pub mod protocol;
 pub mod registry;
@@ -984,7 +985,8 @@ pub fn run() {
             tts::tts_model_status,
             tts::tts_download_model,
             tts::list_audio_outputs,
-            tts::tts_delete_model
+            tts::tts_delete_model,
+            image::load_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
