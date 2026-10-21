@@ -50,6 +50,7 @@ Status: draft, awaiting review
 | `ImageChoice` variants | **Both** `mutuallyExclusive` + `multipleSelection` | "Keep which of these?" is the real multi-image case, and the selection-mark shape already distinguishes the two (round vs square). |
 | `ImageChoice` geometry | **Square tiles, `cover` by default, `fit:"contain"` opt-in** | Cover keeps an even grid with no letterbox bars at every count; `contain` is one enum away for agents judging screenshots or UI diffs where cropping destroys the comparison. |
 | `ImageChoice` count | **Hard cap at 10** | Below ~58px a tile stops being a thumb you can judge. Ten also bounds the payload: ~25 KB per tile inside the existing 256 KiB envelope. |
+| Comma in option values | **Rejected when `variant:"multipleSelection"`, in both `ImageChoice` and `ChoicePicker`** | A multi-select answer is flattened by `String(raw)` at `src/PromptPanel.tsx:151`, so `["a","b"]` and a single option valued `"a,b"` produce the same answer string — the agent cannot tell them apart. A single-select answer is unwrapped to one token first, so the collision cannot exist there; rejecting commas unconditionally would break shipped payloads for no gain. `ChoicePicker` has carried `multipleSelection` since long before this feature and flattens through the same path, so the rule covers both or it fixes nothing. |
 
 ## Components
 
@@ -282,11 +283,13 @@ New checks, each with an error naming the limit and the fix:
 - `Image`: `url` is a string; if it starts with a scheme, the scheme is in
   `{"data"}`; `data:` URIs must match
   `^data:image/(png|jpeg|gif|webp);base64,`.
-- `ChoicePicker`: `displayStyle` in `{"chips","checkbox"}` when present.
+- `ChoicePicker`: `displayStyle` in `{"chips","checkbox"}` when present; when
+  `variant` is `"multipleSelection"`, no option `value` contains a comma.
 - `ImageChoice`: `options.len() in 1..=10`, every option has a non-empty
   `value` and an `image` that passes the same scheme/data-URI check as `Image`,
   `variant` in `{"mutuallyExclusive","multipleSelection"}`, `fit` in
-  `{"cover","contain"}` when present, `columns` in `1..=5` when present.
+  `{"cover","contain"}` when present, `columns` in `1..=5` when present, and no
+  option `value` contains a comma when `variant` is `"multipleSelection"`.
 
 Validation walks `updateComponents.components`, keying on the `component`
 string. Components not in the catalog are left to the renderer, as today.
