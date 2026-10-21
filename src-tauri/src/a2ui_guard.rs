@@ -47,6 +47,14 @@ pub const MAX_MATRIX_ROWS: usize = 3;
 /// is deliberately uncapped.
 pub const MAX_MATRIX_POINTS: i64 = 7;
 
+/// Maximum span of a `RatingMatrix` scale in `sliders` mode (`max - min + 1`).
+///
+/// Sliders are continuous, so 0-10 and 0-100 are both normal and are NOT held to
+/// the 7-point cap that `matrix` needs to fit its numeral targets. A ceiling
+/// still applies: the range is a payload-supplied `i64`, and an unbounded one is
+/// a payload error, not something to render.
+pub const MAX_SLIDER_POINTS: i64 = 1000;
+
 /// Maximum `ImageChoice.options` (below ~58px a tile stops being a thumbnail
 /// you can judge; ten also bounds the payload at ~25 KB per tile).
 pub const MAX_IMAGE_CHOICE_OPTIONS: usize = 10;
@@ -168,6 +176,51 @@ fn component_label(obj: &serde_json::Map<String, Value>, kind: &str) -> String {
 /// rejecting it unconditionally would break shipped payloads for no gain.
 /// Shared by `ChoicePicker` and `ImageChoice` because both flatten through that
 /// same path — fixing one and not the other fixes nothing.
+/// Validate a `RatingMatrix.value` seed: a row->number map, a JSON text of one,
+/// or a `{path}` / `{call}` binding.
+///
+/// The component's zod schema admits exactly those shapes, and a shape it
+/// rejects makes the whole surface fail to build — the panel silently falls
+/// back to the desugared prompt instead of telling the agent anything. For most
+/// props that costs a missing widget; for `RatingMatrix.value` it costs the
+/// ANSWER, because that object is where every rating accumulates.
+fn check_matrix_seed(seed: &Value) -> Result<(), String> {
+    // A binding is resolved by the renderer, not by us.
+    if seed.get("path").is_some() || seed.get("call").is_some() {
+        return Ok(());
+    }
+    if let Some(text) = seed.as_str() {
+        // The adapter writes JSON text; a payload may pre-seed it the same way.
+        if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+            return check_matrix_seed(&parsed);
+        }
+        return Err(format!(
+            "is the string \"{text}\", which is not JSON — it must be a row->number object \
+             like {{\"pace\": 4}}, or a binding like {{\"path\": \"/items\"}}"
+        ));
+    }
+    let Some(map) = seed.as_object() else {
+        return Err(format!(
+            "must be an object keyed by row value (e.g. {{\"pace\": 4}}) or a binding like \
+             {{\"path\": \"/items\"}}, got {}",
+            type_name(seed)
+        ));
+    };
+    if map.is_empty() {
+        return Ok(());
+    }
+    for (key, n) in map {
+        if !n.is_number() {
+            return Err(format!(
+                "has a non-numeric \"{key}\": {} — every entry must be a number, because each \
+                 one is a rating; a string there blanks the whole panel",
+                type_name(n)
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn check_no_comma_values(obj: &serde_json::Map<String, Value>, label: &str) -> Result<(), String> {
     if obj.get("variant").and_then(Value::as_str) != Some("multipleSelection") {
         return Ok(());
@@ -558,7 +611,30 @@ fn check_component(component: &Value) -> Result<(), String> {
                      low to high"
                 ));
             }
+            // `value` decides what the panel shows when it opens, and the
+            // component's schema admits only a row->number map, a JSON text of
+            // one, or a {path}/{call} binding. Anything else (a number, an
+            // array, a map of strings) is dropped by the schema, which blanks
+            // the surface and falls back to the desugared prompt — the agent
+            // gets no error at all. The matrix is unique here: `value` is where
+            // the ANSWER accumulates, so a wrong shape silently discards every
+            // rating instead of just one prop.
+            if let Some(seed) = obj.get("value") {
+                check_matrix_seed(seed)
+                    .map_err(|err| format!("{label}: RatingMatrix.value {err}"))?;
+            }
             let points = max - min + 1;
+            // A slider's range is continuous, so 0-100 is a normal request and
+            // is not capped at 7. It is still capped: the range decides the
+            // slider's step, and `max`/`min` are i64, so an absurd range is a
+            // payload error rather than something to render.
+            if points > MAX_SLIDER_POINTS {
+                return Err(format!(
+                    "{label}: spans {points} points from min {min} to max {max}; the maximum \
+                     is {MAX_SLIDER_POINTS} — use a coarser scale (0-10 or 0-100), or ask \
+                     about each item on its own with ask_sequence"
+                ));
+            }
             if obj.get("mode").and_then(Value::as_str) == Some("matrix")
                 && points > MAX_MATRIX_POINTS
             {
@@ -1352,6 +1428,65 @@ mod tests {
             .map(|i| json!({ "value": format!("r{i}"), "label": format!("R{i}") }))
             .collect();
         matrix(json!({ "rows": rows, "min": 1, "max": 7 })).unwrap();
+    }
+
+    // Sliders are continuous, so the 7-point numeral cap must not apply — but
+    // an unbounded i64 range is a payload error, not something to render.
+    // `value` is where the ANSWER accumulates, so a shape the component's
+    // schema rejects does not just lose a prop — it silently discards every
+    // rating, and the surface falls back to the desugared prompt with no error
+    // to the agent.
+    #[test]
+    fn matrix_value_with_a_string_rating_rejects() {
+        let err = matrix(json!({ "value": { "pace": "4" } })).unwrap_err();
+        assert!(err.contains("RatingMatrix.value"), "{err}");
+        assert!(err.contains("\"pace\""), "must name the key: {err}");
+        assert!(err.contains("number"), "must give the fix: {err}");
+    }
+
+    #[test]
+    fn matrix_value_as_a_non_json_string_rejects() {
+        let err = matrix(json!({ "value": "not json" })).unwrap_err();
+        assert!(err.contains("not JSON"), "{err}");
+        assert!(err.contains("\"path\""), "must name the binding form: {err}");
+    }
+
+    #[test]
+    fn matrix_value_as_a_number_or_array_rejects() {
+        assert!(matrix(json!({ "value": 42 })).unwrap_err().contains("object"));
+        assert!(matrix(json!({ "value": [4] })).unwrap_err().contains("object"));
+    }
+
+    #[test]
+    fn matrix_value_shapes_the_renderer_accepts_still_pass() {
+        matrix(json!({ "value": { "path": "/items" } })).unwrap();
+        matrix(json!({ "value": { "pace": 4 } })).unwrap();
+        matrix(json!({ "value": "{\"pace\": 4}" })).unwrap();
+        matrix(json!({ "value": {} })).unwrap();
+    }
+
+    #[test]
+    fn matrix_without_a_value_passes() {
+        matrix(json!({})).unwrap();
+    }
+
+    #[test]
+    fn sliders_accept_a_continuous_range_that_matrix_rejects() {
+        matrix(json!({ "mode": "sliders", "min": 0, "max": 100 })).unwrap();
+    }
+
+    #[test]
+    fn sliders_reject_an_absurd_range_naming_a_sane_scale() {
+        let err = matrix(json!({ "mode": "sliders", "min": 0, "max": 1_000_000_000 }))
+            .unwrap_err();
+        assert!(err.contains("1000000001 points"), "{err}");
+        assert!(err.contains("1000"), "must name the maximum: {err}");
+        assert!(err.contains("ask_sequence"), "must name the alternative: {err}");
+    }
+
+    #[test]
+    fn sliders_at_the_span_cap_still_pass() {
+        matrix(json!({ "mode": "sliders", "min": 0, "max": 999 })).unwrap();
     }
 
     #[test]
