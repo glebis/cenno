@@ -1038,8 +1038,11 @@
   overflow-wrap: anywhere;
 }
 
+/* Bigger than body: at 58px tiles the glyph is the only part of the failure
+   state readable at a glance, so it carries the verdict and the words explain
+   it. 28px keeps it inside the smallest tile without touching the mark. */
 .cenno-ichoice__error-glyph {
-  font-size: var(--cenno-type-body);
+  font-size: 28px;
   line-height: 1;
 }
 
@@ -1047,14 +1050,13 @@
   font-weight: 600;
 }
 
-/* The reason is detail, not the verdict — it yields first when a tile is small
-   enough that three lines do not fit. */
+/* The reason keeps its whole string: "file not found" and "failed to decode"
+   describe different fixes, and truncating it is what makes a failure
+   undiagnosable. It is clamped by the TILE's overflow, not by its own line
+   clamp, so the box grows to fit rather than cutting the sentence. */
 .cenno-ichoice__error-reason {
   color: var(--cenno-text-dim);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 /* Selection mark, top-right, over the image. Round for one answer, square for
