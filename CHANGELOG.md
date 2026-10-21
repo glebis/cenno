@@ -4,6 +4,46 @@ All notable changes to cenno are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
+## [0.4.1] — 2026-08-08
+
+### Added
+
+- **Panels can render a table.** An `a2ui` `Table` shows up to 4 columns and 12
+  rows of plain data — plans, metrics, options — with an optional caption and
+  per-column end alignment for numbers. Rows wash faintly on hover and hovering
+  a column header washes the whole column, so the eye can follow one record
+  across four columns without losing the line.
+- **Panels can render radios and checkboxes.** `ChoicePicker` now honours
+  A2UI's `displayStyle`: `"checkbox"` renders a real radio/checkbox list with
+  arrow-key navigation and a single tab stop; the default stays chips, so every
+  existing payload looks exactly as before.
+- **Rate several things in one panel.** A new `RatingMatrix` lays out one row
+  per item — either a row of numeral targets (`mode: "matrix"`) or a slider per
+  item (`mode: "sliders"`) — and answers with a JSON object keyed by row value,
+  e.g. `{"pace":4,"usefulness":3}`. Nothing submits until you press **Done**,
+  so a three-row evaluation can actually be filled in; clicking a column numeral
+  rates every row at once, and a partial answer is allowed.
+- **Choose from pictures.** A new `ImageChoice` renders up to 10 image tiles in
+  an adaptive grid (1–5 columns depending on the count, never leaving a lone
+  tile on the last row), round selection marks for one answer and square for
+  several, with an optional `fit: "contain"` for images that must not be cropped.
+- **Images now say when they fail.** A failed image names the file it could not
+  read and keeps its slot in the layout — a missing preview is not a missing
+  option, so the tile stays selectable. Local files load through a bounded,
+  extension-checked, magic-byte-checked Rust command.
+
+### Changed
+
+- **Images are sandboxed to `data:` URIs and local file paths.** Remote URLs are
+  rejected at the boundary with an explanation, because cenno never fetches.
+
+### Fixed
+
+- A matrix answer keeps **every** rated row, not just the last one you touched,
+  and a pre-seeded value can no longer override the rating you just gave.
+- A slider range such as `min: 0, max: 1e9` is now rejected instead of hanging
+  the panel while it materialises a billion numerals.
+
 ## [0.4.0] — 2026-08-06
 
 > Includes everything staged under the never-published 0.3.2 bump.
