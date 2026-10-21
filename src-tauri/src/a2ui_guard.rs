@@ -16,6 +16,10 @@
 //! must target the one catalog cenno ships, and every updateComponents must
 //! be an object carrying a components array — payloads violating any of
 //! these render nothing on the web side.
+//!
+//! Component props are then checked one type at a time in `check_component`;
+//! today only `Image.url`, which rejects remote URLs and data URIs the webview
+//! cannot render (see `check_image_url`).
 
 use serde_json::Value;
 
@@ -28,6 +32,11 @@ pub const CATALOG_ID: &str = "cenno:catalog/v1";
 
 const MESSAGE_KEYS: [&str; 3] = ["createSurface", "updateComponents", "updateDataModel"];
 
+/// Inline raster formats the webview can render, mirroring `DATA_URI_OK` in
+/// src/a2ui/image.ts. SVG is deliberately absent: `data:image/svg+xml` is an
+/// XSS vector.
+const DATA_URI_OK: [&str; 4] = ["png", "jpeg", "gif", "webp"];
+
 fn type_name(v: &Value) -> &'static str {
     match v {
         Value::Null => "null",
@@ -36,6 +45,76 @@ fn type_name(v: &Value) -> &'static str {
         Value::String(_) => "a string",
         Value::Array(_) => "an array",
         Value::Object(_) => "an object",
+    }
+}
+
+/// Does the part of a `data:` URI after `data:image/` have an allowed raster
+/// MIME followed by exactly `;base64,`?
+fn is_renderable_data_uri(rest: &str) -> bool {
+    for mime in DATA_URI_OK {
+        if let Some(tail) = rest.strip_prefix(mime) {
+            return tail.starts_with(";base64,");
+        }
+    }
+    false
+}
+
+/// The one rule for an `Image.url`, shared by every component that carries an
+/// image reference (today `Image.url`, later `ImageChoice` options).
+///
+/// Anything that is neither a `data:` URI nor a remote URL is treated as a
+/// local path and passes: the `load_image` command enforces the path rules
+/// (absolute, image extension, size cap, magic bytes) at read time, and the
+/// guard must not stat files.
+fn check_image_url(url: &str) -> Result<(), String> {
+    if let Some(rest) = url.strip_prefix("data:") {
+        if rest
+            .strip_prefix("image/")
+            .is_some_and(is_renderable_data_uri)
+        {
+            return Ok(());
+        }
+        return Err(format!(
+            "malformed data: URI \"{url}\" — expected \
+             data:image/<png|jpeg|gif|webp>;base64,… (lowercase MIME, base64 \
+             payload); SVG and other types are not renderable"
+        ));
+    }
+    if url.starts_with("https:") || url.starts_with("http:") {
+        return Err(format!(
+            "remote images are not allowed (\"{url}\") — cenno never fetches; embed \
+             the image as a data: URI or pass a local file path"
+        ));
+    }
+    Ok(())
+}
+
+/// Per-component prop rules. Called for every entry of every
+/// `updateComponents.components` array.
+///
+/// Unknown component names — and entries that are not objects — return
+/// `Ok(())`: the renderer drops what it cannot build, as it always has. Each
+/// arm below covers exactly one component type.
+fn check_component(component: &Value) -> Result<(), String> {
+    let Some(obj) = component.as_object() else {
+        return Ok(());
+    };
+    match obj.get("component").and_then(Value::as_str) {
+        Some("Image") => {
+            let label = obj
+                .get("id")
+                .and_then(Value::as_str)
+                .map_or_else(|| "Image".to_string(), |id| format!("Image \"{id}\""));
+            let url = obj.get("url").and_then(Value::as_str).ok_or_else(|| {
+                format!(
+                    "{label}: Image.url must be a string (a data: URI or a local file \
+                     path), got {} — add it or remove the component",
+                    obj.get("url").map_or("nothing", type_name)
+                )
+            })?;
+            check_image_url(url).map_err(|err| format!("{label}: {err}"))
+        }
+        _ => Ok(()),
     }
 }
 
@@ -164,6 +243,10 @@ pub fn validate_a2ui(value: &Value) -> Result<(), String> {
                 )
             })?;
             total_components += components.len();
+
+            for component in components {
+                check_component(component)?;
+            }
         }
     }
 
@@ -368,6 +451,113 @@ mod tests {
         let err = validate_a2ui(&payload).unwrap_err();
         assert!(err.contains("201"), "must report the count: {err}");
         assert!(err.contains("200"), "must report the limit: {err}");
+    }
+
+    // ---- Image.url (Task 4) ----
+
+    /// Envelope carrying the standard root Column plus one extra component
+    /// under test, so each case exercises the component walk.
+    fn envelope_with(component: Value) -> Value {
+        json!([
+            create_surface(),
+            { "version": "v0.9", "updateComponents": { "surfaceId": "main",
+                "components": [
+                    { "id": "root", "component": "Column", "children": ["c"] },
+                    component
+                ] } }
+        ])
+    }
+
+    #[test]
+    fn https_image_rejects_with_the_fix() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "https://example.com/a.png" })))
+            .unwrap_err();
+        assert!(err.contains("remote images are not allowed"), "{err}");
+        assert!(err.contains("data: URI"), "{err}");
+    }
+
+    #[test]
+    fn http_image_rejects_too() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "http://example.com/a.png" })))
+            .unwrap_err();
+        assert!(err.contains("remote images are not allowed"), "{err}");
+        assert!(err.contains("http://example.com/a.png"), "must quote the url: {err}");
+    }
+
+    #[test]
+    fn malformed_data_uri_rejects() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "data:text/html;base64,AAAA" })))
+            .unwrap_err();
+        assert!(err.contains("data:image/"), "{err}");
+    }
+
+    #[test]
+    fn every_bad_data_uri_shape_rejects() {
+        for url in [
+            "data:image/svg+xml;base64,AAAA", // XSS vector
+            "data:image/PNG;base64,AAAA",    // uppercase mime
+            "data:image/png,AAAA",           // not base64
+            "data:image/png;base64",         // no payload separator
+            "data:,AAAA",
+        ] {
+            let err = validate_a2ui(&envelope_with(json!({
+                "id": "c", "component": "Image", "url": url })))
+                .unwrap_err();
+            assert!(err.contains("data:image/"), "{url} must be rejected: {err}");
+        }
+    }
+
+    #[test]
+    fn local_path_and_good_data_uri_pass() {
+        for url in [
+            "/Users/x/a.png",
+            "data:image/png;base64,AAAA",
+            "data:image/jpeg;base64,AAAA",
+            "data:image/gif;base64,AAAA",
+            "data:image/webp;base64,AAAA",
+        ] {
+            validate_a2ui(&envelope_with(json!({
+                "id": "c", "component": "Image", "url": url })))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn image_without_a_string_url_rejects() {
+        for bad in [json!(null), json!(7), json!(["a.png"])] {
+            let err = validate_a2ui(&envelope_with(json!({
+                "id": "c", "component": "Image", "url": bad })))
+                .unwrap_err();
+            assert!(err.contains("Image.url must be a string"), "{err}");
+        }
+        // Absent url is the same error.
+        let err = validate_a2ui(&envelope_with(json!({ "id": "c", "component": "Image" })))
+            .unwrap_err();
+        assert!(err.contains("Image.url must be a string"), "{err}");
+    }
+
+    #[test]
+    fn image_error_names_the_component_id() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "hero", "component": "Image", "url": "https://example.com/a.png" })))
+            .unwrap_err();
+        assert!(err.contains("hero"), "must name the node to fix: {err}");
+    }
+
+    #[test]
+    fn components_without_an_image_url_are_untouched() {
+        // Unknown component names stay the renderer's problem, as before.
+        for component in [
+            json!({ "id": "c", "component": "Text", "text": "hi" }),
+            json!({ "id": "c", "component": "Future" }),
+            json!({ "id": "c" }),
+            json!("not an object"),
+        ] {
+            validate_a2ui(&envelope_with(component)).unwrap();
+        }
     }
 
     #[test]
