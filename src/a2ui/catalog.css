@@ -781,7 +781,9 @@
   padding: 2px 0;
   background: transparent;
   border: none;
-  border-radius: var(--cenno-radius-control);
+  /* Square fill: the header is a column ruler, and a rounded pill under one
+     numeral reads as a button detached from the column it belongs to. */
+  border-radius: 0;
   text-align: center;
   font-size: var(--cenno-type-caption);
   line-height: var(--cenno-font-leading-caption);
