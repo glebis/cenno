@@ -1031,7 +1031,9 @@
   justify-content: center;
   gap: 2px;
   overflow: hidden;
-  padding: 0 var(--cenno-space-1);
+  /* Tight horizontal padding: every pixel here is a character the filename
+     cannot show. */
+  padding: 0 4px;
   font-size: var(--cenno-type-caption);
   line-height: var(--cenno-font-leading-caption);
   /* Full-strength text, not --cenno-text-dim: on the mood surface the dim tone
@@ -1044,7 +1046,7 @@
 /* Sized to leave room for the file name beneath it: the glyph is the verdict,
    but the name is what the user acts on, so the glyph yields first. */
 .cenno-ichoice__error-glyph {
-  font-size: 20px;
+  font-size: 16px;
   line-height: 1;
   color: var(--cenno-text);
 }
@@ -1057,13 +1059,16 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   font-weight: 600;
-  /* Two lines is the most the square can hold beside the glyph; the full path
-     is still in the tile's title. `anywhere` breaks inside a long filename
-     rather than ellipsising it to "cenno-…". */
+  /* Three lines: a 58px tile still holds "cenno-no-such-image.png" in two or
+     three, and two was cutting real names. `anywhere` breaks inside the
+     filename rather than ellipsising it to "cenno-…"; anything longer than
+     three lines is in the tile's title. */
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-font-leading-caption);
 }
 
 .cenno-ichoice__error-status {
