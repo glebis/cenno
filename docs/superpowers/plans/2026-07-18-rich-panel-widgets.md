@@ -420,6 +420,7 @@ git commit -m "feat(guard): reject remote and malformed image URLs"
 - Modify: `src/a2ui/views.tsx` (new `CheckListView` beside `ChipsView` at line 119)
 - Modify: `src/a2ui/catalog.tsx:246-275` (`CennoChoicePicker` picks a view from `displayStyle`)
 - Modify: `src/a2ui/catalog.css` (list styles after the `.cenno-chips` block at line 101)
+- Modify: `src-tauri/src/a2ui_guard.rs` (`ChoicePicker` arm in `check_component`)
 - Test: `src/a2ui/views.test.tsx`, `src/a2ui/catalog.test.tsx` if a catalog-level assertion fits
 
 **Interfaces:**
@@ -499,10 +500,27 @@ Expected: all pass.
 
 Run: `npx vitest run src/a2ui` — the existing `ChipsView` tests must still pass untouched, proving `displayStyle` omission keeps chips.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Guard the `displayStyle` value**
+
+Add the `ChoicePicker` arm to `check_component`: when `displayStyle` is present it must be `"chips"` or `"checkbox"`, otherwise `ChoicePicker.displayStyle must be "chips" or "checkbox", got "<value>" — omit it to keep chips`. Write the failing test first:
+
+```rust
+#[test]
+fn choice_picker_unknown_display_style_rejects() {
+    let err = validate_a2ui(&envelope_with(json!({
+        "id": "c", "component": "ChoicePicker", "displayStyle": "radio",
+        "options": [{ "label": "a", "value": "a" }] }))).unwrap_err();
+    assert!(err.contains("displayStyle"), "{err}");
+    assert!(err.contains("chips") && err.contains("checkbox"), "{err}");
+}
+```
+
+Run: `cd src-tauri && cargo test a2ui_guard::` — red, then green.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/a2ui/views.tsx src/a2ui/catalog.tsx src/a2ui/catalog.css src/a2ui/views.test.tsx
+git add src/a2ui/views.tsx src/a2ui/catalog.tsx src/a2ui/catalog.css src/a2ui/views.test.tsx src-tauri/src/a2ui_guard.rs
 git commit -m "feat(a2ui): honour displayStyle with a radio/checkbox list view"
 ```
 
