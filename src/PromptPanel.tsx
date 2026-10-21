@@ -29,6 +29,7 @@ import { injectBasicCatalogStyles } from "@a2ui/web_core/v0_9/basic_catalog";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { cennoCatalog } from "./a2ui/catalog";
 import { desugar, SURFACE_ID } from "./a2ui/desugar";
+import { clearImageCache } from "./a2ui/image";
 import { getWidgets } from "./userConfig";
 import { observePanelContent } from "./panelResize";
 
@@ -199,6 +200,17 @@ export default function PromptPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [prompt.id],
   );
+
+  // Resolved image reads are memoised across tiles (src/a2ui/image.ts), so a
+  // prompt swap must drop them: a stale tile (or a stale failure) must never
+  // survive into the next prompt. Done during render, not in an effect — a
+  // child's effect runs BEFORE the parent's, so an effect here would let the
+  // new prompt's images resolve against the old prompt's cache first.
+  const imagePromptRef = useRef<string | null>(null);
+  if (imagePromptRef.current !== prompt.id) {
+    imagePromptRef.current = prompt.id;
+    clearImageCache();
+  }
 
   // Content-driven window height: after this prompt's surface mounts (and
   // whenever its content box changes — e.g. the error boundary swapping in

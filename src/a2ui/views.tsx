@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { ImageLoadError, resolveImageUrl } from "./image";
 import "./catalog.css";
 
 export type TextRole = "question-l" | "question-m" | "body" | "caption";
@@ -400,9 +401,15 @@ export function DateTimeView({
 }
 
 /**
- * Display-only image. Without a description it is presentational (alt="" →
- * hidden from assistive tech). Note for agents: bundled builds enforce CSP,
- * so prefer data: URIs or app-served assets over arbitrary remote URLs.
+ * Display-only image with three states in a fixed-size box, so the panel never
+ * jumps between them: loading (shimmer), ok (the <img>), error (a caption-size
+ * line naming the reason). A broken preview must not read as a missing option,
+ * so the failed box stays put with the reason visible.
+ *
+ * Without a description it is presentational (alt="" → hidden from assistive
+ * tech). Note for agents: bundled builds enforce CSP, so prefer app-served
+ * assets or local file paths over arbitrary remote URLs — remote URLs are
+ * rejected by resolveImageUrl with a named reason.
  */
 export function ImageView({
   url,
@@ -421,14 +428,100 @@ export function ImageView({
     | "largeFeature"
     | "header";
 }) {
+  const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  const [src, setSrc] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    // Results that land after a re-render for a different url (or after
+    // unmount) must not overwrite the newer state.
+    let live = true;
+    setState("loading");
+    setSrc(null);
+    setReason("");
+
+    if (!url) {
+      setReason("no image URL was given");
+      setState("error");
+      return () => {
+        live = false;
+      };
+    }
+
+    resolveImageUrl(url).then(
+      (resolved) => {
+        if (!live) return;
+        setSrc(resolved);
+        setState("ok");
+      },
+      (err: unknown) => {
+        if (!live) return;
+        setReason(imageReason(err));
+        setState("error");
+      },
+    );
+
+    return () => {
+      live = false;
+    };
+  }, [url]);
+
+  const box = `cenno-image-box cenno-image-box--${variant}`;
+
+  if (state === "ok" && src !== null) {
+    return (
+      <div className={box}>
+        <img
+          className="cenno-image"
+          src={src}
+          alt={description ?? ""}
+          style={{ objectFit: fit === "scaleDown" ? "scale-down" : fit }}
+          onError={() => {
+            // A well-formed data: URI can still fail to decode in the webview.
+            setReason("failed to decode");
+            setState("error");
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (state === "error") {
+    return (
+      <div className={box} data-testid="image-error" title={reason}>
+        <span className="cenno-image-box__error">
+          <span className="cenno-image-box__error-glyph" aria-hidden="true">
+            ⚠
+          </span>
+          <span className="cenno-image-box__error-text">
+            {`image failed to load — ${reason}`}
+          </span>
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <img
-      className={`cenno-image cenno-image--${variant}`}
-      src={url}
-      alt={description ?? ""}
-      style={{ objectFit: fit === "scaleDown" ? "scale-down" : fit }}
-    />
+    <div className={box}>
+      <div
+        className="cenno-image-box__loading"
+        data-testid="image-loading"
+        // Same accessibility contract as the <img>: presentational without a
+        // description, labelled by it when there is one.
+        role={description ? "img" : undefined}
+        aria-hidden={description ? undefined : true}
+        aria-label={description ? `Loading ${description}` : undefined}
+      />
+    </div>
   );
+}
+
+/** `reason` is shown verbatim in the panel; never decorate it here. */
+function imageReason(err: unknown): string {
+  if (err instanceof ImageLoadError) return err.reason;
+  if (typeof err === "string" && err.trim()) return err;
+  if (err instanceof Error && err.message) return err.message;
+  return "unknown error";
 }
 
 /**

@@ -359,37 +359,131 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- image: display-only, never overflow the panel ---- */
+/* ---- image: display-only, never overflow the panel ----
+   The BOX owns the per-variant size and is rendered identically in every
+   state (loading / ok / error), so swapping states can never change the
+   panel's height. The <img> is centered inside and clamped to the box. */
 
-.cenno-image {
-  display: block;
+.cenno-image-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   max-width: 100%;
   border-radius: var(--cenno-radius-control);
+  overflow: hidden;
 }
 
-.cenno-image--icon {
+.cenno-image-box--icon {
   width: 24px;
   height: 24px;
 }
 
-.cenno-image--avatar {
+.cenno-image-box--avatar {
   width: 44px;
   height: 44px;
   border-radius: 50%;
 }
 
-.cenno-image--smallFeature {
-  max-height: 80px;
-}
-
-.cenno-image--mediumFeature {
-  max-height: 120px;
-}
-
-.cenno-image--largeFeature,
-.cenno-image--header {
-  max-height: 160px;
+.cenno-image-box--smallFeature {
   width: 100%;
+  height: 80px;
+}
+
+.cenno-image-box--mediumFeature {
+  width: 100%;
+  height: 120px;
+}
+
+.cenno-image-box--largeFeature,
+.cenno-image-box--header {
+  width: 100%;
+  height: 160px;
+}
+
+.cenno-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--cenno-radius-control);
+}
+
+/* ok: the <img> is clamped by the box. Wide feature variants stretch to it
+   (they did before the box existed); the small ones keep their natural size
+   centered, so a 16px icon is not blown up into a 24px tile. */
+
+.cenno-image-box--largeFeature > .cenno-image,
+.cenno-image-box--header > .cenno-image {
+  width: 100%;
+  height: 100%;
+}
+
+/* loading: shimmer tint while a local path is read off disk */
+
+.cenno-image-box__loading {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  opacity: 0.45;
+  background-image: linear-gradient(
+    100deg,
+    var(--cenno-line) 20%,
+    transparent 40%,
+    transparent 60%,
+    var(--cenno-line) 80%
+  );
+  background-size: 200% 100%;
+  animation: cenno-image-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes cenno-image-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* reduced motion: static tint instead of a moving gradient */
+@media (prefers-reduced-motion: reduce) {
+  .cenno-image-box__loading {
+    animation: none;
+    background-image: none;
+    background-color: var(--cenno-line);
+    opacity: 0.35;
+  }
+}
+
+/* error: the box stays, the reason is readable at caption size. A long
+   reason (a path, a size) is clamped so it can never grow the box. */
+
+.cenno-image-box__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cenno-space-1);
+  max-width: 100%;
+  max-height: 100%;
+  padding: 0 var(--cenno-space-1);
+  text-align: center;
+  overflow: hidden;
+}
+
+.cenno-image-box__error-glyph {
+  font-size: var(--cenno-type-caption);
+  line-height: 1;
+  color: var(--cenno-text-dim);
+}
+
+.cenno-image-box__error-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-leading-caption, 1.3);
+  color: var(--cenno-text-dim);
 }
 
 /* ---- buttons ---- */

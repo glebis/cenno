@@ -1,6 +1,8 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
+import { clearImageCache } from "./image";
 import {
   TextView,
   ScaleView,
@@ -16,6 +18,8 @@ import {
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 describe("TextView", () => {
   it("renders markdown strong", () => {
@@ -446,27 +450,78 @@ describe("DateTimeView", () => {
   });
 });
 
+const DATA_URI = "data:image/png;base64,iVBORw0KGgo=";
+
 describe("ImageView", () => {
-  it("renders the image with src, alt, fit, and variant", () => {
-    render(
+  it("renders the image with src, alt, fit, and variant", async () => {
+    const { container } = render(
       <ImageView
-        url="https://example.com/pic.png"
+        url={DATA_URI}
         description="two design options"
         fit="contain"
         variant="largeFeature"
       />,
     );
-    const img = screen.getByRole("img", {
+    const img = (await screen.findByRole("img", {
       name: "two design options",
-    }) as HTMLImageElement;
-    expect(img.src).toBe("https://example.com/pic.png");
-    expect(img.className).toContain("cenno-image--largeFeature");
+    })) as HTMLImageElement;
+    expect(img.getAttribute("src")).toBe(DATA_URI);
+    // The variant now sizes the fixed BOX (was: the <img> itself), so the
+    // panel cannot jump when the state changes.
+    expect(container.querySelector(".cenno-image-box--largeFeature")).toBeTruthy();
     expect(img.style.objectFit).toBe("contain");
   });
 
-  it("is hidden from assistive tech without a description", () => {
-    render(<ImageView url="https://example.com/pic.png" />);
+  it("is hidden from assistive tech without a description", async () => {
+    const { container } = render(<ImageView url={DATA_URI} />);
+    await waitFor(() => expect(container.querySelector("img")).toBeTruthy());
     expect(screen.queryByRole("img")).toBeNull(); // alt="" → presentation
+  });
+});
+
+describe("ImageView states", () => {
+  beforeEach(() => {
+    clearImageCache();
+    vi.mocked(invoke).mockReset();
+  });
+
+  it("shows a placeholder while a local path resolves", async () => {
+    vi.mocked(invoke).mockReturnValue(new Promise(() => {})); // never settles
+    render(<ImageView url="/Users/x/a.png" />);
+    expect(screen.getByTestId("image-loading")).toBeTruthy();
+  });
+
+  it("shows the image once a data: URI resolves", async () => {
+    render(<ImageView url={DATA_URI} description="logo" />);
+    const img = await screen.findByRole("img", { name: "logo" });
+    expect(img.getAttribute("src")).toBe(DATA_URI);
+  });
+
+  it("names the reason when the path fails to load", async () => {
+    vi.mocked(invoke).mockRejectedValue("file not found: /Users/x/a.png");
+    render(<ImageView url="/Users/x/a.png" />);
+    expect(await screen.findByText(/image failed to load — file not found/)).toBeTruthy();
+  });
+
+  it("rejects a remote URL in the panel instead of rendering blank", async () => {
+    render(<ImageView url="https://example.com/a.png" />);
+    expect(await screen.findByText(/remote images are not allowed/)).toBeTruthy();
+  });
+
+  it("falls back to the error state when a valid data: URI fails to decode", async () => {
+    const { container } = render(<ImageView url="data:image/png;base64,AAAA" />);
+    const img = await waitFor(() => {
+      const el = container.querySelector("img");
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    fireEvent.error(img);
+    expect(await screen.findByText(/image failed to load — failed to decode/)).toBeTruthy();
+  });
+
+  it("keeps a fixed box so the panel does not jump between states", async () => {
+    const { container } = render(<ImageView url="/Users/x/a.png" variant="smallFeature" />);
+    expect(container.querySelector(".cenno-image-box--smallFeature")).toBeTruthy();
   });
 });
 
