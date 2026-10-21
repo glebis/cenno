@@ -1159,10 +1159,13 @@ export function MatrixView({
   // it, the draft keeps the number live when it does not (SliderView's own
   // contract).
   const [draft, setDraft] = useState<Record<string, number>>({});
-  // The bound value wins when the host echoes it; the draft keeps a number
-  // live when it does not (SliderView's own contract). Either way the merged
-  // map is what Done submits, so a host that never echoes still answers.
-  const merged = { ...draft, ...(value ?? {}) };
+  // The DRAFT wins. It holds the user's gestures and is written on every tap;
+  // `value` is only the seed (a payload may pre-populate `/items`, and an
+  // echoing host repeats what the draft already has). Spreading `value` last
+  // let a pre-seeded row override the tap that just changed it, so a host that
+  // never echoes an `updateDataModel` — an agent that just renders and waits —
+  // answered with the seed instead of the user's actual rating.
+  const merged = { ...(value ?? {}), ...draft };
   const answered = Object.keys(merged).length > 0;
 
   if (mode === "sliders") {

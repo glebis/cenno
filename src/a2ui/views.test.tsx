@@ -934,6 +934,18 @@ describe("MatrixView", () => {
     expect(onDone).toHaveBeenCalledWith({ pace: 2, useful: 3 });
   });
 
+  // A payload may pre-seed `/items`, and a host that never echoes an
+  // updateDataModel leaves that seed in `value` forever. If `value` won the
+  // merge, the panel would answer with the seed and ignore every tap.
+  it("a tap overrides a pre-seeded value the host never echoes", () => {
+    const onDone = vi.fn();
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      value={{ pace: 1 }} onSelect={vi.fn()} onDone={onDone} />);
+    fireEvent.click(screen.getAllByRole("radio", { name: "3" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({ pace: 3 });
+  });
+
   it("keeps Done disabled until at least one row is rated", () => {
     render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
       onSelect={vi.fn()} onDone={vi.fn()} />);
