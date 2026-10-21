@@ -47,6 +47,10 @@ pub const MAX_MATRIX_ROWS: usize = 3;
 /// is deliberately uncapped.
 pub const MAX_MATRIX_POINTS: i64 = 7;
 
+/// Maximum `ImageChoice.options` (below ~58px a tile stops being a thumbnail
+/// you can judge; ten also bounds the payload at ~25 KB per tile).
+pub const MAX_IMAGE_CHOICE_OPTIONS: usize = 10;
+
 const MESSAGE_KEYS: [&str; 3] = ["createSurface", "updateComponents", "updateDataModel"];
 
 /// Inline raster formats the webview can render, mirroring `DATA_URI_OK` in
@@ -155,6 +159,41 @@ fn component_label(obj: &serde_json::Map<String, Value>, kind: &str) -> String {
         .map_or_else(|| kind.to_string(), |id| format!("{kind} \"{id}\""))
 }
 
+/// A `multipleSelection` answer is flattened by `String(raw)` in
+/// `src/PromptPanel.tsx`, so `["a","b"]` and a single option valued `"a,b"`
+/// arrive as the SAME string and the agent cannot tell them apart.
+///
+/// Scoped to `variant: "multipleSelection"` ONLY: a single-select answer is
+/// unwrapped to its one token first, so a comma cannot collide there, and
+/// rejecting it unconditionally would break shipped payloads for no gain.
+/// Shared by `ChoicePicker` and `ImageChoice` because both flatten through that
+/// same path — fixing one and not the other fixes nothing.
+fn check_no_comma_values(obj: &serde_json::Map<String, Value>, label: &str) -> Result<(), String> {
+    if obj.get("variant").and_then(Value::as_str) != Some("multipleSelection") {
+        return Ok(());
+    }
+    let Some(options) = obj.get("options").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for (i, option) in options.iter().enumerate() {
+        // A non-string value is somebody else's error (each arm reports it);
+        // this check only owns the comma.
+        let Some(value) = option.get("value").and_then(Value::as_str) else {
+            continue;
+        };
+        if value.contains(',') {
+            return Err(format!(
+                "{label}: option {i} has the value \"{value}\" — a comma inside a value is not \
+                 allowed when variant is \"multipleSelection\", because the answer is \
+                 comma-joined and \"a,b\" would be ambiguous between one option and two; \
+                 rename the value (the label may keep its comma) or switch to \
+                 \"mutuallyExclusive\", which keeps each answer unambiguous"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Per-component prop rules. Called for every entry of every
 /// `updateComponents.components` array.
 ///
@@ -187,23 +226,135 @@ fn check_component(component: &Value) -> Result<(), String> {
             // the agent. `displayStyle` is a plain enum, NOT a DynamicString: a
             // data-model binding ({"path": …}) is equally unparseable, so it is
             // rejected here too rather than left to blank the panel.
-            let Some(style) = obj.get("displayStyle") else {
-                return Ok(());
-            };
             let label = component_label(obj, "ChoicePicker");
-            match style.as_str() {
-                Some("chips" | "checkbox") => Ok(()),
-                Some(value) => Err(format!(
-                    "{label}.displayStyle must be \"chips\" or \"checkbox\", got \"{value}\" \
-                     — omit it to keep chips"
-                )),
-                None => Err(format!(
-                    "{label}.displayStyle must be \"chips\" or \"checkbox\", got {} \
-                     — it takes a literal string, never a data-model binding; omit it \
-                     to keep chips",
-                    type_name(style)
-                )),
+            if let Some(style) = obj.get("displayStyle") {
+                match style.as_str() {
+                    Some("chips" | "checkbox") => {}
+                    Some(value) => {
+                        return Err(format!(
+                            "{label}.displayStyle must be \"chips\" or \"checkbox\", got \"{value}\" \
+                             — omit it to keep chips"
+                        ))
+                    }
+                    None => {
+                        return Err(format!(
+                            "{label}.displayStyle must be \"chips\" or \"checkbox\", got {} \
+                             — it takes a literal string, never a data-model binding; omit it \
+                             to keep chips",
+                            type_name(style)
+                        ))
+                    }
+                }
             }
+            // ChoicePicker has flattened multi-select answers through
+            // String() since long before ImageChoice existed, so the comma
+            // rule has to cover it too or it fixes nothing.
+            check_no_comma_values(obj, &label)
+        }
+        Some("ImageChoice") => {
+            // Up to 10 images, and the same image rule as `Image` per option.
+            // The comma rule matches ChoicePicker: a multi-select answer is
+            // comma-joined by String(), so a comma INSIDE a value would make
+            // "a,b" ambiguous between one option and two.
+            let label = component_label(obj, "ImageChoice");
+            let options = obj.get("options").and_then(Value::as_array).ok_or_else(|| {
+                format!(
+                    "{label}: ImageChoice.options must be an array of option objects \
+                     ({{ \"value\": … , \"image\": … }}), got {}",
+                    obj.get("options").map_or("nothing", type_name)
+                )
+            })?;
+            if options.is_empty() {
+                return Err(format!(
+                    "{label}: has 0 options; an image choice needs at least 1 option — add an \
+                     option object ({{ \"value\": …, \"image\": … }}) or drop the component"
+                ));
+            }
+            if options.len() > MAX_IMAGE_CHOICE_OPTIONS {
+                return Err(format!(
+                    "{label}: has {} options; the maximum is {MAX_IMAGE_CHOICE_OPTIONS} — below \
+                     ~58px a tile stops being a thumbnail you can judge; narrow the choice, or \
+                     use ask_sequence to walk through them in several prompts",
+                    options.len()
+                ));
+            }
+            for (i, option) in options.iter().enumerate() {
+                let Some(option_obj) = option.as_object() else {
+                    return Err(format!(
+                        "{label}: option {i} must be an object with a \"value\" and an \"image\", \
+                         got {}",
+                        type_name(option)
+                    ));
+                };
+                match option_obj.get("value").and_then(Value::as_str) {
+                    Some(value) if !value.trim().is_empty() => {}
+                    Some(_) => {
+                        return Err(format!(
+                            "{label}: option {i} has an empty \"value\"; it is the answer you \
+                             receive back — give it a non-empty name like \"v2\""
+                        ))
+                    }
+                    None => {
+                        return Err(format!(
+                            "{label}: option {i} has no string \"value\"; it is the answer you \
+                             receive back — add one, e.g. {{ \"value\": \"v2\", \"image\": … }}"
+                        ))
+                    }
+                }
+                match option_obj.get("image").and_then(Value::as_str) {
+                    Some(image) => check_image_url(image)
+                        .map_err(|err| format!("{label}: option {i} {err}"))?,
+                    None => {
+                        return Err(format!(
+                            "{label}: option {i} has no string \"image\"; it needs a data: URI \
+                             or a local file path, got {}",
+                            option_obj.get("image").map_or("nothing", type_name)
+                        ))
+                    }
+                }
+            }
+            match obj.get("variant") {
+                None => {}
+                Some(Value::String(value))
+                    if value == "mutuallyExclusive" || value == "multipleSelection" => {}
+                Some(other) => {
+                    return Err(format!(
+                        "{label}.variant {other}; the allowed values are \"mutuallyExclusive\" \
+                         (one answer, round mark) and \"multipleSelection\" (several answers, \
+                         square mark) — omit it for one answer"
+                    ))
+                }
+            }
+            match obj.get("fit") {
+                None => {}
+                Some(Value::String(value)) if value == "cover" || value == "contain" => {}
+                Some(other) => {
+                    return Err(format!(
+                        "{label}: fit {other}; the allowed values are \"cover\" (default, crops \
+                         to an even grid) and \"contain\" (letterboxes, for screenshots) — omit \
+                         it or pick one"
+                    ))
+                }
+            }
+            match obj.get("columns") {
+                None => {}
+                Some(Value::Number(n)) => {
+                    if !matches!(n.as_i64(), Some(1..=5)) {
+                        return Err(format!(
+                            "{label}: columns {n}; the allowed range is 1 to 5 — omit it to use \
+                             the adaptive grid"
+                        ));
+                    }
+                }
+                Some(other) => {
+                    return Err(format!(
+                        "{label}: ImageChoice.columns must be a number from 1 to 5, got {} — \
+                         omit it to use the adaptive grid",
+                        type_name(other)
+                    ))
+                }
+            }
+            check_no_comma_values(obj, &label)
         }
         Some("Table") => {
             // Display-only tables are capped because a panel is ~320-420px
@@ -1264,5 +1415,135 @@ mod tests {
     #[test]
     fn matrix_sliders_mode_passes() {
         matrix(json!({ "mode": "sliders", "min": 0, "max": 10 })).unwrap();
+    }
+
+    // ---- ImageChoice + the comma rule (Task 8) ----
+
+    fn image_choice(extra: Value) -> Result<(), String> {
+        let mut base = json!({
+            "id": "pick", "component": "ImageChoice",
+            "options": [{ "value": "v1", "image": "data:image/png;base64,AAAA" }],
+        });
+        if let (Some(base), Some(extra)) = (base.as_object_mut(), extra.as_object()) {
+            for (k, v) in extra {
+                base.insert(k.clone(), v.clone());
+            }
+        }
+        validate_a2ui(&envelope_with(base))
+    }
+
+    #[test]
+    fn image_choice_over_ten_options_rejects_with_two_fixes() {
+        let opts: Vec<Value> = (0..11)
+            .map(|i| json!({ "value": format!("v{i}"), "image": "data:image/png;base64,AAAA" }))
+            .collect();
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "ImageChoice", "options": opts }))).unwrap_err();
+        assert!(err.contains("11 options") && err.contains("maximum is 10"), "{err}");
+        assert!(err.contains("ask_sequence"), "{err}");
+    }
+
+    #[test]
+    fn image_choice_value_with_a_comma_rejects() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "ImageChoice", "variant": "multipleSelection",
+            "options": [{ "value": "a,b", "image": "data:image/png;base64,AAAA" }] }))).unwrap_err();
+        assert!(err.contains("comma"), "{err}");
+        assert!(err.contains("unambiguous"), "{err}");
+    }
+
+    #[test]
+    fn image_choice_rejects_a_remote_option_image() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "ImageChoice",
+            "options": [{ "value": "v1", "image": "https://example.com/a.png" }] }))).unwrap_err();
+        assert!(err.contains("remote images are not allowed"), "{err}");
+    }
+
+    #[test]
+    fn image_choice_unknown_variant_rejects() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "ImageChoice", "variant": "radio",
+            "options": [{ "value": "v1", "image": "data:image/png;base64,AAAA" }] }))).unwrap_err();
+        assert!(err.contains("mutuallyExclusive"), "{err}");
+    }
+
+    #[test]
+    fn choice_picker_multiple_selection_value_with_a_comma_rejects() {
+        // ChoicePicker has flattened multi-select answers through the same
+        // String() path since long before ImageChoice existed, so the comma
+        // rule has to cover both or it fixes nothing.
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "tags", "component": "ChoicePicker", "variant": "multipleSelection",
+            "options": [{ "label": "a,b", "value": "a,b" }] }))).unwrap_err();
+        assert!(err.contains("comma"), "{err}");
+        assert!(err.contains("unambiguous"), "{err}");
+        assert!(err.contains("tags"), "must name the node: {err}");
+    }
+
+    #[test]
+    fn comma_in_a_single_select_value_is_harmless() {
+        // A mutuallyExclusive answer is unwrapped to one token before String(),
+        // so no collision is possible — rejecting it would break shipped
+        // payloads for no gain.
+        for component in ["ChoicePicker", "ImageChoice"] {
+            validate_a2ui(&envelope_with(json!({
+                "id": "c", "component": component, "variant": "mutuallyExclusive",
+                "options": [{ "label": "a,b", "value": "a,b",
+                              "image": "data:image/png;base64,AAAA" }] })))
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn image_choice_at_the_caps_passes() {
+        let opts: Vec<Value> = (0..10)
+            .map(|i| json!({ "value": format!("v{i}"), "image": "data:image/png;base64,AAAA" }))
+            .collect();
+        image_choice(json!({ "options": opts, "columns": 5, "fit": "contain" })).unwrap();
+        image_choice(json!({ "variant": "multipleSelection", "columns": 1 })).unwrap();
+    }
+
+    #[test]
+    fn image_choice_options_outside_one_to_ten_reject() {
+        let err = image_choice(json!({ "options": [] })).unwrap_err();
+        assert!(err.contains("at least 1 option"), "{err}");
+        let err = image_choice(json!({ "options": "nope" })).unwrap_err();
+        assert!(err.contains("ImageChoice.options"), "{err}");
+    }
+
+    #[test]
+    fn image_choice_option_without_a_value_or_image_rejects_naming_the_option() {
+        let err = image_choice(json!({ "options": [
+            { "value": "v1", "image": "data:image/png;base64,AAAA" },
+            { "image": "data:image/png;base64,AAAA" }
+        ] })).unwrap_err();
+        assert!(err.contains("option 1"), "{err}");
+        assert!(err.contains("value"), "{err}");
+
+        let err = image_choice(json!({ "options": [{ "value": "v1" }] })).unwrap_err();
+        assert!(err.contains("option 0"), "{err}");
+        assert!(err.contains("image"), "{err}");
+    }
+
+    #[test]
+    fn image_choice_malformed_data_uri_names_the_option() {
+        let err = image_choice(json!({ "options": [
+            { "value": "v1", "image": "data:image/svg+xml;base64,AAAA" }] })).unwrap_err();
+        assert!(err.contains("option 0"), "{err}");
+        assert!(err.contains("data:image/"), "{err}");
+    }
+
+    #[test]
+    fn image_choice_layout_enums_reject_outside_their_values() {
+        let err = image_choice(json!({ "fit": "stretch" })).unwrap_err();
+        assert!(err.contains("\"stretch\""), "must quote the value: {err}");
+        assert!(err.contains("contain"), "must give the fix: {err}");
+
+        for bad in [json!(0), json!(6), json!("3")] {
+            let err = image_choice(json!({ "columns": bad })).unwrap_err();
+            assert!(err.contains("columns"), "{bad} must be rejected: {err}");
+            assert!(err.contains("1") && err.contains("5"), "{err}");
+        }
     }
 }

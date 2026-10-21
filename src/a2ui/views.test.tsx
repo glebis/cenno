@@ -17,6 +17,8 @@ import {
   ImageView,
   TableView,
   MatrixView,
+  ImageChoiceView,
+  imageChoiceColumns,
 } from "./views";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -526,6 +528,7 @@ describe("cennoCatalog", () => {
       "DateTimeInput",
       "Dots",
       "Image",
+      "ImageChoice",
       "RatingMatrix",
       "Row",
       "Scale",
@@ -910,5 +913,78 @@ describe("DotsView", () => {
     expect(dots[0].getAttribute("aria-current")).toBeNull();
     expect(dots[1].getAttribute("aria-current")).toBe("step");
     expect(dots[2].getAttribute("aria-current")).toBeNull();
+  });
+});
+
+describe("imageChoiceColumns", () => {
+  it("maps every count 1..10 to the documented column count", () => {
+    const expected = [1, 2, 3, 2, 3, 3, 4, 4, 3, 5];
+    for (let n = 1; n <= 10; n++) {
+      expect(imageChoiceColumns(n)).toBe(expected[n - 1]);
+    }
+  });
+
+  it("never returns a column count that orphans a single tile", () => {
+    for (let n = 1; n <= 10; n++) {
+      const cols = imageChoiceColumns(n);
+      const lastRow = n % cols;
+      expect(lastRow).not.toBe(1);
+    }
+  });
+});
+
+describe("ImageChoiceView", () => {
+  const opts = [
+    { value: "v1", label: "v1 · bold", image: "data:image/png;base64,AAAA" },
+    { value: "v2", label: "v2 · quiet", image: "data:image/png;base64,BBBB" },
+  ];
+
+  beforeEach(() => {
+    clearImageCache();
+    vi.mocked(invoke).mockReset();
+  });
+
+  it("renders one radio per option with the label under the tile", () => {
+    render(<ImageChoiceView options={opts} variant="mutuallyExclusive" onSelect={vi.fn()} />);
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(screen.getByRole("radio", { name: /v1 · bold/ })).toBeTruthy();
+  });
+
+  it("reports the option value on click", () => {
+    const onSelect = vi.fn();
+    render(<ImageChoiceView options={opts} onSelect={onSelect} />);
+    fireEvent.click(screen.getByRole("radio", { name: /v2/ }));
+    expect(onSelect).toHaveBeenCalledWith("v2");
+  });
+
+  it("uses a square mark for multipleSelection", () => {
+    const { container } = render(
+      <ImageChoiceView options={opts} variant="multipleSelection" onSelect={vi.fn()} />,
+    );
+    expect(container.querySelectorAll(".cenno-ichoice__mark--square")).toHaveLength(2);
+  });
+
+  it("keeps a failed tile in the grid and selectable", async () => {
+    vi.mocked(invoke).mockRejectedValue("file not found: /x/a.png");
+    const onSelect = vi.fn();
+    render(
+      <ImageChoiceView
+        options={[{ value: "broken", label: "broken", image: "/x/a.png" }]}
+        onSelect={onSelect}
+      />,
+    );
+    expect(await screen.findByText(/failed to load — file not found/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: /broken/ }));
+    expect(onSelect).toHaveBeenCalledWith("broken");
+  });
+
+  it("applies the adaptive column count and 1fr tracks so tiles compress instead of collapsing", () => {
+    const opts10 = Array.from({ length: 10 }, (_, i) => ({
+      value: `v${i}`, image: "data:image/png;base64,AAAA",
+    }));
+    const { container } = render(<ImageChoiceView options={opts10} onSelect={vi.fn()} />);
+    const grid = container.querySelector<HTMLElement>(".cenno-ichoice")!;
+    expect(grid.style.getPropertyValue("--cenno-ichoice-cols")).toBe("5");
+    expect(getComputedStyle(grid).gridTemplateColumns).toMatch(/1fr/);
   });
 });

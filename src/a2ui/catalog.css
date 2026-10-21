@@ -877,6 +877,150 @@
   color: var(--cenno-text);
 }
 
+/* ---- image choice: up to 10 square tiles, adaptive grid ---- */
+
+/* Column count is a CSS var set by the view (the adaptive lookup, or the
+   agent's `columns` override). Tracks are `minmax(0, 1fr)`: without the
+   explicit 0 minimum a track floors at its content's min-content width (a long
+   label or the error line), which pushes the grid wider than the panel instead
+   of compressing the tiles. */
+.cenno-ichoice {
+  display: grid;
+  grid-template-columns: repeat(var(--cenno-ichoice-cols, 3), minmax(0, 1fr));
+  gap: var(--cenno-space-2);
+  width: 100%;
+}
+
+.cenno-ichoice__tile {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cenno-space-1);
+  /* A tile is one grid cell: it must not grow past the track, and it must not
+     be shrunk by a neighbouring label. */
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--cenno-text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* The square preview. `aspect-ratio` + `width: 100%` makes the tile's height
+   follow the track width, so every count in the adaptive table lands on a
+   square without measuring anything. `flex: none` keeps it from being squeezed
+   in a height-clamped panel. */
+.cenno-ichoice__box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: var(--cenno-radius-control);
+  /* 1px when unselected, 2px when selected: the border width stays part of
+     the box, so selecting never shifts the grid by a pixel. */
+  border: 1px solid transparent;
+  background-color: transparent;
+}
+
+.cenno-ichoice__tile:hover .cenno-ichoice__box {
+  border-color: var(--cenno-line);
+}
+
+.cenno-ichoice__tile.is-selected .cenno-ichoice__box {
+  border: 2px solid var(--cenno-text);
+}
+
+/* The error state keeps the box and swaps the border for a dashed hairline, so
+   a failed preview still reads as a slot in the grid, not as empty space. */
+.cenno-ichoice__box--error {
+  border: 1px dashed var(--cenno-line);
+}
+
+.cenno-ichoice__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Compact failure line: caption size, dim, clamped to two lines. It names the
+   reason so the agent can fix the path — a silent blank is the bug. */
+.cenno-ichoice__error {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding: 0 var(--cenno-space-1);
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-font-leading-caption);
+  color: var(--cenno-text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* Selection mark, top-right, over the image. Round for one answer, square for
+   several — the shape alone says which answer you will get. */
+.cenno-ichoice__mark {
+  position: absolute;
+  top: var(--cenno-space-1);
+  right: var(--cenno-space-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 16px, `flex: none` so a narrow tile cannot squash the mark into a dash. */
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--cenno-text);
+  border-radius: var(--cenno-radius-pill);
+  background-color: var(--cenno-surface);
+  transition: background-color 120ms ease;
+}
+
+.cenno-ichoice__mark--square {
+  border-radius: 3px;
+}
+
+.cenno-ichoice__tile.is-selected .cenno-ichoice__mark {
+  background-color: var(--cenno-text);
+  border-color: var(--cenno-text);
+}
+
+.cenno-ichoice__mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The label sits UNDER the tile, never over the image: it can wrap to two
+   lines without covering the thing being judged. */
+.cenno-ichoice__label {
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-font-leading-caption);
+  color: var(--cenno-text);
+  overflow-wrap: anywhere;
+}
+
+.cenno-ichoice__tile:focus-visible {
+  outline: none;
+}
+
+.cenno-ichoice__tile:focus-visible .cenno-ichoice__box {
+  outline: 1px solid var(--cenno-text);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cenno-ichoice__mark {
+    transition: none;
+  }
+}
+
 /* ---- dots pagination ---- */
 
 .cenno-dots {

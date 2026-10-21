@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   AnchorHTMLAttributes,
+  CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent,
   ReactNode,
@@ -718,6 +719,204 @@ export function ImageView({
         aria-hidden={description ? undefined : true}
         aria-label={description ? `Loading ${description}` : undefined}
       />
+    </div>
+  );
+}
+
+/**
+ * Adaptive column count for `ImageChoice` — the spec's table, indexed by
+ * `count - 1`: [1,2,3,2,3,3,4,4,3,5].
+ *
+ * A lookup, not `auto-fill`: the rule behind the table is "keep tiles at least
+ * ~58px and never leave the final row with a single orphan tile", and no
+ * `auto-fill` expression can express it (5 tiles are 3+2 rather than 4+1, 9 are
+ * 3×3 rather than 4+4+1). Counts outside 1..=10 are clamped: the guard rejects
+ * them first, so this is only the render-time backstop.
+ */
+const IMAGE_CHOICE_COLUMNS = [1, 2, 3, 2, 3, 3, 4, 4, 3, 5];
+
+export function imageChoiceColumns(n: number): number {
+  if (!Number.isFinite(n)) return IMAGE_CHOICE_COLUMNS[0];
+  const index =
+    Math.min(Math.max(Math.round(n), 1), IMAGE_CHOICE_COLUMNS.length) - 1;
+  return IMAGE_CHOICE_COLUMNS[index];
+}
+
+/**
+ * One tile of an `ImageChoice` grid: a square preview with a selection mark and
+ * the label UNDER it.
+ *
+ * Image resolution goes through `resolveImageUrl` directly (not through
+ * `ImageView`) so a failure can render a one-line reason inside the tile box
+ * instead of the variant box's glyph + three-line block. A failed tile keeps
+ * its box and stays selectable — a missing preview is not a missing option
+ * (the agent-judging-images case must not silently drop a candidate).
+ */
+function ImageChoiceTile({
+  option,
+  checked,
+  multiple,
+  fit,
+  onSelect,
+}: {
+  option: { value: string; label?: string; image: string };
+  checked: boolean;
+  multiple: boolean;
+  fit?: "cover" | "contain";
+  onSelect: (value: string) => void;
+}) {
+  const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  const [src, setSrc] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    // Same guard as ImageView: a resolution that lands after the image prop
+    // changed (or after unmount) must not overwrite the newer state.
+    let live = true;
+    setState("loading");
+    setSrc(null);
+    setReason("");
+
+    if (!option.image) {
+      setReason("no image URL was given");
+      setState("error");
+      return () => {
+        live = false;
+      };
+    }
+
+    resolveImageUrl(option.image).then(
+      (resolved) => {
+        if (!live) return;
+        setSrc(resolved);
+        setState("ok");
+      },
+      (err: unknown) => {
+        if (!live) return;
+        setReason(imageReason(err));
+        setState("error");
+      },
+    );
+
+    return () => {
+      live = false;
+    };
+  }, [option.image]);
+
+  const label = option.label ?? option.value;
+
+  return (
+    <button
+      type="button"
+      className={`cenno-ichoice__tile${checked ? " is-selected" : ""}`}
+      role={multiple ? "checkbox" : "radio"}
+      aria-checked={checked}
+      onClick={() => onSelect(option.value)}
+    >
+      <span
+        className={`cenno-ichoice__box${state === "error" ? " cenno-ichoice__box--error" : ""}`}
+      >
+        {state === "ok" && src !== null ? (
+          <img
+            className="cenno-ichoice__img"
+            src={src}
+            // The visible label below names the tile; a second copy on the
+            // <img> would make a screen reader read the option twice.
+            alt=""
+            style={{ objectFit: fit === "contain" ? "contain" : "cover" }}
+            onError={() => {
+              // A well-formed data: URI can still fail to decode in the webview.
+              setReason("failed to decode");
+              setState("error");
+            }}
+          />
+        ) : state === "error" ? (
+          <span className="cenno-ichoice__error" title={reason}>
+            {`failed to load — ${reason}`}
+          </span>
+        ) : (
+          <span className="cenno-image-box__loading" aria-hidden="true" />
+        )}
+        <span
+          className={`cenno-ichoice__mark${multiple ? " cenno-ichoice__mark--square" : ""}`}
+          aria-hidden="true"
+        >
+          {checked && (
+            <svg viewBox="0 0 14 14" focusable="false" aria-hidden="true">
+              {multiple ? (
+                <path
+                  d="M3 7.5 L6 10.5 L11 4.5"
+                  fill="none"
+                  stroke="var(--cenno-surface)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ) : (
+                <circle cx="7" cy="7" r="3" fill="var(--cenno-surface)" />
+              )}
+            </svg>
+          )}
+        </span>
+      </span>
+      <span className="cenno-ichoice__label">{label}</span>
+    </button>
+  );
+}
+
+/**
+ * Choose from up to 10 images. The answer is the option VALUE (labels are
+ * display only and may collide), unwrapped by PromptPanel for
+ * `mutuallyExclusive` and comma-joined for `multipleSelection` — which is why
+ * the guard rejects a comma inside a value in the multi-select case.
+ *
+ * The grid sets `--cenno-ichoice-cols`, so tiles COMPRESS (track sizes are
+ * `minmax(0, 1fr)`) instead of overflowing the panel. The `columns` prop
+ * overrides the adaptive lookup when the agent knows better.
+ */
+export function ImageChoiceView({
+  options,
+  selected = [],
+  variant,
+  fit,
+  columns,
+  onSelect,
+}: {
+  options: { value: string; label?: string; image: string }[];
+  selected?: string[];
+  variant?: "mutuallyExclusive" | "multipleSelection";
+  fit?: "cover" | "contain";
+  columns?: number;
+  onSelect: (value: string) => void;
+}) {
+  const multiple = variant === "multipleSelection";
+  const cols = columns ?? imageChoiceColumns(options.length);
+
+  return (
+    <div
+      className="cenno-ichoice"
+      style={
+        {
+          "--cenno-ichoice-cols": String(cols),
+          // Repeated from catalog.css on purpose: vitest stubs stylesheet
+          // imports, so the track list has to ride inline for the "tiles
+          // compress, never collapse" contract to be observable at all. The
+          // stylesheet keeps the same declaration for the bundled build.
+          gridTemplateColumns:
+            "repeat(var(--cenno-ichoice-cols), minmax(0, 1fr))",
+        } as CSSProperties
+      }
+    >
+      {options.map((option) => (
+        <ImageChoiceTile
+          key={option.value}
+          option={option}
+          checked={selected.includes(option.value)}
+          multiple={multiple}
+          fit={fit}
+          onSelect={onSelect}
+        />
+      ))}
     </div>
   );
 }

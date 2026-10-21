@@ -17,6 +17,8 @@
  *   input cells are out of scope because every answer flattens to a string)
  * - `RatingMatrix` — several items rated in one panel, matrix or sliders
  *   (ChoicePicker and Slider both answer a single question)
+ * - `ImageChoice` — choose between up to 10 images (ChoicePicker options are
+ *   strictly {label, value}, so there is no place to put a picture)
  *
  * Adapters are intentionally untested here; they are covered by the Task 6
  * renderer integration.
@@ -58,6 +60,7 @@ import {
   ImageView,
   TableView,
   MatrixView,
+  ImageChoiceView,
   type TextRole,
 } from "./views";
 
@@ -686,6 +689,132 @@ export const CennoRatingMatrix = createComponentImplementation(
 );
 
 /* ------------------------------------------------------------------ */
+/* ImageChoice — custom: choose from up to 10 images                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * No standard A2UI component puts an image on an option: `ChoicePicker`
+ * options are strictly `{label, value}` in every published release, and its
+ * chips layout has nowhere to draw a picture. A new type (rather than an
+ * extra option field) keeps a shipped `ChoicePicker` payload from silently
+ * changing shape.
+ *
+ * `value` binds as a `string[]` exactly like `ChoicePicker` — the adapter
+ * below copies its selection logic line for line — so `multipleSelection`
+ * answers flatten to a comma-joined string through `String(raw)` in
+ * `src/PromptPanel.tsx` unchanged, and `mutuallyExclusive` is unwrapped to its
+ * one token. That flattening is WHY the guard rejects a comma inside an option
+ * value in the multi-select case (see the `ImageChoice` arm of
+ * src-tauri/src/a2ui_guard.rs); nothing here may write an object, which would
+ * reach the agent as "[object Object]".
+ *
+ * Caps (10 options, 5 columns) live in the guard.
+ */
+export const ImageChoiceApi = {
+  name: "ImageChoice",
+  schema: z
+    .object({
+      ...CommonProps,
+      options: z
+        .array(
+          z
+            .object({
+              value: z
+                .string()
+                .describe(
+                  "The value returned to you when this image is chosen; " +
+                    "never displayed. Must not contain a comma when variant " +
+                    "is multipleSelection (the answer is comma-joined).",
+                ),
+              label: DynamicStringSchema.optional().describe(
+                "Display name for the tile; falls back to the value. Rendered " +
+                  "UNDER the image, never over it.",
+              ),
+              image: DynamicStringSchema.describe(
+                "A data: URI (data:image/<png|jpeg|gif|webp>;base64,…) or a " +
+                  "local file path. Remote URLs are rejected.",
+              ),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(10)
+        .describe("Images to choose between, 1 to 10."),
+      variant: z
+        .enum(["mutuallyExclusive", "multipleSelection"])
+        .optional()
+        .describe(
+          "Selection behavior (default mutuallyExclusive). The selection mark " +
+            "is a circle for one answer, a square for several.",
+        ),
+      fit: z
+        .enum(["cover", "contain"])
+        .optional()
+        .describe(
+          "How a tile fills its square: 'cover' (default) crops to an even " +
+            "grid; 'contain' letterboxes, for screenshots or UI diffs where " +
+            "cropping destroys the comparison.",
+        ),
+      columns: z
+        .number()
+        .int()
+        .min(1)
+        .max(5)
+        .optional()
+        .describe(
+          "Columns in the grid, 1 to 5. Omit it to use the adaptive table " +
+            "(which keeps tiles at least ~58px and never orphans one tile).",
+        ),
+      value: z
+        .union([z.array(z.string()), DataBindingSchema, FunctionCallSchema])
+        .optional()
+        .describe("The chosen value(s); bind to the data model."),
+      selectAction: ActionSchema.optional().describe(
+        "Action fired after an image is chosen (tap-to-answer flows). Its " +
+          "context should carry { value: <the same path as `value`>, " +
+          "via: \"choice\" }.",
+      ),
+    })
+    .strict(),
+};
+
+export const CennoImageChoice = createComponentImplementation(
+  ImageChoiceApi,
+  ({ props }) => {
+    const values = Array.isArray(props.value) ? (props.value as string[]) : [];
+    const options = (props.options ?? []).map((o) => ({
+      value: o.value,
+      label: typeof o.label === "string" ? o.label : undefined,
+      image: typeof o.image === "string" ? o.image : "",
+    }));
+    return (
+      <ImageChoiceView
+        options={options}
+        selected={values}
+        variant={props.variant}
+        fit={props.fit}
+        columns={props.columns}
+        onSelect={(value) => {
+          // Same selection logic as CennoChoicePicker, deliberately: one
+          // flattening path, so the two components cannot disagree about what
+          // a multi-select answer looks like.
+          if (props.variant === "multipleSelection") {
+            props.setValue(
+              values.includes(value)
+                ? values.filter((v) => v !== value)
+                : [...values, value],
+            );
+          } else {
+            props.setValue([value]);
+          }
+          props.selectAction?.();
+        }}
+      />
+    );
+  },
+);
+
+/* ------------------------------------------------------------------ */
 /* Dots — custom: EMA step pagination                                  */
 /* ------------------------------------------------------------------ */
 
@@ -726,6 +855,7 @@ export const cennoCatalog = new Catalog(
     CennoScale,
     CennoTable,
     CennoRatingMatrix,
+    CennoImageChoice,
     CennoDots,
   ],
   BASIC_FUNCTIONS,
