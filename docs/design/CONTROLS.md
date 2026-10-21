@@ -64,29 +64,45 @@ views.tsx    — plain React, no A2UI imports; styled by catalog.css
 | `Row` / `Column` | standard | — | flex divs |
 | `Button` | standard `ButtonApi` | — (borderless → secondary) | `ButtonView` |
 | `TextField` | standard, extended | `voice`, `submitAction` (Enter) | `TextFieldView` |
-| `ChoicePicker` | standard, extended | `selectAction` (tap) | `ChipsView` |
+| `ChoicePicker` | standard, extended | `selectAction` (tap); `displayStyle: "checkbox"` renders the radio/checkbox list instead of chips | `ChipsView` / `CheckListView` |
 | `Slider` | standard `SliderApi`, extended | `minLabel`, `maxLabel`, `selectAction` (thumb release / Enter) | `SliderView` |
 | `DateTimeInput` | standard, extended | `submitAction` (Enter) | `DateTimeView` |
-| `Image` | standard `ImageApi` | — (display-only) | `ImageView` |
+| `Image` | standard `ImageApi` | — (display-only; `data:` URI or local path, three states) | `ImageView` |
 | `Scale` | custom (discrete targets; SliderApi is continuous) | — | `ScaleView` |
 | `Dots` | custom (no standard pagination API) | — | `DotsView` |
+| `Table` | custom (no table component exists upstream in any release) | `header`, `columns[{label,align}]`, `dense` | `TableView` |
+| `RatingMatrix` | custom (several bindings in one control) | `rows`, `mode`, `min`/`max`, `minLabel`/`maxLabel` | `MatrixView` |
+| `ImageChoice` | custom (`ChoicePicker` options are strictly `{label,value}`) | `options[{value,label?,image}]`, `variant`, `fit`, `columns` | `ImageChoiceView` |
 
 `Slider` vs `Scale`: Scale is the EMA 1..N numeral row — discrete tap
 targets, each a 44px circle. Slider is a continuous range for "how much"
 questions where granularity matters more than labeled steps.
 
+`RatingMatrix` vs two `Scale`s: the matrix exists because evaluating N items
+means the numeral columns must LINE UP across rows — that alignment is the
+whole control. It caps at 3 rows × 7 points because `resize_panel` clamps the
+panel to 240–560px; more items belong in `ask_sequence`.
+
+`Table` vs a `Column` of `Row`s: the table exists for the header rule, the
+per-column alignment (tabular numerals right-aligned), and the row/column
+caps. It is display-only and caps at 4 columns × 12 rows.
+
 `DateTimeInput` notes: `enableDate`/`enableTime` map onto native
 `date`/`time`/`datetime-local` inputs (system picker UI); values are the
 input's native ISO-ish strings ("2026-06-15", "14:30",
 "2026-06-15T14:30"), passed to the agent verbatim. `Image` notes: without
-a `description` the image is presentational (hidden from assistive tech);
-bundled builds enforce CSP, so agents should prefer data: URIs or
-app-served assets over arbitrary remote URLs.
+a `description` the image is presentational (hidden from assistive tech).
+The release build's CSP allows `img-src 'self' data:` only, so a `data:` URI
+and a local file path (read through the `load_image` command, 512 KiB cap)
+both render while a remote URL is rejected with a named reason in the panel.
+A failed image keeps its box (and, in `ImageChoice`, stays selectable) so the
+panel never jumps and a missing preview is never mistaken for a missing option.
 
 ### Considered and not added (and why)
 
 - `CheckBox` — a single boolean is the confirm flow (Yes/No buttons), and
-  multi-select is ChoicePicker's `multipleSelection` chips.
+  multi-select is ChoicePicker's `multipleSelection` chips (or, for images,
+  `ImageChoice` with `variant: "multipleSelection"`).
 - `Icon`, `Divider` — decorative; the panel is one question per screen and
   Column gap owns spacing.
 - `Video`, `AudioPlayer` — heavy media is off-mission for glanceable,
@@ -107,6 +123,16 @@ back to defaults (verified live, 2026-06-10: a max-less slider rendered as
 strings tell the agent what to send; the adapter defaults decide what a
 malformed payload silently becomes. Keep adapter defaults sensible for
 that reason.
+
+What the RENDERER drops silently, the GUARD must reject loudly. A component
+the catalog cannot parse is discarded by the webview without an error, so
+`src-tauri/src/a2ui_guard.rs` is authoritative for the cases where silence
+would mislead: image URLs/`data:` shapes, `ChoicePicker.displayStyle`,
+`Table` column/row caps, `RatingMatrix` row/point caps, and `ImageChoice`
+option count, enum props, and comma-containing values in
+`multipleSelection`. When adding a prop whose invalid value would render
+nothing (rather than something wrong), add it to the guard too — otherwise
+the agent gets a blank panel and no reason.
 
 ## Recipe: adding a control
 
