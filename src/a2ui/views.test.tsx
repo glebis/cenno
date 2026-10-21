@@ -1038,7 +1038,10 @@ describe("ImageChoiceView", () => {
         onSelect={onSelect}
       />,
     );
-    expect(await screen.findByText(/failed to load — file not found/)).toBeTruthy();
+    // The verdict and the reason are separate nodes now (glyph + "failed to
+    // load" + reason), so assert both halves rather than one joined string.
+    expect(await screen.findByText("failed to load")).toBeTruthy();
+    expect(screen.getByText("file not found: /x/a.png")).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: /broken/ }));
     expect(onSelect).toHaveBeenCalledWith("broken");
   });

@@ -832,7 +832,14 @@ function ImageChoiceTile({
           />
         ) : state === "error" ? (
           <span className="cenno-ichoice__error" title={reason}>
-            {`failed to load — ${reason}`}
+            {/* A glyph carries the verdict at a glance; the reason is the
+                detail behind it. The ✕ is `aria-hidden` because the reason
+                text next to it already says the same thing in words. */}
+            <span className="cenno-ichoice__error-glyph" aria-hidden="true">
+              ✕
+            </span>
+            <span className="cenno-ichoice__error-label">failed to load</span>
+            <span className="cenno-ichoice__error-reason">{reason}</span>
           </span>
         ) : (
           <span className="cenno-image-box__loading" aria-hidden="true" />
@@ -1012,7 +1019,7 @@ export function TableView({
       )}
       <tbody>
         {rows.map((row, r) => (
-          <tr key={r}>
+          <tr key={r} className="cenno-table__row">
             {columns.map((col, c) => (
               <td
                 key={c}

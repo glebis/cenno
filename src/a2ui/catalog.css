@@ -695,6 +695,13 @@
   overflow-wrap: anywhere;
 }
 
+/* Body row hover: the table is display-only, so this is not a click affordance
+   — it is what lets the eye follow one record across four columns without
+   losing the line. Kept to 6% so it never reads as a selected row. */
+.cenno-table__row:hover > .cenno-table__cell {
+  background: color-mix(in srgb, var(--cenno-text) 6%, transparent);
+}
+
 /* Last row keeps no trailing hairline: it would read as an outer border. */
 .cenno-table tr:last-child > .cenno-table__cell {
   border-bottom: none;
@@ -988,15 +995,39 @@
 /* Compact failure line: caption size, dim, clamped to two lines. It names the
    reason so the agent can fix the path — a silent blank is the bug. */
 .cenno-ichoice__error {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   overflow: hidden;
   padding: 0 var(--cenno-space-1);
   font-size: var(--cenno-type-caption);
   line-height: var(--cenno-font-leading-caption);
-  color: var(--cenno-text-dim);
+  /* Full-strength text, not --cenno-text-dim: on the mood surface the dim tone
+     measures 1.90:1, and this is the one line the user must act on. */
+  color: var(--cenno-text);
+  text-align: center;
   overflow-wrap: anywhere;
+}
+
+.cenno-ichoice__error-glyph {
+  font-size: var(--cenno-type-body);
+  line-height: 1;
+}
+
+.cenno-ichoice__error-label {
+  font-weight: 600;
+}
+
+/* The reason is detail, not the verdict — it yields first when a tile is small
+   enough that three lines do not fit. */
+.cenno-ichoice__error-reason {
+  color: var(--cenno-text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Selection mark, top-right, over the image. Round for one answer, square for
