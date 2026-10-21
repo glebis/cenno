@@ -446,6 +446,14 @@
 
 .cenno-image-box {
   display: flex;
+  /* `flex: none` is load-bearing: the box is a flex ITEM in a height-clamped
+     .cenno-column, and its automatic minimum size is content-dependent. The
+     loading and ok states contribute ~0 (their children are sized in
+     percentages) while the error state floors at ~72px of text — without this
+     the three states would shrink by different amounts in an overflowing
+     panel, which is exactly the jump the box exists to prevent. Every other
+     fixed-size element in this file already sets it. */
+  flex: none;
   align-items: center;
   justify-content: center;
   max-width: 100%;
@@ -464,13 +472,19 @@
   border-radius: 50%;
 }
 
-.cenno-image-box--smallFeature {
+/* Full-bleed feature images. Scoped to a Column child: inside a Row, a box with
+   width:100% takes flex-basis:100% and squeezes its siblings, which the old
+   content-width <img> never did. */
+.cenno-column > .cenno-image-box--smallFeature,
+.cenno-column > .cenno-image-box--mediumFeature {
   width: 100%;
+}
+
+.cenno-image-box--smallFeature {
   height: 80px;
 }
 
 .cenno-image-box--mediumFeature {
-  width: 100%;
   height: 120px;
 }
 
@@ -553,7 +567,7 @@
 .cenno-image-box__error-glyph {
   font-size: var(--cenno-type-caption);
   line-height: 1;
-  color: var(--cenno-text-dim);
+  color: var(--cenno-text);
 }
 
 .cenno-image-box__error-text {
@@ -562,8 +576,19 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-size: var(--cenno-type-caption);
-  line-height: var(--cenno-leading-caption, 1.3);
-  color: var(--cenno-text-dim);
+  line-height: var(--cenno-font-leading-caption, 1.3);
+  /* --cenno-text, not --cenno-text-dim: this is the one line the user must act
+     on, and the dim tint measures 1.90:1 on the mood surface — below even the
+     3:1 large-text floor. */
+  color: var(--cenno-text);
+}
+
+/* icon (24px) and avatar (44px) cannot hold a caption line plus a glyph: the
+   clamp does not truncate the sentence, it cuts the glyph in half. Drop the
+   text there and keep the mark; `title` still carries the full reason. */
+.cenno-image-box--icon .cenno-image-box__error-text,
+.cenno-image-box--avatar .cenno-image-box__error-text {
+  display: none;
 }
 
 /* ---- buttons ---- */
@@ -618,6 +643,86 @@
   /* horizontal padding only on the trailing side keeps the label flush with
      the panel's right inset while preserving the tap target via min-height */
   padding: var(--cenno-space-1) 0;
+}
+
+/* ---- table (display-only, literal rows) ---- */
+
+/* Hairlines only: a bottom border per row, no outer border, no zebra
+   striping, no background — it sits on the flow color like every other
+   component. `table-layout: fixed` + `width: 100%` keeps the columns inside
+   the 320–420px panel; a long unbroken token wraps instead of pushing the
+   table wider (overflow-wrap is also set inline by TableView). */
+.cenno-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: var(--cenno-text);
+  font-size: var(--cenno-type-body);
+  line-height: var(--cenno-font-leading-body);
+}
+
+.cenno-table__caption {
+  caption-side: top;
+  text-align: start;
+  padding-bottom: var(--cenno-space-1);
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-font-leading-caption);
+  color: var(--cenno-text-dim);
+}
+
+/* Header: caption size, dim, uppercase, .08em tracking — the ScaleView end
+   label treatment. The hairline below it separates header from body. */
+.cenno-table__head {
+  padding: var(--cenno-space-1) var(--cenno-space-1) var(--cenno-space-1) 0;
+  text-align: start;
+  font-size: var(--cenno-type-caption);
+  font-weight: var(--cenno-font-weight-caption);
+  line-height: var(--cenno-font-leading-caption);
+  letter-spacing: var(--cenno-font-tracking-caption);
+  text-transform: uppercase;
+  color: var(--cenno-text-dim);
+  border-bottom: 1px solid var(--cenno-line);
+  overflow-wrap: anywhere;
+}
+
+.cenno-table__cell {
+  /* >=32px row height at 17px body / 1.4 leading; the panel has no zoom, so
+     rows never get tighter than that unless density is asked for. */
+  padding: var(--cenno-space-1) var(--cenno-space-1) var(--cenno-space-1) 0;
+  text-align: start;
+  vertical-align: baseline;
+  border-bottom: 1px solid var(--cenno-line);
+  overflow-wrap: anywhere;
+}
+
+/* Last row keeps no trailing hairline: it would read as an outer border. */
+.cenno-table tr:last-child > .cenno-table__cell {
+  border-bottom: none;
+}
+
+/* Per-column end alignment: tabular numerals so digits line up. */
+.cenno-table__head.is-end,
+.cenno-table__cell.is-end {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* First column hugs the panel's left inset; last column the right one. */
+.cenno-table__head:first-child,
+.cenno-table__cell:first-child {
+  padding-left: 0;
+}
+
+.cenno-table__head:last-child,
+.cenno-table__cell:last-child {
+  padding-right: 0;
+}
+
+/* dense: half the vertical padding, still landing near 24px per row. */
+.cenno-table.is-dense .cenno-table__head,
+.cenno-table.is-dense .cenno-table__cell {
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 /* ---- dots pagination ---- */
