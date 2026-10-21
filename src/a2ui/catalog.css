@@ -1007,7 +1007,10 @@
 }
 
 /* The error state keeps the box and swaps the border for a dashed hairline, so
-   a failed preview still reads as a slot in the grid, not as empty space. */
+   a failed preview still reads as a slot in the grid, not as empty space. The
+   box stays SQUARE: releasing the aspect made the failed tile taller than its
+   neighbours and stretched the whole row, turning one missing file into a
+   broken-looking grid. */
 .cenno-ichoice__box--error {
   border: 1px dashed var(--cenno-line);
 }
@@ -1038,31 +1041,34 @@
   overflow-wrap: anywhere;
 }
 
-/* Bigger than body: at 58px tiles the glyph is the only part of the failure
-   state readable at a glance, so it carries the verdict and the words explain
-   it. 28px keeps it inside the smallest tile without touching the mark. */
+/* Sized to leave room for the file name beneath it: the glyph is the verdict,
+   but the name is what the user acts on, so the glyph yields first. */
 .cenno-ichoice__error-glyph {
-  font-size: 28px;
+  font-size: 20px;
   line-height: 1;
+  color: var(--cenno-text);
 }
 
 /* The file name leads: it is the answer to "which picture is missing?", which
-   is the question a failed tile actually raises. Clamped to one line with the
-   full name in the tile's title, so a very long path cannot push the glyph out
-   of the box. */
+   is the question a failed tile actually raises. It WRAPS instead of
+   ellipsising — a truncated name is unreadable exactly when it matters, and the
+   error box no longer forces a square, so the lines have somewhere to go. */
 .cenno-ichoice__error-name {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   font-weight: 600;
+  /* Two lines is the most the square can hold beside the glyph; the full path
+     is still in the tile's title. `anywhere` breaks inside a long filename
+     rather than ellipsising it to "cenno-…". */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .cenno-ichoice__error-status {
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   color: var(--cenno-text-dim);
 }
 
