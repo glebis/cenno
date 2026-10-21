@@ -158,25 +158,35 @@ behaviour, no schema change beyond what the guard accepts.
 |---|---|
 | `data:image/<png\|jpeg\|gif\|webp>;base64,…` | used directly; scheme and mime prefix validated |
 | `https:` / `http:` | rejected with `remote images are not allowed — embed it as a data: URI or pass a local file path` |
-| absolute path (`/Users/x/a.png`), `~/a.png`, `./a.png` | resolved by the new Rust command into a `data:` URI |
+| absolute path (`/Users/x/a.png`), `~/a.png` | resolved by the new Rust command into a `data:` URI |
 
 **New Rust command** `load_image(app, path, max_bytes) -> Result<String, String>`
 in a new `src-tauri/src/image.rs`, registered in the
 `tauri::generate_handler!` list (`src-tauri/src/lib.rs:965`):
 
-1. Reject non-absolute paths (after expanding a leading `~`).
-2. `canonicalize`, then require a regular file.
-3. Require an extension in `png/jpeg/jpg/gif/webp` — extension check first so a
-   directory or a `/dev/...` device never reaches `read`.
+1. Expand a leading `~` to `$HOME`, then reject anything still not absolute —
+   a relative path is ambiguous (relative to what, the app bundle?) and is
+   rejected with a copy that says so.
+2. `metadata()` the path (which follows symlinks), branch on `io::ErrorKind` so
+   a permission error does not masquerade as "file not found", then require
+   `is_file()` — this is what keeps `read` away from directories, FIFOs and
+   device nodes.
+3. Require an extension in `png/jpeg/jpg/gif/webp` *before* any read, so an
+   unrelated file is rejected on its name alone.
 4. `metadata().len()` against `max_bytes` (default 512 KiB, clamped to
-   1–4096 KiB) *before* reading, so an oversized file is never loaded.
-5. Read the bytes, sniff the magic number, and reject if it disagrees with the
-   extension (`PNG` signature, `\xFF\xD8\xFF`, `GIF8`, `RIFF…WEBP`).
+   1–4096 KiB) — and the read itself is capped with `File::take(max_bytes + 1)`
+   and re-checked, so a file that grows between stat and read cannot exceed the
+   cap.
+5. Sniff the magic number and reject if it disagrees with the extension
+   (`PNG` signature, `\xFF\xD8\xFF`, `GIF8`, `RIFF…WEBP`).
 6. Return `data:<mime>;base64,<…>`.
 
-Every failure is a specific `Err` string: `file not found`,
-`not an image (extension ".txt")`, `too large (1.4 MB, max 512 KB)`,
-`contents are not a valid PNG`. These strings are what the panel shows.
+Every failure is a specific `Err` string, reason first and path last so the
+reason survives truncation at caption size in a 320–420px panel: `file not
+found: <path> — the assistant sent a path that does not exist`,
+`not an image (extension ".txt"): <path> — cenno only loads png, jpg, jpeg,
+gif or webp`, `too large (1.4 MB, max 512 KB): <path>`, `contents are not a
+valid PNG: <path>`. These strings are what the panel shows.
 
 **Frontend helper** `resolveImageUrl(url)` in a new `src/a2ui/image.ts`:
 classifies the URL and either returns a `data:` URI, throws a named error for a
