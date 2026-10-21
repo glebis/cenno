@@ -901,6 +901,59 @@ mod tests {
         assert!(err.contains("the value as sent was"), "must show the raw value: {err}");
     }
 
+    // ---- whitespace + scheme corpus (mirrors src/a2ui/image.test.ts) ----
+
+    const DATA_URI: &str = "data:image/png;base64,AA";
+
+    fn image_url(input: &str) -> Result<(), String> {
+        validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": input })))
+    }
+
+    #[test]
+    fn ascii_whitespace_around_a_data_uri_is_accepted() {
+        for input in [
+            format!(" {DATA_URI}"),
+            format!("\t{DATA_URI}"),
+            format!("{DATA_URI}\n"),
+        ] {
+            assert!(image_url(&input).is_ok(), "should accept {input:?}");
+        }
+    }
+
+    /// A trailing newline must not hide a remote URL: trimming comes first, then
+    /// classification, so this has to fail as remote (not pass as a "path").
+    #[test]
+    fn trailing_newline_does_not_hide_a_remote_url() {
+        let err = image_url("https://x/a.png\n").unwrap_err();
+        assert!(err.contains("remote images are not allowed"), "{err}");
+    }
+
+    /// Leading non-ASCII whitespace (BOM, NBSP, NEL) is invisible but would make
+    /// the scheme undetectable, so it is rejected explicitly rather than being
+    /// trimmed — and rejected identically by `src/a2ui/image.ts`, which uses the
+    /// same ASCII-only trim. `str::trim` and `String.trim` disagree on exactly
+    /// these characters, which is why neither side uses its language's trim.
+    #[test]
+    fn leading_non_ascii_whitespace_is_rejected() {
+        for ws in ['\u{FEFF}', '\u{00A0}', '\u{0085}'] {
+            for tail in [DATA_URI, "https://x/a.png"] {
+                let err = image_url(&format!("{ws}{tail}")).unwrap_err();
+                assert!(
+                    err.contains("non-ASCII whitespace") && err.contains(&format!("U+{:04X}", ws as u32)),
+                    "leading U+{:04X} must be named: {err}",
+                    ws as u32
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn uppercase_scheme_is_classified_as_remote() {
+        let err = image_url("HTTPS://x/a.png").unwrap_err();
+        assert!(err.contains("remote images are not allowed"), "{err}");
+    }
+
     // ---- Table caps (Task 6) ----
 
     #[test]

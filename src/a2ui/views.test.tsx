@@ -749,6 +749,25 @@ describe("ImageView states", () => {
     expect(await screen.findByText(/image failed to load — file not found/)).toBeTruthy();
   });
 
+  it("says so when there is no image url at all", async () => {
+    // Reachable from a payload whose `url` is not a string: catalog.tsx coerces
+    // it to "" and this branch carries the message.
+    render(<ImageView url="" />);
+    expect(await screen.findByText(/image failed to load — no image URL/)).toBeTruthy();
+  });
+
+  it("keeps the description in the accessible name after a failure", async () => {
+    // The visible text drops the description, so a screen-reader user would
+    // otherwise not learn WHICH image failed.
+    vi.mocked(invoke).mockRejectedValue("file not found: /Users/x/a.png");
+    render(<ImageView url="/Users/x/a.png" description="floor plan" />);
+    // The loading box is also role="img" ("Loading floor plan"), so wait for
+    // the error state explicitly instead of matching whichever lands first.
+    const box = await screen.findByTestId("image-error");
+    expect(box.getAttribute("aria-label")).toContain("floor plan");
+    expect(box.getAttribute("aria-label")).toContain("file not found");
+  });
+
   it("rejects a remote URL in the panel instead of rendering blank", async () => {
     render(<ImageView url="https://example.com/a.png" />);
     expect(await screen.findByText(/remote images are not allowed/)).toBeTruthy();
@@ -765,9 +784,30 @@ describe("ImageView states", () => {
     expect(await screen.findByText(/image failed to load — failed to decode/)).toBeTruthy();
   });
 
-  it("keeps a fixed box so the panel does not jump between states", async () => {
-    const { container } = render(<ImageView url="/Users/x/a.png" variant="smallFeature" />);
-    expect(container.querySelector(".cenno-image-box--smallFeature")).toBeTruthy();
+  it("renders the SAME box in every state, so the panel cannot jump", async () => {
+    // jsdom cannot measure layout, so this asserts the honest half: the box
+    // element (class + testid) is identical in loading, ok and error. The
+    // sizing half is CSS (`flex: none` on .cenno-image-box).
+    const variants = ["icon", "avatar", "smallFeature", "mediumFeature", "largeFeature", "header"] as const;
+    for (const variant of variants) {
+      vi.mocked(invoke).mockReset();
+      vi.mocked(invoke).mockReturnValue(new Promise(() => {})); // stays loading
+      const loading = render(<ImageView url="/Users/x/a.png" variant={variant} />);
+      const loadingBox = loading.container.querySelector(`.cenno-image-box--${variant}`);
+      expect(loadingBox).toBeTruthy();
+      const loadingClass = loadingBox!.className;
+      loading.unmount();
+
+      // The in-flight (never-settling) promise is cached per path, so the error
+      // render would otherwise reuse it and hang in the loading state.
+      clearImageCache();
+      vi.mocked(invoke).mockReset();
+      vi.mocked(invoke).mockRejectedValue("file not found: /Users/x/a.png");
+      const err = render(<ImageView url="/Users/x/a.png" variant={variant} />);
+      const errorBox = await err.findByTestId("image-error");
+      expect(errorBox.className).toBe(loadingClass);
+      err.unmount();
+    }
   });
 });
 
