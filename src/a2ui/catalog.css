@@ -661,6 +661,15 @@
   line-height: var(--cenno-font-leading-body);
 }
 
+/* Cell washes animate rather than snap. One shared transition on the cells
+   covers row hover, column hover and the pointer leaving the table, so the
+   highlight eases out instead of vanishing. `background-color` only — the
+   1px hairline stays a hairline, so nothing reflows. */
+.cenno-table__head,
+.cenno-table__cell {
+  transition: background-color 180ms ease-out;
+}
+
 .cenno-table__caption {
   caption-side: top;
   text-align: start;
@@ -681,7 +690,9 @@
   letter-spacing: var(--cenno-font-tracking-caption);
   text-transform: uppercase;
   color: var(--cenno-text-dim);
-  border-bottom: 1px solid var(--cenno-line);
+  /* Softer than the panel's own divider tone: a table of four columns draws a
+     lot of hairline, and at full --cenno-line it reads as a grid. */
+  border-bottom: 1px solid color-mix(in srgb, var(--cenno-line) 55%, transparent);
   overflow-wrap: anywhere;
 }
 
@@ -691,15 +702,32 @@
   padding: var(--cenno-space-1) var(--cenno-space-1) var(--cenno-space-1) 0;
   text-align: start;
   vertical-align: baseline;
-  border-bottom: 1px solid var(--cenno-line);
+  border-bottom: 1px solid color-mix(in srgb, var(--cenno-line) 55%, transparent);
   overflow-wrap: anywhere;
 }
 
 /* Body row hover: the table is display-only, so this is not a click affordance
    — it is what lets the eye follow one record across four columns without
-   losing the line. Kept to 6% so it never reads as a selected row. */
+   losing the line. Kept to 5% so it never reads as a selected row. */
 .cenno-table__row:hover > .cenno-table__cell {
-  background: color-mix(in srgb, var(--cenno-text) 6%, transparent);
+  background-color: color-mix(in srgb, var(--cenno-text) 5%, transparent);
+}
+
+/* Column hover, driven by which header the pointer is in: reading a table
+   often means reading DOWN a column, and a row-only wash gives no help there.
+   Slightly stronger than the row wash (7%) because one column is a thinner
+   band than one row and needs a touch more to register — plus a 1px vertical
+   hairline on the left edge that fades in, so the column reads as a unit
+   without the table gaining a visible grid. */
+.cenno-table .is-col-hover {
+  background-color: color-mix(in srgb, var(--cenno-text) 7%, transparent);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--cenno-line) 80%, transparent);
+}
+
+/* A cell that is both in the hovered column and a hovered row keeps one wash,
+   not two stacked ones (two 5-7% washes read as a heavy block, not a crosshair). */
+.cenno-table__row:hover > .is-col-hover {
+  background-color: color-mix(in srgb, var(--cenno-text) 9%, transparent);
 }
 
 /* Last row keeps no trailing hairline: it would read as an outer border. */

@@ -823,6 +823,22 @@ describe("TableView", () => {
   ];
   const rows = [["free", "$0"], ["pro", "$20"]];
 
+  // Reading a table often means reading down a column; a row-only wash gives
+  // no help there. The class is set from header hover so the whole column
+  // responds, and cleared when the pointer leaves the table.
+  it("highlights the whole column while a header is hovered", () => {
+    const { container } = render(
+      <TableView columns={columns} rows={rows} />,
+    );
+    const head = screen.getByRole("columnheader", { name: "Cost" });
+    fireEvent.mouseEnter(head);
+    expect(container.querySelectorAll(".cenno-table .is-col-hover")).toHaveLength(
+      rows.length + 1, // the header itself plus one cell per row
+    );
+    fireEvent.mouseLeave(screen.getByRole("table"));
+    expect(container.querySelectorAll(".is-col-hover")).toHaveLength(0);
+  });
+
   it("renders a real table with a header row and one row per record", () => {
     render(<TableView columns={columns} rows={rows} caption="Plans compared" />);
     expect(screen.getByRole("table", { name: "Plans compared" })).toBeTruthy();

@@ -999,8 +999,19 @@ export function TableView({
   /** Accessible name for the table; rendered as a real `<caption>`. */
   caption?: string;
 }) {
+  // Which COLUMN the pointer is over, tracked in state rather than with CSS
+  // `:has(...:hover)` + one rule per column: the guard caps tables at 4
+  // columns, so this is bounded, and it keeps the highlight logic in one place
+  // instead of duplicating it four times in the stylesheet.
+  const [hoverCol, setHoverCol] = useState<number | null>(null);
+  const colClass = (i: number) => (hoverCol === i ? " is-col-hover" : "");
   return (
-    <table className={`cenno-table${dense ? " is-dense" : ""}`}>
+    <table
+      className={`cenno-table${dense ? " is-dense" : ""}${hoverCol !== null ? " is-column-hover" : ""}`}
+      // Leaving the table clears the column wash; each `<th>` re-sets it, so
+      // the highlight follows the pointer without a per-cell handler.
+      onMouseLeave={() => setHoverCol(null)}
+    >
       {caption && <caption className="cenno-table__caption">{caption}</caption>}
       {header && (
         <thead>
@@ -1009,7 +1020,8 @@ export function TableView({
               <th
                 key={i}
                 scope="col"
-                className={`cenno-table__head${col.align === "end" ? " is-end" : ""}`}
+                className={`cenno-table__head${col.align === "end" ? " is-end" : ""}${colClass(i)}`}
+                onMouseEnter={() => setHoverCol(i)}
               >
                 {col.label}
               </th>
@@ -1023,7 +1035,7 @@ export function TableView({
             {columns.map((col, c) => (
               <td
                 key={c}
-                className={`cenno-table__cell${col.align === "end" ? " is-end" : ""}`}
+                className={`cenno-table__cell${col.align === "end" ? " is-end" : ""}${colClass(c)}`}
                 // `overflow-wrap: break-word` inline as well as in catalog.css:
                 // a long unbroken token (a hash, a url) must wrap inside its
                 // column, never widen the panel.
