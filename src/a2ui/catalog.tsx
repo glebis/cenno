@@ -669,19 +669,15 @@ export const CennoRatingMatrix = createComponentImplementation(
         minLabel={typeof props.minLabel === "string" ? props.minLabel : undefined}
         maxLabel={typeof props.maxLabel === "string" ? props.maxLabel : undefined}
         value={value}
-        onSelect={(key, n) => {
-          // Spread, not a positional array: the object is keyed by row value, so
-          // a reordered row list still maps onto the right answer. This only
+        onSelect={(all) => {
+          // The view hands over the whole map, so this write never regresses to
+          // "only the row just touched" when the host does not echo. This only
           // WRITES — it must not call selectAction: answering on the first row
           // tap closed the panel before the other rows could be rated.
-          props.setValue(JSON.stringify({ ...value, [key]: n }));
+          props.setValue(JSON.stringify(all));
         }}
         onCommit={
-          props.mode === "sliders"
-            ? (key, n) => {
-                props.setValue(JSON.stringify({ ...value, [key]: n }));
-              }
-            : undefined
+          props.mode === "sliders" ? (all) => props.setValue(JSON.stringify(all)) : undefined
         }
         onDone={(all) => {
           // Done submits the merged map directly, so a host that never echoed

@@ -1145,16 +1145,23 @@ export function MatrixView({
   minLabel?: string;
   maxLabel?: string;
   value?: Record<string, number>;
-  /** Writes one row's number to the bound object. Never completes the prompt. */
-  onSelect: (key: string, n: number) => void;
+  /**
+   * Writes the WHOLE map (seed + every gesture so far) to the bound object.
+   * Never completes the prompt.
+   *
+   * The full map, not `(key, n)`: the caller would have to merge one key into
+   * whatever it last received from the host, and a host that never echoes an
+   * `updateDataModel` leaves that stale — so rating pace then useful used to
+   * leave the data model holding only `useful`. The view already has the
+   * accumulated map, so it writes all of it every time.
+   */
+  onSelect: (all: Record<string, number>) => void;
   /** Sliders mode: the commit gesture (release/Enter). Defaults to onSelect. */
-  onCommit?: (key: string, n: number) => void;
+  onCommit?: (all: Record<string, number>) => void;
   /** The explicit submit: receives every answered row, keyed by row value. */
   onDone: (all: Record<string, number>) => void;
   doneLabel?: string;
 }) {
-  const steps: number[] = [];
-  for (let n = min; n <= max; n++) steps.push(n);
   // Readout state for sliders mode; the bound value wins when the host echoes
   // it, the draft keeps the number live when it does not (SliderView's own
   // contract).
@@ -1166,7 +1173,10 @@ export function MatrixView({
   // never echoes an `updateDataModel` — an agent that just renders and waits —
   // answered with the seed instead of the user's actual rating.
   const merged = { ...(value ?? {}), ...draft };
-  const answered = Object.keys(merged).length > 0;
+  // Only a ROW key counts as an answer. A key that matches no row (a stale or
+  // misspelled seed) used to enable Done, which then submitted the agent's own
+  // leftover key as if the user had confirmed it.
+  const answered = rows.some((row) => merged[row.value] !== undefined);
 
   if (mode === "sliders") {
     return (
@@ -1187,10 +1197,15 @@ export function MatrixView({
                 value={value?.[row.value]}
                 label={row.label}
                 onChange={(n) => {
-                  setDraft((d) => ({ ...d, [row.value]: n }));
-                  onSelect(row.value, n);
+                  const next = { ...draft, [row.value]: n };
+                  setDraft(next);
+                  onSelect({ ...(value ?? {}), ...next });
                 }}
-                onCommit={(n) => (onCommit ?? onSelect)(row.value, n)}
+                onCommit={(n) => {
+                  const next = { ...draft, [row.value]: n };
+                  setDraft(next);
+                  (onCommit ?? onSelect)({ ...(value ?? {}), ...next });
+                }}
               />
             </div>
           );
@@ -1208,6 +1223,13 @@ export function MatrixView({
     );
   }
 
+  // Materialised HERE, inside the matrix branch, and never for sliders: the
+  // guard caps matrix points at 7 but deliberately leaves a slider's range
+  // free, so building this list before the branch turned a guard-passing
+  // `sliders min:0 max:1e9` into a billion-element array on every render and
+  // hung the webview for the prompt's whole timeout.
+  const steps: number[] = [];
+  for (let n = min; n <= max; n++) steps.push(n);
   // The header numerals only earn their space while the targets still fit on
   // the panel's width; past the guard's 7-value cap they would be a second set
   // of numbers the user has to align by eye.
@@ -1220,7 +1242,7 @@ export function MatrixView({
     const next: Record<string, number> = {};
     for (const row of rows) next[row.value] = n;
     setDraft((d) => ({ ...d, ...next }));
-    for (const row of rows) onSelect(row.value, n);
+    onSelect({ ...merged, ...next });
   };
   return (
     <div className="cenno-matrix">
@@ -1261,8 +1283,9 @@ export function MatrixView({
                   aria-label={String(n)}
                   className={`cenno-matrix__dot${selected ? " is-selected" : ""}`}
                   onClick={() => {
-                    setDraft((d) => ({ ...d, [row.value]: n }));
-                    onSelect(row.value, n);
+                    const next = { ...draft, [row.value]: n };
+                    setDraft(next);
+                    onSelect({ ...(value ?? {}), ...next });
                   }}
                 >
                   <span className="cenno-matrix__dotnum">{n}</span>

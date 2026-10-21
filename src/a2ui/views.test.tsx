@@ -896,7 +896,7 @@ describe("MatrixView", () => {
     render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
       onSelect={onSelect} onDone={vi.fn()} />);
     fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]);
-    expect(onSelect).toHaveBeenCalledWith("useful", 3);
+    expect(onSelect).toHaveBeenCalledWith({ useful: 3 });
   });
 
   // The regression: tapping a row used to fire selectAction immediately, so the
@@ -932,6 +932,18 @@ describe("MatrixView", () => {
     fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]);
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onDone).toHaveBeenCalledWith({ pace: 2, useful: 3 });
+  });
+
+  // The data model must never regress to "only the row just touched": a host
+  // that never echoes an updateDataModel would then answer with the last tap
+  // alone, losing every earlier rating.
+  it("writes the whole accumulated map on each tap, not just the row touched", () => {
+    const onSelect = vi.fn();
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      onSelect={onSelect} onDone={vi.fn()} />);
+    fireEvent.click(screen.getAllByRole("radio", { name: "1" })[0]);
+    fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]);
+    expect(onSelect).toHaveBeenLastCalledWith({ pace: 1, useful: 3 });
   });
 
   // A payload may pre-seed `/items`, and a host that never echoes an
@@ -987,7 +999,7 @@ describe("MatrixView", () => {
     const sliders = screen.getAllByRole("slider");
     expect(sliders).toHaveLength(2);
     fireEvent.change(sliders[0], { target: { value: "7" } });
-    expect(onSelect).toHaveBeenCalledWith("pace", 7);
+    expect(onSelect).toHaveBeenCalledWith({ pace: 7 });
   });
 
   it("shows end labels once, shared by every row", () => {
