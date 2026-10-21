@@ -67,7 +67,17 @@ fn is_renderable_data_uri(rest: &str) -> bool {
 /// (absolute, image extension, size cap, magic bytes) at read time, and the
 /// guard must not stat files.
 fn check_image_url(url: &str) -> Result<(), String> {
-    if let Some(rest) = url.strip_prefix("data:") {
+    // Schemes are case-insensitive (RFC 3986) and agents do emit `DATA:` and
+    // `HTTPS:`. Lowercase only the scheme token for classification — never the
+    // payload, and never the local path.
+    let trimmed = url.trim();
+    let scheme_len = trimmed.find(':').filter(|i| *i > 0);
+    let probe = match scheme_len {
+        Some(i) => format!("{}{}", trimmed[..i].to_ascii_lowercase(), &trimmed[i..]),
+        None => trimmed.to_string(),
+    };
+
+    if let Some(rest) = probe.strip_prefix("data:") {
         if rest
             .strip_prefix("image/")
             .is_some_and(is_renderable_data_uri)
@@ -80,7 +90,7 @@ fn check_image_url(url: &str) -> Result<(), String> {
              payload); SVG and other types are not renderable"
         ));
     }
-    if url.starts_with("https:") || url.starts_with("http:") {
+    if probe.starts_with("https:") || probe.starts_with("http:") {
         return Err(format!(
             "remote images are not allowed (\"{url}\") — cenno never fetches; embed \
              the image as a data: URI or pass a local file path"
@@ -498,7 +508,6 @@ mod tests {
     fn every_bad_data_uri_shape_rejects() {
         for url in [
             "data:image/svg+xml;base64,AAAA", // XSS vector
-            "data:image/PNG;base64,AAAA",    // uppercase mime
             "data:image/png,AAAA",           // not base64
             "data:image/png;base64",         // no payload separator
             "data:,AAAA",
@@ -508,6 +517,30 @@ mod tests {
                 .unwrap_err();
             assert!(err.contains("data:image/"), "{url} must be rejected: {err}");
         }
+    }
+
+    #[test]
+    fn uppercase_scheme_is_classified_by_the_guard_not_left_to_load_image() {
+        // RFC 3986: schemes are case-insensitive. `DATA:` must be judged here —
+        // falling through as a "local path" would defer a valid data URI to
+        // load_image, which answers "not an absolute path".
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "DATA:IMAGE/PNG;base64,AA" })))
+            .unwrap_err();
+        assert!(err.contains("data:image/"), "{err}");
+
+        let remote = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "HTTPS://x/a.png" })))
+            .unwrap_err();
+        assert!(remote.contains("remote images are not allowed"), "{remote}");
+
+        // A good data URI keeps working whatever the scheme case.
+        validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "Data:Image/PNG;base64,AA" })))
+            .unwrap_err();
+        validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "data:image/png;base64,AA" })))
+            .unwrap();
     }
 
     #[test]
