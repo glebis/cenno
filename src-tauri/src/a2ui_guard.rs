@@ -77,7 +77,24 @@ fn check_image_url(url: &str) -> Result<(), String> {
     // Schemes are case-insensitive (RFC 3986) and agents do emit `DATA:` and
     // `HTTPS:`. Lowercase only the scheme token for classification — never the
     // payload, and never the local path.
-    let trimmed = url.trim();
+    //
+    // Trim ASCII whitespace ONLY, and reject a leading non-ASCII whitespace
+    // outright. `str::trim` (Rust) and `String.trim` (JS) do NOT agree: Rust
+    // strips U+0085 but not U+FEFF, JS strips U+FEFF but not U+0085. Using
+    // either one here would let the guard and resolveImageUrl classify the same
+    // input differently — the guard accepting a data URI the renderer rejects,
+    // or vice versa. ASCII-only trimming is byte-identical on both sides.
+    if let Some(c) = url.chars().next() {
+        if !c.is_ascii() && (c.is_whitespace() || c == '\u{FEFF}') {
+            return Err(format!(
+                "image url starts with a non-ASCII whitespace character (U+{:04X}) — \
+                 remove it; a data: URI or a local path must start at the first \
+                 character",
+                c as u32
+            ));
+        }
+    }
+    let trimmed = url.trim_matches(|c: char| c.is_ascii_whitespace());
     let scheme_len = trimmed.find(':').filter(|i| *i > 0);
     let probe = match scheme_len {
         Some(i) => format!("{}{}", trimmed[..i].to_ascii_lowercase(), &trimmed[i..]),
@@ -92,18 +109,40 @@ fn check_image_url(url: &str) -> Result<(), String> {
             return Ok(());
         }
         return Err(format!(
-            "malformed data: URI \"{url}\" — expected \
+            "malformed data: URI \"{trimmed}\" — expected \
              data:image/<png|jpeg|gif|webp>;base64,… (lowercase MIME, base64 \
-             payload); SVG and other types are not renderable"
+             payload); SVG and other types are not renderable{}",
+            original_note(url, trimmed)
         ));
     }
     if probe.starts_with("https:") || probe.starts_with("http:") {
         return Err(format!(
-            "remote images are not allowed (\"{url}\") — cenno never fetches; embed \
-             the image as a data: URI or pass a local file path"
+            "remote images are not allowed (\"{trimmed}\") — cenno never fetches; embed \
+             the image as a data: URI or pass a local file path{}",
+            original_note(url, trimmed)
         ));
     }
     Ok(())
+}
+
+/// Quote the untrimmed value alongside the trimmed one when they differ, so the
+/// agent can see the whitespace it sent instead of wondering why the guard
+/// "misparsed" an URL that looks correct in its own payload.
+fn original_note(url: &str, trimmed: &str) -> String {
+    if url == trimmed {
+        String::new()
+    } else {
+        format!(" (the value as sent was \"{url}\")")
+    }
+}
+
+/// `Image "hero"` when the component has an id, else the bare type name.
+/// One helper rather than four copies, so the missing-id fallback and the
+/// quoting style cannot drift between arms.
+fn component_label(obj: &serde_json::Map<String, Value>, kind: &str) -> String {
+    obj.get("id")
+        .and_then(Value::as_str)
+        .map_or_else(|| kind.to_string(), |id| format!("{kind} \"{id}\""))
 }
 
 /// Per-component prop rules. Called for every entry of every
@@ -118,14 +157,12 @@ fn check_component(component: &Value) -> Result<(), String> {
     };
     match obj.get("component").and_then(Value::as_str) {
         Some("Image") => {
-            let label = obj
-                .get("id")
-                .and_then(Value::as_str)
-                .map_or_else(|| "Image".to_string(), |id| format!("Image \"{id}\""));
+            let label = component_label(obj, "Image");
             let url = obj.get("url").and_then(Value::as_str).ok_or_else(|| {
                 format!(
-                    "{label}: Image.url must be a string (a data: URI or a local file \
-                     path), got {} — add it or remove the component",
+                    "{label}: Image.url must be a string literal (a data: URI or a \
+                     local file path), got {} — cenno does not resolve {{path}}/{{call}} \
+                     bindings here; inline the value or remove the component",
                     obj.get("url").map_or("nothing", type_name)
                 )
             })?;
@@ -143,10 +180,7 @@ fn check_component(component: &Value) -> Result<(), String> {
             let Some(style) = obj.get("displayStyle") else {
                 return Ok(());
             };
-            let label = obj.get("id").and_then(Value::as_str).map_or_else(
-                || "ChoicePicker".to_string(),
-                |id| format!("ChoicePicker \"{id}\""),
-            );
+            let label = component_label(obj, "ChoicePicker");
             match style.as_str() {
                 Some("chips" | "checkbox") => Ok(()),
                 Some(value) => Err(format!(
@@ -172,10 +206,7 @@ fn check_component(component: &Value) -> Result<(), String> {
             // allowed, because TableView pads the missing cells with an em
             // dash (a ragged last row is a normal table shape, a bulging one
             // is a bug). Do not "fix" one half without the other.
-            let label = obj
-                .get("id")
-                .and_then(Value::as_str)
-                .map_or_else(|| "Table".to_string(), |id| format!("Table \"{id}\""));
+            let label = component_label(obj, "Table");
             let columns = obj
                 .get("columns")
                 .and_then(Value::as_array)
@@ -803,6 +834,71 @@ mod tests {
             "id": "c", "component": "ChoicePicker",
             "options": [{ "label": "a", "value": "a" }] })))
         .unwrap();
+    }
+
+    // ---- whitespace + scheme normalization (Task 4 review) ----
+
+    /// SHARED CORPUS — the same table exists in `src/a2ui/image.test.ts`
+    /// ("whitespace + scheme normalization"). The two classifications must agree
+    /// input for input: if one side gains a case the other lacks, one of the two
+    /// suites fails instead of the pair drifting silently.
+    #[test]
+    fn whitespace_corpus_matches_the_frontend() {
+        const GOOD: &str = "data:image/png;base64,AA";
+
+        // ASCII whitespace around a valid value is trimmed on both sides.
+        for input in [
+            format!(" {GOOD}"),
+            format!("\t{GOOD}"),
+            format!("{GOOD}\n"),
+        ] {
+            validate_a2ui(&envelope_with(json!({
+                "id": "c", "component": "Image", "url": input })))
+            .unwrap_or_else(|e| panic!("{input:?} must pass: {e}"));
+        }
+
+        // A tab-prefixed absolute path is a path.
+        validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "\t/abs/a.png" })))
+        .unwrap();
+
+        // Trailing whitespace must not hide a remote URL.
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "https://x/a.png\n" })))
+        .unwrap_err();
+        assert!(err.contains("remote images are not allowed"), "{err}");
+
+        // Non-ASCII whitespace prefixes are rejected outright rather than
+        // misrouted: Rust's trim and JS's trim disagree on exactly these.
+        for ws in ["\u{FEFF}", "\u{a0}", "\u{85}"] {
+            for tail in [GOOD, "https://x/a.png"] {
+                let url = format!("{ws}{tail}");
+                let err = validate_a2ui(&envelope_with(json!({
+                    "id": "c", "component": "Image", "url": url })))
+                .unwrap_err();
+                assert!(
+                    err.contains("non-ASCII whitespace"),
+                    "{url:?} must be rejected for its prefix, got: {err}"
+                );
+            }
+        }
+
+        // A local path containing a colon keeps its case.
+        validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image", "url": "/Users/X:Docs/a.png" })))
+        .unwrap();
+    }
+
+    /// The untrimmed value is quoted too, so an agent that sent whitespace sees
+    /// it instead of concluding the guard misparsed a correct-looking URL.
+    #[test]
+    fn whitespace_rejection_quotes_the_value_as_sent() {
+        let err = validate_a2ui(&envelope_with(json!({
+            "id": "c", "component": "Image",
+            "url": " https://x/a.png " })))
+        .unwrap_err();
+        assert!(err.contains("https://x/a.png"), "{err}");
+        assert!(err.contains("the value as sent was"), "must show the raw value: {err}");
     }
 
     // ---- Table caps (Task 6) ----

@@ -142,3 +142,62 @@ describe("resolveImageUrl", () => {
     expect(err.reason).toContain("must be a string");
   });
 });
+
+/**
+ * SHARED CORPUS — the same table exists in `src-tauri/src/a2ui_guard.rs`
+ * (`whitespace_corpus_matches_the_frontend`). The two classifications must agree
+ * input for input; if one side gains a case the other lacks, one of the two
+ * suites fails instead of the pair drifting silently.
+ */
+describe("whitespace + scheme normalization (shared corpus with the Rust guard)", () => {
+  beforeEach(() => {
+    clearImageCache();
+    vi.mocked(invoke).mockReset();
+    vi.mocked(invoke).mockResolvedValue("data:image/png;base64,AAAA");
+  });
+
+  const acceptedDataUri = "data:image/png;base64,AA";
+
+  it.each([
+    ["ascii-space prefix", ` ${acceptedDataUri}`],
+    ["tab prefix", `\t${acceptedDataUri}`],
+    ["newline suffix", `${acceptedDataUri}\n`],
+  ])("accepts %s as the data URI it is", async (_name, input) => {
+    await expect(resolveImageUrl(input)).resolves.toBe(acceptedDataUri);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("accepts a tab-prefixed absolute path as a path", async () => {
+    await resolveImageUrl("\t/abs/a.png");
+    expect(invoke).toHaveBeenCalledWith("load_image", {
+      path: "/abs/a.png",
+      maxBytes: undefined,
+    });
+  });
+
+  it("accepts trailing newline on a remote url and still rejects it as remote", async () => {
+    const err = await resolveImageUrl("https://x/a.png\n").catch((e) => e);
+    expect(err.reason).toContain("remote images are not allowed");
+  });
+
+  it.each([
+    ["BOM", "\uFEFF"],
+    ["NBSP", "\u00a0"],
+    ["NEL", "\u0085"],
+  ])("rejects a leading %s instead of misrouting the value", async (_name, ws) => {
+    for (const tail of [acceptedDataUri, "https://x/a.png"]) {
+      const err = await resolveImageUrl(ws + tail).catch((e) => e);
+      expect(err).toBeInstanceOf(ImageLoadError);
+      expect(err.reason).toContain("non-ASCII whitespace");
+    }
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("a local path containing a colon keeps its case", async () => {
+    await resolveImageUrl("/Users/X:Docs/a.png");
+    expect(invoke).toHaveBeenCalledWith("load_image", {
+      path: "/Users/X:Docs/a.png",
+      maxBytes: undefined,
+    });
+  });
+});

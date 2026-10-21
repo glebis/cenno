@@ -53,6 +53,17 @@ function loadLocalImage(path: string): Promise<string> {
 }
 
 /**
+ * Trim ASCII whitespace only, mirroring `check_image_url` in
+ * `src-tauri/src/a2ui_guard.rs`. `String.prototype.trim` also strips U+FEFF and
+ * U+00A0 (which Rust's `str::trim` does not) while missing U+0085 (which Rust
+ * strips), so the two sides would classify the same input differently. ASCII
+ * trimming is byte-identical on both.
+ */
+function trimAscii(s: string): string {
+  return s.replace(/^[\t\n\v\f\r ]+|[\t\n\v\f\r ]+$/g, "");
+}
+
+/**
  * Classify what an agent supplied as an image reference and return something
  * safe to put in an `<img src>`.
  *
@@ -69,12 +80,17 @@ export async function resolveImageUrl(url: string): Promise<string> {
   if (typeof url !== "string") {
     throw new ImageLoadError("image url must be a string");
   }
-  const trimmed = url.trim();
-  const colon = trimmed.indexOf(":");
-  const probe =
-    colon > 0
-      ? trimmed.slice(0, colon).toLowerCase() + trimmed.slice(colon)
-      : trimmed;
+  const trimmed = trimAscii(url);
+  // A leading non-ASCII whitespace (U+00A0, U+0085, U+FEFF, …) would leave the
+  // scheme undetectable while looking invisible — reject it explicitly rather
+  // than misrouting the value into the local-path branch.
+  const first = trimmed.charAt(0);
+  if (first && first.charCodeAt(0) > 0x7f && (/\s/.test(first) || first === "\u0085")) {
+    throw new ImageLoadError(
+      "image url starts with a non-ASCII whitespace character — remove it; a data: URI or a local path must start at the first character",
+    );
+  }
+  const probe = lowerScheme(trimmed);
 
   if (DATA_URI_OK.test(probe)) return trimmed;
   if (probe.startsWith("data:")) throw new ImageLoadError(MALFORMED_DATA_URI);
@@ -84,6 +100,13 @@ export async function resolveImageUrl(url: string): Promise<string> {
   const cached = cache.get(trimmed);
   if (cached) return cached;
   return loadLocalImage(trimmed);
+}
+
+/** Lowercase ONLY the leading scheme token, never the payload or the path. */
+function lowerScheme(value: string): string {
+  const colon = value.indexOf(":");
+  if (colon <= 0) return value;
+  return value.slice(0, colon).toLowerCase() + value.slice(colon);
 }
 
 /** Drop every memoised read — used by tests and by retry affordances. */
