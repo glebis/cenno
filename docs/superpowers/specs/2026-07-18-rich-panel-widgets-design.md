@@ -1,0 +1,263 @@
+# Rich panel widgets — tables, choice presentations, multi-item evaluation, images
+
+Date: 2026-07-18
+Status: draft, awaiting review
+
+## Problem
+
+`cenno:catalog/v1` cannot express four things agents routinely need:
+
+1. **Tabular data.** No Table component exists in A2UI v0.9 (verified against
+   `@a2ui/web_core` 0.10.7 and 0.14.0 — the stock catalog is Text, Image,
+   Icon, Video, AudioPlayer, Row, Column, List, Card, Tabs, Modal, Divider,
+   Button, TextField, CheckBox, ChoicePicker, Slider, DateTimeInput). An
+   agent comparing plans, test runs, or candidates has to flatten a table into
+   prose.
+2. **Radio buttons / checkboxes.** `ChoicePickerApi` carries
+   `displayStyle: "checkbox" | "chips"` and `filterable`, but
+   `CennoChoicePicker` (`src/a2ui/catalog.tsx:213`) ignores both and always
+   renders `ChipsView`. A stacked radio list is unavailable, and multi-select
+   rendered as filled pills reads as a pressed button rather than a state.
+3. **Evaluating several items at once.** The user asked for "multiple lines,
+   each with slider / some form of radio buttons — so that I can evaluate
+   multiple items". Today the only path is N separate prompts
+   (`ask_sequence`), which shows one item at a time.
+4. **Images that reliably load.** `ImageView` (`src/a2ui/views.tsx:404`) is a
+   bare `<img>` with no load checking. The release CSP
+   (`src-tauri/tauri.conf.json:26`) is `img-src 'self' data:`, so remote URLs
+   and local file paths render as a silent blank box, and `a2ui_guard.rs`
+   validates nothing about image URLs.
+
+## Decisions
+
+| Question | Decision | Rationale |
+|---|---|---|
+| Remote (`https:`) images | **Not allowed** | The panel is a local, non-activating surface. Fetching an agent-supplied URL turns every prompt into a network client and a privacy leak (the panel would beacon to an arbitrary host). AGENTS.md permits network only for the user-initiated updater and the one-time voice model download. |
+| Local file images | **Rust command → `data:` URI** | Tauri's asset protocol would need a filesystem scope in capabilities, and any useful scope exposes more than images to the webview. A command takes one path, caps size, sniffs type. |
+| Choice presentations | **All three: radios, checkboxes, chips** | Chips stay the default when `displayStyle` is omitted, so no existing payload changes appearance. |
+| Multi-item widget | **One component, `mode: "matrix" \| "sliders"`** | Both shapes are the same data (a set of keyed values); two components would duplicate validation and styling. |
+| Multi-item answer | **JSON object string keyed by row value** | `{"pace":4,"usefulness":3}` is self-describing and parses in the agent's language without a schema fetch. Row `value` is returned; `label` is display-only. |
+| Table | **Display-only, literal rows** | Input cells multiply the guard's job (cell → binding paths) and every answer must flatten to one string anyway. Largest value for the smallest validation surface. |
+| Table column cap | **Hard cap at 4** | Panels are ~320–420px. A 5th column forces horizontal scroll in a floating panel that must not be scrolled. The guard rejects with an actionable error. |
+| Image error verbosity | **Name the reason in the panel** | A silent blank is the bug being fixed; "image failed to load" alone doesn't tell the agent what to change. The panel line is caption-size and dim — it does not compete with the question. |
+| Combined panel height | **Matrix capped at 3 rows** | `resize_panel` clamps to 240–560px. A table plus a longer matrix exceeds that and scrolls. More items belong in `ask_sequence`. |
+
+## Components
+
+### 1. `CheckListView` — a new view behind the existing `ChoicePicker`
+
+This is not a new catalog component: `ChoicePicker` stays the component name
+and the schema is unchanged. What changes is that `CennoChoicePicker` stops
+discarding `displayStyle` and renders one of three presentations from
+the new `CheckListView`. Selected values remain
+`string[]` in the data model; single-select still unwraps to one element in
+`src/PromptPanel.tsx:151`, so the answer contract is unchanged.
+
+No new schema. The adapter reads the stock `displayStyle` and `variant`:
+
+| `displayStyle` | `variant` | rendering |
+|---|---|---|
+| `"chips"` (cenno default) | either | existing `ChipsView` pills |
+| `"checkbox"` | `"mutuallyExclusive"` | radio list, `role="radiogroup"` + `role="radio"` + `aria-checked` |
+| `"checkbox"` | `"multipleSelection"` | checkbox list, `role="group"` + `role="checkbox"` + `aria-checked` |
+| — | `"words"` (cenno extension) | existing bare-word row, unchanged |
+
+The marks are drawn in CSS (a border-radius circle with an inset filled dot;
+a 3px-radius square with an inset check) rather than native
+`<input type=radio>`, because the panel's type and line tokens must survive —
+native controls ignore `--cenno-type-*` and render at OS sizes on a colored
+surface. Keyboard and VoiceOver support comes from the ARIA roles plus
+`tabIndex` and Space/Enter handling, tested in `views.test.tsx`.
+
+The default is `"chips"` when `displayStyle` is absent. Upstream defaults it
+to `"checkbox"`, but cenno's identity is the chip and every shipped payload
+omits the field — adopting the upstream default would silently restyle every
+existing prompt.
+
+### 2. `RatingMatrix` — custom (new)
+
+One component, `mode` selects the presentation. Both modes render from a
+single view, `MatrixView`, which switches on `mode` — the two presentations
+share the row model, the caps, and the answer encoding.
+
+```
+{ id: "items", component: "RatingMatrix",
+  mode: "matrix" | "sliders",
+  rows: [ { value: "pace", label: "Pace" }, … ],
+  min, max, step,                        // matrix: 1..max points; sliders: range
+  minLabel, maxLabel,
+  value: { path: "/items" },
+  selectAction: { event: { name: "submit-items",
+                           context: { value: { path: "/items" }, via: "choice" } } } }
+```
+
+- `mode: "matrix"` — a grid: first column is the row label, then one radio
+  point per value from `min` to `max`. One tap answers that row. The dot shows
+  its numeral once selected (and on hover), so the scale is legible without
+  counting.
+- `mode: "sliders"` — one label + numeric readout + slider per row. Commits on
+  thumb release (pointer) or Enter (keyboard), matching `SliderView`'s existing
+  contract in `src/a2ui/views.tsx:290`.
+
+Rows carry `value` (the returned key) and `label` (display only). A row with a
+label but no value derives its key by slugifying the label, so the simplest
+payload still works.
+
+`value` binds to the data model as an object (`/items`), not an array: each row
+writes `path + "/" + row.value`. That keeps the mapping positional-free — row
+order can change without corrupting answers.
+
+`rows` length is capped at **3** and `max - min + 1` at **7**, both enforced in
+`a2ui_guard.rs` with errors naming the limit and pointing at `ask_sequence`.
+Over either cap the guard rejects before a prompt is registered, so the failure
+is an actionable tool error rather than a clipped panel.
+
+### 3. `Table` — custom (new)
+
+```
+{ id: "plan", component: "Table",
+  header: true,
+  columns: [ { label: "Plan" }, { label: "/mo", align: "end" },
+             { label: "Seats", align: "end" } ],
+  rows: [ ["Starter", "9", "1"], ["Team", "29", "5"] ],
+  dense: false }
+```
+
+- Display only. `rows` is an array of arrays of strings; numbers may be sent as
+  JSON numbers and are stringified on render.
+- `columns[].align` accepts `"start"` (default) or `"end"`; the end alignment
+  uses tabular numerals so digits line up. A per-column alignment array is the
+  reason numbers stop wobbling — a single table-wide setting cannot express
+  "labels left, money right".
+- `header: false` renders the body only.
+- `dense: true` halves vertical cell padding.
+- Hairlines only — bottom borders on each row, no outer border, no zebra
+  striping, no background. It sits on the flow color like every other
+  component.
+- Header cells use the caption size, dim color, uppercase, and letter spacing,
+  matching the existing `ScaleView` end labels.
+- Caps: **4 columns**, **12 rows** — both in `a2ui_guard.rs`.
+
+### 4. `Image` — existing component, hardened
+
+Keeps the stock `ImageApi` (`url`, `description`, `fit`, `variant`). Adds
+behaviour, no schema change beyond what the guard accepts.
+
+**Accepted `url` forms:**
+
+| form | handling |
+|---|---|
+| `data:image/<png\|jpeg\|gif\|webp>;base64,…` | used directly; scheme and mime prefix validated |
+| `https:` / `http:` | rejected with `remote images are not allowed — embed it as a data: URI or pass a local file path` |
+| absolute path (`/Users/x/a.png`), `~/a.png`, `./a.png` | resolved by the new Rust command into a `data:` URI |
+
+**New Rust command** `load_image(app, path, max_bytes) -> Result<String, String>`
+in a new `src-tauri/src/image.rs`, registered in the
+`tauri::generate_handler!` list (`src-tauri/src/lib.rs:965`):
+
+1. Reject non-absolute paths (after expanding a leading `~`).
+2. `canonicalize`, then require a regular file.
+3. Require an extension in `png/jpeg/jpg/gif/webp` — extension check first so a
+   directory or a `/dev/...` device never reaches `read`.
+4. `metadata().len()` against `max_bytes` (default 512 KiB, clamped to
+   1–4096 KiB) *before* reading, so an oversized file is never loaded.
+5. Read the bytes, sniff the magic number, and reject if it disagrees with the
+   extension (`PNG` signature, `\xFF\xD8\xFF`, `GIF8`, `RIFF…WEBP`).
+6. Return `data:<mime>;base64,<…>`.
+
+Every failure is a specific `Err` string: `file not found`,
+`not an image (extension ".txt")`, `too large (1.4 MB, max 512 KB)`,
+`contents are not a valid PNG`. These strings are what the panel shows.
+
+**Frontend helper** `resolveImageUrl(url)` in a new `src/a2ui/image.ts`:
+classifies the URL and either returns a `data:` URI, throws a named error for a
+rejected scheme, or awaits `invoke("load_image", …)`. Results are memoised in a
+small `Map` keyed by path so a table of thumbnails does not re-read a file on
+every re-render.
+
+**`ImageView` states**, all with a fixed-size box matching the `variant` cap so
+the panel never jumps:
+
+- *loading* — shimmer tint, `prefers-reduced-motion` gets a static tint
+- *ok* — the `<img>`, with `onLoad`/`onError` wired so a decode failure in the
+  webview is caught too (a valid `data:` URI can still fail to decode)
+- *error* — an icon glyph plus a caption-size dim line reading
+  `image failed to load — <reason>`
+
+The view never throws: a broken image degrades to the error line and the prompt
+stays answerable.
+
+## Boundary validation (`src-tauri/src/a2ui_guard.rs`)
+
+The guard grows from "is this a well-formed envelope" to "could this render".
+New checks, each with an error naming the limit and the fix:
+
+- `Table`: `columns.len() <= 4`, `rows.len() <= 12`, every row length equals
+  `columns.len()`, `columns[].align` in `{"start","end"}`.
+- `RatingMatrix`: `rows.len() <= 3`, `max - min + 1 <= 7`, `mode` in
+  `{"matrix","sliders"}`, every row has a non-empty `label` or `value`.
+- `Image`: `url` is a string; if it starts with a scheme, the scheme is in
+  `{"data"}`; `data:` URIs must match
+  `^data:image/(png|jpeg|gif|webp);base64,`.
+- `ChoicePicker`: `displayStyle` in `{"chips","checkbox"}` when present.
+
+Validation walks `updateComponents.components`, keying on the `component`
+string. Components not in the catalog are left to the renderer, as today.
+
+The existing 200-component and 256 KiB caps stay. A 4×12 table is 1 component,
+so tables cost almost nothing against them; a matrix is likewise one component.
+
+## Files touched
+
+| file | change |
+|---|---|
+| `src/a2ui/views.tsx` | add `CheckListView`, `MatrixView`, `TableView`; harden `ImageView` |
+| `src/a2ui/views.test.tsx` | tests for each new view + image three-state behaviour |
+| `src/a2ui/catalog.tsx` | honour `displayStyle`; add `TableApi`, `RatingMatrixApi` + adapters |
+| `src/a2ui/catalog.css` | styles for the list, matrix, slider rows, table, image states |
+| `src/a2ui/image.ts` | new — URL classification + `load_image` invocation + memo |
+| `src-tauri/src/image.rs` | new — the loader command |
+| `src-tauri/src/lib.rs` | register `image::load_image` |
+| `src-tauri/src/a2ui_guard.rs` | new structural checks + tests |
+| `src-tauri/src/protocol.rs` | no change (input kinds unchanged) |
+| `skills/cenno/SKILL.md` | document the three new widgets, the image rules, the caps |
+| `docs/design/CONTROLS.md` | record the new presentations |
+
+## Testing
+
+- `npx vitest run` — view-level: radio semantics (`role="radio"` +
+  `aria-checked`), checkbox toggle, matrix row selection reporting a keyed
+  object, slider-row commit on release/Enter, table alignment classes, image
+  loading/ok/error transitions with a mocked `invoke`.
+- `cargo test` in `src-tauri/` — guard rejects oversized tables, too many
+  matrix rows, a `https:` image, a malformed `data:` URI, an unknown
+  `displayStyle`; `load_image` rejects a missing file, a non-image extension, a
+  file over the cap, and mismatched magic bytes; accepts a small real PNG.
+- `npm run typecheck:tests`.
+- Manual: `./scripts/demo.sh` gains one demo prompt per new widget (table,
+  matrix, slider rows, image ok + image error) for visual QA.
+
+## Risks
+
+- **Panel height.** Even capped at 3 matrix rows, a table + matrix + chips
+  approaches the 560px clamp. Mitigation: the caps above, plus the existing
+  content-driven `resize_panel` fit. If a combination still overflows, the
+  panel scrolls — acceptable, but the caps are tuned to make it rare.
+- **ARIA-only controls.** Hand-rolled radios/checkboxes lose native keyboard
+  behaviour, so Space/Enter and arrow-key navigation must be implemented and
+  tested explicitly. If that proves fragile, the fallback is a visually hidden
+  native `<input type=radio>` behind the drawn mark — same look, real
+  semantics.
+- **`load_image` is a file-read primitive reachable from the webview.** It is
+  bounded (one path, image extensions only, size cap, magic-byte sniff) but it
+  is still a new read surface. It is only reachable from the panel webview,
+  which the CSP pins to `'self'`.
+- **The image memo map grows** with distinct paths per panel. It is cleared on
+  each `prompt.id` change with the rest of the surface state.
+
+## Out of scope
+
+- Input cells in tables, sorting, filtering, column resize.
+- Remote image fetching, including an opt-in config flag.
+- More than 3 matrix rows or more than 4 table columns.
+- Any change to the answer contract (`{answer, via, elapsed_s}` is untouched).
