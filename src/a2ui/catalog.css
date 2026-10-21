@@ -716,12 +716,11 @@
 /* Column hover, driven by which header the pointer is in: reading a table
    often means reading DOWN a column, and a row-only wash gives no help there.
    Slightly stronger than the row wash (7%) because one column is a thinner
-   band than one row and needs a touch more to register — plus a 1px vertical
-   hairline on the left edge that fades in, so the column reads as a unit
-   without the table gaining a visible grid. */
+   band than one row and needs a touch more to register. No edge line: the wash
+   alone is enough to read the column as a unit, and a vertical rule inside a
+   table that has no other vertical rules looks like a stray border. */
 .cenno-table .is-col-hover {
   background-color: color-mix(in srgb, var(--cenno-text) 7%, transparent);
-  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--cenno-line) 80%, transparent);
 }
 
 /* A cell that is both in the hovered column and a hovered row keeps one wash,
