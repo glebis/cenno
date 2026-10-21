@@ -19,6 +19,7 @@
 //! absolute path, one bounded file.
 
 use base64::Engine;
+use std::io::Read;
 
 /// Cap used when the caller does not ask for one: 512 KiB.
 const DEFAULT_CAP_BYTES: u64 = 512 * 1024;
@@ -103,19 +104,38 @@ fn expand_tilde(path: &str) -> Result<String, String> {
 /// Read one local image and return `(mime, bytes)`.
 ///
 /// Deliberately takes no `AppHandle` so tests run without a Tauri runtime.
-/// `max_bytes` is expected to be pre-clamped by [`clamp_cap`] (or be a
-/// deliberate internal limit); it is the hard ceiling for this read.
+/// `max_bytes` is clamped here, so no caller can re-open the DoS the clamp
+/// exists to close.
 pub fn load_image_bytes(path: &str, max_bytes: u64) -> Result<(String, Vec<u8>), String> {
+    let max_bytes = max_bytes.clamp(MIN_CAP_BYTES, MAX_CAP_BYTES);
     let path = expand_tilde(path)?;
 
     if !std::path::Path::new(&path).is_absolute() {
         return Err(format!(
-            "not an absolute path: {path}; cenno loads local images by absolute path only \
+            "not an absolute path: {path} — cenno loads local images by absolute path only \
              (e.g. /Users/you/shot.png, or ~/shot.png)"
         ));
     }
 
-    // 2. Extension allowlist — before any read.
+    // 2. Existence + kind. `metadata` reads no content, so reporting the true
+    //    first error (missing vs. wrong type) costs nothing on the read surface.
+    let meta = std::fs::metadata(&path).map_err(|e| match e.kind() {
+        std::io::ErrorKind::NotFound => {
+            format!("file not found: {path} — the assistant sent a path that does not exist")
+        }
+        std::io::ErrorKind::PermissionDenied => format!(
+            "not readable: {path} — cenno has no permission to read it; check the file's \
+             permissions"
+        ),
+        _ => format!("could not stat: {path} — {e}"),
+    })?;
+    if !meta.is_file() {
+        return Err(format!(
+            "not a regular file: {path} — cenno loads single image files by absolute path"
+        ));
+    }
+
+    // 3. Extension allowlist — before any read.
     let ext = std::path::Path::new(&path)
         .extension()
         .and_then(|e| e.to_str())
@@ -123,49 +143,50 @@ pub fn load_image_bytes(path: &str, max_bytes: u64) -> Result<(String, Vec<u8>),
     let mime = match ext.as_deref() {
         Some(e) => mime_for_extension(e).ok_or_else(|| {
             format!(
-                "not an image: {path} ends in .{e}; cenno only loads {ALLOWED_EXTENSIONS} — \
-                 convert the file or point at an image"
+                "not an image (extension \".{e}\"): {path} — cenno only loads \
+                 {ALLOWED_EXTENSIONS}"
             )
         })?,
         None => {
             return Err(format!(
-                "not an image: {path} has no file extension; cenno only loads \
-                 {ALLOWED_EXTENSIONS} — point at an image file"
+                "not an image (no extension): {path} — cenno only loads {ALLOWED_EXTENSIONS}"
             ))
         }
     };
 
-    // 3. Existence + size — still before any read.
-    let meta = std::fs::metadata(&path).map_err(|_| {
-        format!("file not found: {path} does not exist — check the path the agent supplied")
-    })?;
-    if !meta.is_file() {
-        return Err(format!(
-            "not a regular file: {path} is not a readable file; cenno loads single image files \
-             by absolute path"
-        ));
-    }
+    // 4. Size — still before any read.
     let size = meta.len();
     if size > max_bytes {
         return Err(format!(
-            "too large: {path} is {} but the cap is {} — raise max_bytes (up to {}) or \
-             downscale the image",
+            "too large ({} , max {}): {path} — raise max_bytes (up to {}) or downscale the image",
             human_size(size),
             human_size(max_bytes),
             human_size(MAX_CAP_BYTES)
         ));
     }
 
-    // 4. Read, bounded by the cap we already checked.
-    let bytes = std::fs::read(&path).map_err(|e| {
-        format!("could not read {path}: {e} — check that the file is readable by cenno")
-    })?;
+    // 5. Read, bounded by `max_bytes` structurally — a file that grows between
+    //    the stat above and this read cannot push past the cap.
+    let mut bytes = Vec::with_capacity(size as usize);
+    std::fs::File::open(&path)
+        .map_err(|e| format!("could not read: {path} — {e}"))?
+        .take(max_bytes + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("could not read: {path} — {e}"))?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(format!(
+            "too large ({} read, max {}): {path} — the file grew while it was being read; \
+             raise max_bytes or downscale the image",
+            human_size(bytes.len() as u64),
+            human_size(max_bytes)
+        ));
+    }
 
-    // 5. The bytes must actually be the format the extension claims.
+    // 6. The bytes must actually be the format the extension claims.
     if !magic_bytes_match(mime, &bytes) {
         return Err(format!(
-            "not a valid {}: {path} has a matching extension but its first bytes are not a {} \
-             signature — the file is mislabeled or corrupt; re-export it",
+            "contents are not a valid {}: {path} — the extension says {} but the first bytes \
+             disagree; the file is mislabeled or corrupt",
             type_label(mime),
             type_label(mime)
         ));
@@ -185,7 +206,9 @@ pub fn data_uri(path: &str, max_bytes: Option<u64>) -> Result<String, String> {
 /// Tauri command: read ONE local image file and return it as a `data:` URI.
 ///
 /// `max_bytes` is optional and clamped to 1 KiB..=4 MiB (default 512 KiB).
-#[tauri::command]
+/// `async` keeps the file read + base64 encode off the thread servicing the
+/// panel webview, which is mid-slide-in when this fires.
+#[tauri::command(async)]
 pub fn load_image(path: String, max_bytes: Option<u64>) -> Result<String, String> {
     data_uri(&path, max_bytes)
 }
@@ -195,10 +218,19 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    fn write_tmp(name: &str, bytes: &[u8]) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join("cenno-image-tests");
+    /// Per-test unique directory: two concurrent `cargo test` runs (or a stale
+    /// file from a previous run) cannot interfere.
+    fn test_dir() -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("cenno-image-tests-{}-{n}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let p = dir.join(name);
+        dir
+    }
+
+    fn write_tmp(name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let p = test_dir().join(name);
         let mut f = std::fs::File::create(&p).unwrap();
         f.write_all(bytes).unwrap();
         p
@@ -210,7 +242,15 @@ mod tests {
     fn accepts_a_real_png_and_returns_a_data_uri() {
         let p = write_tmp("ok.png", PNG);
         let uri = data_uri(p.to_str().unwrap(), None).unwrap();
-        assert!(uri.starts_with("data:image/png;base64,"));
+        let b64 = uri
+            .strip_prefix("data:image/png;base64,")
+            .expect("prefix");
+        // The whole point of the command is faithful byte transport — decode
+        // and compare, do not just trust the prefix.
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .expect("valid base64");
+        assert_eq!(decoded, PNG);
     }
 
     #[test]
@@ -228,10 +268,31 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_directory() {
-        let dir = std::env::temp_dir().join("cenno-image-tests");
+    fn rejects_a_directory_even_when_named_like_an_image() {
+        // Named `.png` so it passes the extension gate and actually exercises
+        // the `is_file()` guard that keeps `read` away from non-regular files.
+        let dir = test_dir().join("looks-like.png");
+        std::fs::create_dir_all(&dir).unwrap();
         let err = data_uri(dir.to_str().unwrap(), None).unwrap_err();
-        assert!(err.contains("not an image") || err.contains("not a regular file"), "{err}");
+        assert!(err.contains("not a regular file"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_fifo_named_like_an_image() {
+        let dir = test_dir();
+        let fifo = dir.join("pipe.png");
+        let ok = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !ok {
+            eprintln!("mkfifo unavailable — skipping");
+            return;
+        }
+        let err = data_uri(fifo.to_str().unwrap(), None).unwrap_err();
+        assert!(err.contains("not a regular file"), "{err}");
     }
 
     #[test]
@@ -255,6 +316,49 @@ mod tests {
         let p = write_tmp("liar.png", b"not a png at all");
         let err = data_uri(p.to_str().unwrap(), None).unwrap_err();
         assert!(err.contains("not a valid PNG"), "{err}");
+    }
+
+    #[test]
+    fn clamp_is_enforced_inside_the_read_not_only_in_data_uri() {
+        // `load_image_bytes` is the shared entry point; a caller passing a huge
+        // cap directly must still be bounded.
+        let mut big = PNG.to_vec();
+        big.resize(MAX_CAP_BYTES as usize + 1, 0);
+        let p = write_tmp("huge.png", &big);
+        let err = load_image_bytes(p.to_str().unwrap(), u64::MAX).unwrap_err();
+        assert!(err.contains("too large"), "{err}");
+    }
+
+    #[test]
+    fn magic_sniff_handles_short_and_boundary_inputs_without_panicking() {
+        // A refactor to direct indexing must not introduce an OOB panic here.
+        assert!(!magic_bytes_match("image/png", b""));
+        assert!(!magic_bytes_match("image/webp", b""));
+        assert!(!magic_bytes_match("image/webp", b"RIFF"));
+        assert!(!magic_bytes_match("image/webp", b"RIFFabcdWEB")); // 11 bytes
+        assert!(magic_bytes_match("image/webp", b"RIFFabcdWEBP")); // 12 bytes
+        assert!(!magic_bytes_match("image/gif", b"GIF"));
+        assert!(magic_bytes_match("image/gif", b"GIF89a"));
+        assert!(!magic_bytes_match("image/jpeg", b"\xff\xd8"));
+        assert!(magic_bytes_match("image/jpeg", b"\xff\xd8\xff\xe0"));
+    }
+
+    #[test]
+    fn expands_a_tilde_path() {
+        let home = std::env::var("HOME").expect("HOME");
+        if home.is_empty() || !std::path::Path::new(&home).is_absolute() {
+            eprintln!("HOME unusable — skipping");
+            return;
+        }
+        // Write a real PNG somewhere under $HOME and address it as ~/…
+        let rel = format!("cenno-image-test-{}.png", std::process::id());
+        let abs = std::path::Path::new(&home).join(&rel);
+        std::fs::write(&abs, PNG).unwrap();
+        let tilde = format!("~/{rel}");
+        let uri = data_uri(&tilde, None);
+        let _ = std::fs::remove_file(&abs);
+        let uri = uri.unwrap_or_else(|e| panic!("~ expansion failed: {e}"));
+        assert!(uri.starts_with("data:image/png;base64,"));
     }
 
     #[test]
