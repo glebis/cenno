@@ -23,8 +23,9 @@ src-tauri/src/          Rust backend
   cli.rs                `cenno ask`, `cenno export`, `--tray`, `--mcp-stdio`
   updater.rs            GitHub-releases updater (user-initiated only)
   a2ui_guard.rs         A2UI payload validation at the boundary
+  image.rs              bounded local-image loader → data: URI (extension + magic-byte checked)
 tokens/tokens.json      W3C DTCG design tokens — single source of truth for styling
-docs/design/            TOKENS.md (design system), BRAND.md (the mark)
+docs/design/            TOKENS.md (design system), CONTROLS.md (A2UI catalog), BRAND.md (the mark)
 docs/superpowers/       spec → plan → review trail the app was built from
 skills/cenno/           agent skill teaching ask_user etiquette + setup
 scripts/                smoke.sh, demo.sh (fire test prompts), visual-qa.sh

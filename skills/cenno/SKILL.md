@@ -281,12 +281,21 @@ Exit codes: `0` answered, `2` timed out, `1` not running / error. On success it 
   "choices": ["Deep work", "Meetings", "Scattered"],  // required for kind:choice
   "flow": "ema",       // color theme: mood | question | ema | reminder | ambient
   "progress": { "step": 2, "total": 5 },  // dot pagination for multi-step flows
-  "timeout_s": 120     // default 120
+  "timeout_s": 120,    // default 120 (or ~/.cenno defaults.timeout_s)
+  "urgency": "normal", // low | normal | high — how hard the panel asks for attention
+  "say": "Deploy question needs you",  // short line spoken aloud instead of reading the panel
+  "muted": false       // true = open silently regardless of urgency gating
 }
 ```
 
-Returns `{"answer": "...", "via": "text"|"choice", "elapsed_s": 1.4}`, or
-`{"answered": false, "prompt_id": "p_3"}` on timeout.
+Returns `{"answer": "...", "via": "text"|"choice"|"voice_text", "elapsed_s": 1.4, "muted": false}`, or
+`{"answered": false, "prompt_id": "p_3"}` on timeout. `muted` is the panel's *final* voice state and may be absent on an older frontend — treat a missing value as "unknown", not as `false`.
+
+**`say` and `muted` are about the voice channel.** Write `say` as a phrase for the ear, not a copy of the title — the panel shows the long version, the speaker gets one short line. `muted: true` opens the panel silently even when your urgency would normally make it speak; the effective mute state comes back on `muted` in the answer, so you can tell whether the user actually heard it.
+
+**`urgency` gates whether the panel speaks and how insistently it appears.** Leave it out for a normal question; use `low` for FYI-shaped prompts you don't want announced, `high` only when the answer genuinely blocks the user's next action.
+
+**`device_hint`** (`"phone"` | `"ipad"` | `"watch"`) is a *proposal*, not a command — the user's own routing policy in `~/.cenno` decides, and can ignore it entirely. Omit it unless cross-device delivery is what you actually want.
 
 ### Choosing the input kind
 
@@ -318,6 +327,7 @@ Match the *shape of the decision* to the widget. Work down this table and take t
 | open-ended, a sentence or more | `voice_text` | same as `text` plus a mic — default to it over `text` when the answer is likely > a few words |
 | a date, time, or deadline | `a2ui` **DateTimeInput** | native picker; `enableDate`/`enableTime` |
 | a stacked list of mutually exclusive options | `a2ui` **ChoicePicker** + `"displayStyle":"checkbox"` | radio rows instead of chips — use when labels are long or there are 4–6 of them; omit `displayStyle` to keep chips |
+| pick **several** of a known list | `a2ui` **ChoicePicker** + `"variant":"multipleSelection"` | checkbox behaviour (add `displayStyle:"checkbox"` for a list, omit it for chips). No `value` may contain a comma — the answer is comma-joined |
 | several items each needing a rating, or each on a continuum | `a2ui` **RatingMatrix** | `mode:"matrix"` = one row of numeral targets per item; `mode:"sliders"` = one slider per item. ≤3 rows, ≤7 points. Answer comes back as JSON keyed by row value |
 | comparing structured records (plans, candidates, diffs) | `a2ui` **Table** | display-only, ≤4 columns × ≤12 rows; the question is asked by a widget alongside it |
 | picking one (or several) of up to 10 visual artifacts | `a2ui` **ImageChoice** | adaptive grid, ≤10 tiles; a failed tile keeps its place and stays selectable |
@@ -327,12 +337,27 @@ Match the *shape of the decision* to the widget. Work down this table and take t
 
 Two rules that trump the table: **one decision per panel** (if a prompt needs two widgets to answer two things, it's two questions — use `ask_sequence`), and **the widget must constrain the answer to what you can act on** (if you'd have to parse or re-ask, you picked too loose a widget).
 
+### Answers that are not a single token
+
+`answer` is always one string, so a widget that can report several selections has to flatten — and knowing how saves you a parsing bug:
+
+| the user did | `answer` is |
+|---|---|
+| picked one option (any widget) | that option's `value` |
+| picked **one** in a `multipleSelection` | that single `value`, unwrapped — *not* an array and not `"v1,"` |
+| picked **several** in a `multipleSelection` | the values joined with `,` — `"v1,v3"` |
+| rated several rows in a **RatingMatrix** | a JSON **object** as text — `"{\"pace\":4,\"useful\":3}"`; `JSON.parse` it |
+
+So a multi-select never tells you "one" by wrapping it — check for a `,` if you need to distinguish, and never put a comma inside an option `value` (the guard rejects it for exactly this reason). For a matrix, parse rather than string-match: only the rows the user actually rated appear in the object.
+
 ### Showing images — conventions
 
 The release build's CSP allows only `img-src 'self' data:`. That means:
 
 - **`data:` URIs work** — the default and the cheapest thing to reason about.
-- **Local absolute file paths work** — `/Users/me/out/thumb.png` is read by the app through the `load_image` command and turned into a `data:` URI for you. The file must have an image extension (`.png` `.jpg` `.jpeg` `.gif` `.webp`), be a regular file the app can read, and be **≤512 KiB** (pass `maxBytes` to raise it, capped at 4096). This is the practical route for files you just produced with `sips`/ffmpeg — no base64 round-trip through your own context.
+- **Local absolute file paths work** — `/Users/me/out/thumb.png` is read by the app through the `load_image` command and turned into a `data:` URI for you. The file must have an image extension (`.png` `.jpg` `.jpeg` `.gif` `.webp`), be a regular file the app can read, and be **≤512 KiB**. This is the practical route for files you just produced with `sips`/ffmpeg — no base64 round-trip through your own context.
+
+  If a file is over the cap the panel names it (`too large — 1.2 MB, the limit is 512 KB`) rather than failing silently, so downscale and re-send: `sips -Z 640 -s format jpeg -s formatOptions 60 in.png --out /tmp/small.jpg`. The cap is not adjustable from a payload — the `load_image` command takes a `maxBytes` argument, but no `a2ui` prop plumbs it, so 512 KiB is the number that matters to you.
 - **Remote URLs never render** — `https:`/`http:` are rejected with a named error in the panel. cenno does not fetch. Download the file yourself and pass the path or a `data:` URI.
 
 When you do embed base64, remember the whole `a2ui` payload is capped at 256 KiB, so downscale/compress first (~600px JPEG ≈ 60 KB is plenty at panel size):
@@ -518,7 +543,7 @@ Use this instead of firing N scale prompts when the user must judge several item
 - **Clicking a column numeral rates every row at once** — three items on the same scale is the common case. Rows stay individually adjustable afterwards.
 - **Nothing answers until the user presses `Done`.** Both modes accumulate, then the `Done` button (rename it with `doneLabel`) submits every rated row at once. Rating some rows and skipping others is a valid partial answer; `Done` is disabled only when nothing has been rated.
 - **The answer is JSON keyed by row `value`**: `{"answer":"{\"pace\":4,\"useful\":3}","via":"choice"}` — parse the `answer` string, don't string-match it. Only the rows the user actually touched appear.
-- Caps: **≤3 rows, ≤7 points** (the 7-point cap applies to `matrix` only; sliders are continuous). `rows[].value` is required and is what comes back; `label` is display-only.
+- Caps: **≤3 rows, ≤7 points** (the 7-point cap applies to `matrix` only; sliders are continuous). `rows[].value` is required and is what comes back; `label` is display-only. **Row values must be distinct** — the answer is an object keyed by them, so two rows sharing a value would collapse into one entry and one rating would overwrite the other. The guard rejects duplicates by name.
 
 ## Compare records in a `Table`
 

@@ -95,6 +95,7 @@ Once installed it activates on its own whenever a task calls for asking the user
 
 - **Focus-preserving**: the panel is a non-activating macOS panel — it floats above your work but never grabs your keyboard. You answer when you glance at it, not when it interrupts you.
 - **Structured answers**: agents get typed results (text / choice / scale / confirm), not parsed strings.
+- **Rich when it needs to be**: tables, radio lists, a per-item rating matrix, and image pickers — rendered in the panel, not dumped as text into a terminal.
 - **Respectful by policy**: pause it from the tray (15 min → until tomorrow), and it stays quiet automatically while the screen it lives on is in fullscreen. Suppressed prompts queue and replay; agents just see their normal timeout.
 - **Local, inspectable storage**: every outcome lands in a local SQLite file (`0600` permissions) and exports as JSON/CSV.
 
@@ -111,9 +112,26 @@ Once installed it activates on its own whenever a task calls for asking the user
 | `flow` | `mood` · `question` · `ema` · `reminder` · `ambient` | panel color theme |
 | `progress` | `{step, total}` | dot pagination for multi-step flows |
 | `timeout_s` | number | default 120 |
-| `a2ui` | array | optional rich layout ([A2UI](https://a2ui.org) v0.9 messages, validated at the boundary; see [docs/design/TOKENS.md](docs/design/TOKENS.md)) |
+| `urgency` | `low` · `normal` · `high` | how insistently the panel asks (and whether it speaks) |
+| `say` | string | short line spoken aloud instead of reading the panel |
+| `muted` | boolean | open silently regardless of urgency gating |
+| `device_hint` | `phone` · `ipad` · `watch` | a *proposal* — your `~/.cenno` routing policy decides |
+| `a2ui` | array | optional rich layout ([A2UI](https://a2ui.org) v0.9 messages, validated at the boundary; see [docs/design/CONTROLS.md](docs/design/CONTROLS.md)) |
 
-Returns `{answer, via, elapsed_s}`, or `{answered: false, prompt_id}` on timeout.
+Returns `{answer, via, elapsed_s, muted}`, or `{answered: false, prompt_id}` on timeout. `muted` is the panel's final voice state and may be absent on older frontends.
+
+### Rich panels (`a2ui`)
+
+For anything a title + a row of buttons cannot express, an agent can send an `a2ui` payload ([A2UI](https://a2ui.org) v0.9, catalog `cenno:catalog/v1`) and get a composed panel instead. Beyond the standard text/row/column/button/field controls, cenno adds four:
+
+| component | what it is for |
+|---|---|
+| **`Table`** | display-only structured comparison — ≤4 columns × ≤12 rows, per-column end alignment so numbers line up. Pair it with a widget that asks the question. |
+| **`RatingMatrix`** | rate several items in one panel — a numeral target row per item (`mode: "matrix"`) or a slider per item (`mode: "sliders"`) — ≤3 rows. Answers as JSON keyed by row value, submitted with an explicit **Done**. |
+| **`ImageChoice`** | pick one (or several) of up to 10 images in an adaptive grid. A tile that fails to load keeps its place and stays selectable. |
+| **`ChoicePicker`** | the standard control, plus `displayStyle: "checkbox"` for a real radio/checkbox list instead of chips. |
+
+Payloads are validated at the boundary — an invalid one returns an actionable error instead of a blank panel. Images may be `data:` URIs or local file paths; remote URLs are rejected by design, because cenno never fetches. Full schemas and worked examples: [docs/design/CONTROLS.md](docs/design/CONTROLS.md).
 
 ### `ask_sequence`
 
