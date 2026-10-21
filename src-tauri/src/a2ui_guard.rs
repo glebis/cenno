@@ -482,6 +482,12 @@ fn check_component(component: &Value) -> Result<(), String> {
                     rows.len()
                 ));
             }
+            // Duplicate row values are not a style problem: the answer is a
+            // JSON object keyed by them, so two rows sharing a value collapse
+            // into ONE entry and the user's rating of one row silently
+            // overwrites the other.
+            let mut seen: std::collections::BTreeMap<&str, usize> =
+                std::collections::BTreeMap::new();
             for (i, row) in rows.iter().enumerate() {
                 let Some(row_obj) = row.as_object() else {
                     return Err(format!(
@@ -490,7 +496,15 @@ fn check_component(component: &Value) -> Result<(), String> {
                     ));
                 };
                 match row_obj.get("value").and_then(Value::as_str) {
-                    Some(value) if !value.trim().is_empty() => {}
+                    Some(value) if !value.trim().is_empty() => {
+                        if let Some(first) = seen.insert(value, i) {
+                            return Err(format!(
+                                "{label}: rows {first} and {i} both use \"{value}\" — the answer \
+                                 is an object keyed by row value, so one rating would overwrite \
+                                 the other; give each row a distinct value"
+                            ));
+                        }
+                    }
                     Some(_) => {
                         return Err(format!(
                             "{label}: row {i} has an empty \"value\"; it is the key this \
@@ -1338,6 +1352,25 @@ mod tests {
             .map(|i| json!({ "value": format!("r{i}"), "label": format!("R{i}") }))
             .collect();
         matrix(json!({ "rows": rows, "min": 1, "max": 7 })).unwrap();
+    }
+
+    #[test]
+    fn matrix_duplicate_row_values_reject_because_the_answer_is_keyed_by_them() {
+        let err = matrix(json!({ "rows": [
+            { "value": "pace", "label": "Pace" },
+            { "value": "pace", "label": "Pace again" }
+        ]}))
+        .unwrap_err();
+        assert!(err.contains("rows 0 and 1"), "must name both rows: {err}");
+        assert!(err.contains("\"pace\""), "must quote the value: {err}");
+        assert!(err.contains("distinct"), "must give the fix: {err}");
+    }
+
+    #[test]
+    fn matrix_three_distinct_rows_still_pass() {
+        matrix(json!({ "rows": [
+            { "value": "a" }, { "value": "b" }, { "value": "c" }
+        ]})).unwrap();
     }
 
     #[test]
