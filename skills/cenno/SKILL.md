@@ -317,7 +317,11 @@ Match the *shape of the decision* to the widget. Work down this table and take t
 | a continuous quantity (percent, budget, "how much") | `a2ui` **Slider** | `min`/`max`/`step`; commit fires `selectAction` — or omit it and pair with a **Button** for an explicit confirm |
 | open-ended, a sentence or more | `voice_text` | same as `text` plus a mic — default to it over `text` when the answer is likely > a few words |
 | a date, time, or deadline | `a2ui` **DateTimeInput** | native picker; `enableDate`/`enableTime` |
-| judge or pick among visual artifacts | `a2ui` **Image** (+ ChoicePicker or Buttons) | see image conventions below |
+| a stacked list of mutually exclusive options | `a2ui` **ChoicePicker** + `"displayStyle":"checkbox"` | radio rows instead of chips — use when labels are long or there are 4–6 of them; omit `displayStyle` to keep chips |
+| several items each needing a rating, or each on a continuum | `a2ui` **RatingMatrix** | `mode:"matrix"` = one row of numeral targets per item; `mode:"sliders"` = one slider per item. ≤3 rows, ≤7 points. Answer comes back as JSON keyed by row value |
+| comparing structured records (plans, candidates, diffs) | `a2ui` **Table** | display-only, ≤4 columns × ≤12 rows; the question is asked by a widget alongside it |
+| picking one (or several) of up to 10 visual artifacts | `a2ui` **ImageChoice** | adaptive grid, ≤10 tiles; a failed tile keeps its place and stays selectable |
+| judge or pick among visual artifacts | `a2ui` **Image** (+ ChoicePicker or Buttons) | one image at a time; see image conventions below |
 | several related questions | `ask_sequence` | one panel, instant advance; hand-roll a loop only when a later question depends on an earlier answer |
 | FYI only, no answer needed | `none` | auto-dismisses; don't dress information up as a question |
 
@@ -325,12 +329,20 @@ Two rules that trump the table: **one decision per panel** (if a prompt needs tw
 
 ### Showing images — conventions
 
-The release build's CSP allows only `img-src 'self' data:` — **remote URLs and local file paths will not render.** Embed images as base64 `data:` URIs, and remember the whole `a2ui` payload is capped at 256 KiB, so downscale/compress first (~600px JPEG ≈ 60 KB is plenty at panel size):
+The release build's CSP allows only `img-src 'self' data:`. That means:
+
+- **`data:` URIs work** — the default and the cheapest thing to reason about.
+- **Local absolute file paths work** — `/Users/me/out/thumb.png` is read by the app through the `load_image` command and turned into a `data:` URI for you. The file must have an image extension (`.png` `.jpg` `.jpeg` `.gif` `.webp`), be a regular file the app can read, and be **≤512 KiB** (pass `maxBytes` to raise it, capped at 4096). This is the practical route for files you just produced with `sips`/ffmpeg — no base64 round-trip through your own context.
+- **Remote URLs never render** — `https:`/`http:` are rejected with a named error in the panel. cenno does not fetch. Download the file yourself and pass the path or a `data:` URI.
+
+When you do embed base64, remember the whole `a2ui` payload is capped at 256 KiB, so downscale/compress first (~600px JPEG ≈ 60 KB is plenty at panel size):
 
 ```bash
 sips -Z 640 -s format jpeg -s formatOptions 60 input.png --out /tmp/small.jpg
 B64=$(base64 -i /tmp/small.jpg)   # → "data:image/jpeg;base64,$B64"
 ```
+
+**A failed image does not blank the panel.** The box keeps its size, names the specific reason (`file not found`, `not an image`, `too large — 1.2 MB, the limit is 512 KB`, `failed to decode`, `remote images are not allowed`), and in an `ImageChoice` the tile **stays selectable** — a missing preview is not a missing option.
 
 Scaling is fixed by convention — images are display-only, no zoom/pan:
 
@@ -365,7 +377,7 @@ A "keep this thumbnail?" prompt — Image + choice buttons:
 }
 ```
 
-To choose among N candidates, prefer one panel per candidate via `ask_sequence` (keep/reject each) over cramming a grid into one panel — the panel is small and the per-image verdict is cleaner data.
+To choose among N candidates, prefer **`ImageChoice`** when the candidates are visually distinguishable and there are ≤10 of them: one panel, an adaptive grid, one verdict. Use one panel per candidate via `ask_sequence` when each needs a written rationale rather than a pick — the panel is small and the per-image verdict is cleaner data.
 
 ## Patterns
 
@@ -475,6 +487,94 @@ The built-in `scale` is hard-wired to 1–7. For any other range or custom endpo
 ```
 
 The result text is still `{"answer":"3","via":"choice",...}`. Boundary limits: ≤200 components, ≤256 KiB, catalog must be `cenno:catalog/v1` — invalid payloads return a tool error you can correct and retry.
+
+## Rate several things at once via `a2ui` `RatingMatrix`
+
+Use this instead of firing N scale prompts when the user must judge several items on the same scale — the numeral columns line up across rows, which is the whole point of the control.
+
+```json
+{
+  "title": "Rate this session",
+  "flow": "ema",
+  "timeout_s": 120,
+  "a2ui": [
+    { "version": "v0.9", "createSurface": { "surfaceId": "main", "catalogId": "cenno:catalog/v1" } },
+    { "version": "v0.9", "updateComponents": { "surfaceId": "main", "components": [
+      { "id": "root", "component": "Column", "children": ["m"] },
+      { "id": "m", "component": "RatingMatrix", "mode": "matrix",
+        "rows": [ { "value": "pace", "label": "Pace" },
+                  { "value": "useful", "label": "Usefulness" },
+                  { "value": "clarity", "label": "Clarity" } ],
+        "min": 1, "max": 5, "minLabel": "low", "maxLabel": "high",
+        "value": { "path": "/items" },
+        "selectAction": { "event": { "name": "submit-matrix",
+          "context": { "value": { "path": "/items" }, "via": "choice" } } } }
+    ] } },
+    { "version": "v0.9", "updateDataModel": { "surfaceId": "main", "path": "/", "value": { "items": {} } } }
+  ]
+}
+```
+
+- `mode: "matrix"` = one tap answers the row immediately. `mode: "sliders"` = one labelled slider per item, answering on release/Enter rather than mid-drag.
+- **The answer is JSON keyed by row `value`**: `{"answer":"{\"pace\":4,\"useful\":3}","via":"choice"}` — parse the `answer` string, don't string-match it. Only the rows the user actually touched appear.
+- Caps: **≤3 rows, ≤7 points** (the 7-point cap applies to `matrix` only; sliders are continuous). `rows[].value` is required and is what comes back; `label` is display-only.
+
+## Compare records in a `Table`
+
+Display-only — pair it with a widget that asks the actual question.
+
+```json
+{
+  "title": "Which plan fits?",
+  "timeout_s": 120,
+  "a2ui": [
+    { "version": "v0.9", "createSurface": { "surfaceId": "main", "catalogId": "cenno:catalog/v1" } },
+    { "version": "v0.9", "updateComponents": { "surfaceId": "main", "components": [
+      { "id": "root", "component": "Column", "children": ["t"] },
+      { "id": "t", "component": "Table", "caption": "Plans",
+        "columns": [ { "label": "Plan" }, { "label": "Seats", "align": "end" }, { "label": "Cost", "align": "end" } ],
+        "rows": [ ["free", 1, "$0"], ["pro", 3, "$20"], ["team", 10, "$60"] ] }
+    ] } },
+    { "version": "v0.9", "updateDataModel": { "surfaceId": "main", "path": "/", "value": {} } }
+  ]
+}
+```
+
+- Caps: **≤4 columns, ≤12 rows.** A 5th column forces horizontal scroll in a panel that must not scroll; more rows belong in `ask_sequence` or a summary.
+- `align: "end"` right-aligns a column **and** switches it to tabular numerals — use it for every number so digits line up.
+- Cells are literal strings or numbers (numbers are stringified). A row shorter than `columns` is padded with an em dash; a longer one is **rejected** with an error naming the row.
+- `header: false` drops the header row for a key/value legend. `dense: true` tightens padding when you need all 12 rows in one panel.
+
+## Pick among images via `a2ui` `ImageChoice`
+
+One panel, up to 10 tiles, adaptive grid — the right widget for "which of these?" over visual candidates.
+
+```json
+{
+  "title": "Pick a direction",
+  "timeout_s": 120,
+  "a2ui": [
+    { "version": "v0.9", "createSurface": { "surfaceId": "main", "catalogId": "cenno:catalog/v1" } },
+    { "version": "v0.9", "updateComponents": { "surfaceId": "main", "components": [
+      { "id": "root", "component": "Column", "children": ["ic"] },
+      { "id": "ic", "component": "ImageChoice", "variant": "mutuallyExclusive",
+        "options": [
+          { "value": "warm",  "label": "warm",  "image": "data:image/jpeg;base64,…" },
+          { "value": "cool",  "label": "cool",  "image": "/Users/me/out/cool.jpg" },
+          { "value": "quiet", "label": "quiet", "image": "data:image/jpeg;base64,…" } ],
+        "value": { "path": "/pick" },
+        "selectAction": { "event": { "name": "submit-image",
+          "context": { "value": { "path": "/pick" }, "via": "choice" } } } }
+    ] } },
+    { "version": "v0.9", "updateDataModel": { "surfaceId": "main", "path": "/", "value": { "pick": [] } } }
+  ]
+}
+```
+
+- **≤10 options.** Above ~58px a tile stops being a thumb you can judge. For more candidates, send the top 4 as images and the rest as a `ChoicePicker`, or split across `ask_sequence`.
+- `variant: "mutuallyExclusive"` (round mark, one answer) or `"multipleSelection"` (square mark, answers joined with `,`). **In `multipleSelection`, an option `value` may not contain a comma** — the answer is comma-joined, so a comma inside a value makes it ambiguous and the guard rejects it.
+- `fit` defaults to `cover`; pass `"contain"` when cropping would destroy the comparison (screenshots, UI diffs). `columns` (1–5) overrides the adaptive layout if you want a specific shape.
+- A tile whose image fails **keeps its place and stays selectable**, showing the reason — a missing preview is not a missing option. `label` renders under the tile, never over it.
 
 ## The `get_screen_context` tool
 
