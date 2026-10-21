@@ -869,28 +869,72 @@ describe("MatrixView", () => {
   ];
 
   it("renders one row of numeral targets per item in matrix mode", () => {
-    render(<MatrixView rows={rows} mode="matrix" min={1} max={3} onSelect={vi.fn()} />);
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      onSelect={vi.fn()} onDone={vi.fn()} />);
     expect(screen.getAllByRole("radiogroup")).toHaveLength(2);
     expect(screen.getAllByRole("radio")).toHaveLength(6);
   });
 
   it("reports the row value with the chosen number", () => {
     const onSelect = vi.fn();
-    render(<MatrixView rows={rows} mode="matrix" min={1} max={3} onSelect={onSelect} />);
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      onSelect={onSelect} onDone={vi.fn()} />);
     fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]);
     expect(onSelect).toHaveBeenCalledWith("useful", 3);
   });
 
+  // The regression: tapping a row used to fire selectAction immediately, so the
+  // panel closed on the FIRST vote and a 3-row evaluation could not be filled.
+  it("does not answer until Done, and Done carries every rated row", () => {
+    const onSelect = vi.fn();
+    const onDone = vi.fn();
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      onSelect={onSelect} onDone={onDone} />);
+    fireEvent.click(screen.getAllByRole("radio", { name: "3" })[0]);
+    fireEvent.click(screen.getAllByRole("radio", { name: "2" })[1]);
+    expect(onDone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({ pace: 3, useful: 2 });
+  });
+
+  it("keeps Done disabled until at least one row is rated", () => {
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      onSelect={vi.fn()} onDone={vi.fn()} />);
+    expect(
+      (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it("submits a partial answer — rating some rows is a verdict", () => {
+    const onDone = vi.fn();
+    render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
+      value={{ pace: 2 }} onSelect={vi.fn()} onDone={onDone} />);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({ pace: 2 });
+  });
+
+  it("sliders mode also waits for Done instead of answering on commit", () => {
+    const onCommit = vi.fn();
+    const onDone = vi.fn();
+    render(<MatrixView rows={rows} mode="sliders" min={0} max={10}
+      onSelect={vi.fn()} onCommit={onCommit} onDone={onDone} />);
+    const sliders = screen.getAllByRole("slider");
+    fireEvent.change(sliders[0], { target: { value: "7" } });
+    expect(onDone).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({ pace: 7 });
+  });
+
   it("marks the bound values as checked", () => {
     render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
-      value={{ pace: 2 }} onSelect={vi.fn()} />);
+      value={{ pace: 2 }} onSelect={vi.fn()} onDone={vi.fn()} />);
     expect(screen.getAllByRole("radio")[1].getAttribute("aria-checked")).toBe("true");
   });
 
   it("renders a labelled slider per item in sliders mode", () => {
     const onSelect = vi.fn();
     render(<MatrixView rows={rows} mode="sliders" min={0} max={10}
-      minLabel="low" maxLabel="high" onSelect={onSelect} />);
+      minLabel="low" maxLabel="high" onSelect={onSelect} onDone={vi.fn()} />);
     const sliders = screen.getAllByRole("slider");
     expect(sliders).toHaveLength(2);
     fireEvent.change(sliders[0], { target: { value: "7" } });
@@ -899,7 +943,7 @@ describe("MatrixView", () => {
 
   it("shows end labels once, shared by every row", () => {
     render(<MatrixView rows={rows} mode="sliders" min={0} max={10}
-      minLabel="not at all" maxLabel="completely" onSelect={vi.fn()} />);
+      minLabel="not at all" maxLabel="completely" onSelect={vi.fn()} onDone={vi.fn()} />);
     expect(screen.getAllByText("not at all")).toHaveLength(1);
     expect(screen.getAllByText("completely")).toHaveLength(1);
   });

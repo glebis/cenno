@@ -641,9 +641,13 @@ export const RatingMatrixApi = {
         "Object binding keyed by row value, e.g. {\"path\": \"/items\"}. " +
           "Each row writes its own key beneath it.",
       ),
+      doneLabel: DynamicStringSchema.optional().describe(
+        "Label for the submit button under the rows (default 'Done').",
+      ),
       selectAction: ActionSchema.optional().describe(
-        "Action fired after a row is answered. Its context should carry " +
-          "{ value: <the same path as `value`>, via: \"choice\" }.",
+        "Action fired when the user presses Done, carrying every rated row. " +
+          "Its context should carry { value: <the same path as `value`>, " +
+          "via: \"choice\" }.",
       ),
     })
     .strict(),
@@ -667,22 +671,25 @@ export const CennoRatingMatrix = createComponentImplementation(
         value={value}
         onSelect={(key, n) => {
           // Spread, not a positional array: the object is keyed by row value, so
-          // a reordered row list still maps onto the right answer.
+          // a reordered row list still maps onto the right answer. This only
+          // WRITES — it must not call selectAction: answering on the first row
+          // tap closed the panel before the other rows could be rated.
           props.setValue(JSON.stringify({ ...value, [key]: n }));
-          // Sliders must not ANSWER while the thumb is still moving — that is
-          // SliderView's change/commit split (src/a2ui/views.tsx:473), so in
-          // sliders mode the action waits for onCommit below. A matrix tap is
-          // the whole gesture, so it answers immediately.
-          if (props.mode !== "sliders") props.selectAction?.();
         }}
         onCommit={
           props.mode === "sliders"
             ? (key, n) => {
                 props.setValue(JSON.stringify({ ...value, [key]: n }));
-                props.selectAction?.();
               }
             : undefined
         }
+        onDone={(all) => {
+          // Done submits the merged map directly, so a host that never echoed
+          // an intermediate setValue still answers with every rated row.
+          props.setValue(JSON.stringify(all));
+          props.selectAction?.();
+        }}
+        doneLabel={typeof props.doneLabel === "string" ? props.doneLabel : "Done"}
       />
     );
   },

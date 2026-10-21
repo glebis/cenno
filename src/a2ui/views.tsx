@@ -1050,9 +1050,14 @@ export function TableView({
  *
  * In sliders mode `onSelect` fires on every move (the readout must track the
  * thumb) while `onCommit` fires on release/Enter — SliderView's own contract,
- * so a drag does not answer the prompt on its first pixel of travel. Matrix
- * mode has no such split: one tap is the whole gesture, so it reports through
- * `onSelect` only.
+ * so a drag does not answer the prompt on its first pixel of travel.
+ *
+ * NEITHER mode answers from a row gesture. Both accumulate into `draft` and
+ * only `onDone` (the explicit submit button) completes the prompt: answering
+ * on the first row tap closed the panel before the remaining rows could be
+ * rated, which made a multi-item evaluation impossible to fill in. `onDone`
+ * receives the merged map, so the submit does not depend on the host having
+ * echoed an earlier `setValue`.
  *
  * Answers are `(row.value, n)` — the row VALUE, never the label (labels are
  * display only) — so the bound object stays stable when rows are reordered.
@@ -1067,6 +1072,8 @@ export function MatrixView({
   value,
   onSelect,
   onCommit,
+  onDone,
+  doneLabel = "Done",
 }: {
   rows: { value: string; label: string }[];
   mode: "matrix" | "sliders";
@@ -1075,9 +1082,13 @@ export function MatrixView({
   minLabel?: string;
   maxLabel?: string;
   value?: Record<string, number>;
+  /** Writes one row's number to the bound object. Never completes the prompt. */
   onSelect: (key: string, n: number) => void;
   /** Sliders mode: the commit gesture (release/Enter). Defaults to onSelect. */
   onCommit?: (key: string, n: number) => void;
+  /** The explicit submit: receives every answered row, keyed by row value. */
+  onDone: (all: Record<string, number>) => void;
+  doneLabel?: string;
 }) {
   const steps: number[] = [];
   for (let n = min; n <= max; n++) steps.push(n);
@@ -1085,12 +1096,17 @@ export function MatrixView({
   // it, the draft keeps the number live when it does not (SliderView's own
   // contract).
   const [draft, setDraft] = useState<Record<string, number>>({});
+  // The bound value wins when the host echoes it; the draft keeps a number
+  // live when it does not (SliderView's own contract). Either way the merged
+  // map is what Done submits, so a host that never echoes still answers.
+  const merged = { ...draft, ...(value ?? {}) };
+  const answered = Object.keys(merged).length > 0;
 
   if (mode === "sliders") {
     return (
       <div className="cenno-matrix cenno-matrix--sliders">
         {rows.map((row) => {
-          const current = value?.[row.value] ?? draft[row.value];
+          const current = merged[row.value];
           return (
             <div className="cenno-matrix__slider" key={row.value}>
               <div className="cenno-matrix__slider-head">
@@ -1119,6 +1135,9 @@ export function MatrixView({
             <span className="cenno-slider__label">{maxLabel}</span>
           </div>
         )}
+        <DoneBar answered={answered} onDone={() => onDone(merged)}>
+          {doneLabel}
+        </DoneBar>
       </div>
     );
   }
@@ -1150,7 +1169,7 @@ export function MatrixView({
             aria-label={row.label}
           >
             {steps.map((n) => {
-              const selected = value?.[row.value] === n;
+              const selected = merged[row.value] === n;
               return (
                 <button
                   key={n}
@@ -1159,7 +1178,10 @@ export function MatrixView({
                   aria-checked={selected}
                   aria-label={String(n)}
                   className={`cenno-matrix__dot${selected ? " is-selected" : ""}`}
-                  onClick={() => onSelect(row.value, n)}
+                  onClick={() => {
+                    setDraft((d) => ({ ...d, [row.value]: n }));
+                    onSelect(row.value, n);
+                  }}
                 >
                   <span className="cenno-matrix__dotnum">{n}</span>
                 </button>
@@ -1168,6 +1190,33 @@ export function MatrixView({
           </div>
         </div>
       ))}
+      <DoneBar answered={answered} onDone={() => onDone(merged)}>
+        {doneLabel}
+      </DoneBar>
+    </div>
+  );
+}
+
+/**
+ * The submit bar every `RatingMatrix` mode ends with. Disabled until at least
+ * one row has a number, so an empty submit cannot reach the agent as `{}`;
+ * deliberately NOT disabled for a partial answer — rating two of three rows is
+ * a legitimate verdict and must not be forced into a timeout.
+ */
+function DoneBar({
+  answered,
+  onDone,
+  children,
+}: {
+  answered: boolean;
+  onDone: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="cenno-matrix__done">
+      <ButtonView variant="primary" disabled={!answered} onClick={onDone}>
+        {children}
+      </ButtonView>
     </div>
   );
 }

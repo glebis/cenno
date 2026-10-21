@@ -877,6 +877,18 @@
   color: var(--cenno-text);
 }
 
+/* Submit bar. `flex: none` so the button keeps its height in a panel that is
+   already at the 560px clamp; the top hairline separates it from the last row
+   without drawing a box. */
+.cenno-matrix__done {
+  display: flex;
+  justify-content: flex-end;
+  flex: none;
+  margin-top: var(--cenno-space-1);
+  padding-top: var(--cenno-space-2);
+  border-top: 1px solid var(--cenno-line);
+}
+
 /* ---- image choice: up to 10 square tiles, adaptive grid ---- */
 
 /* Column count is a CSS var set by the view (the adaptive lookup, or the

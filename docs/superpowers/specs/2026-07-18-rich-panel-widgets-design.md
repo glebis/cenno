@@ -96,18 +96,33 @@ share the row model, the caps, and the answer encoding.
   rows: [ { value: "pace", label: "Pace" }, … ],
   min, max, step,                        // matrix: 1..max points; sliders: range
   minLabel, maxLabel,
+  doneLabel,                             // submit button label, default "Done"
   value: { path: "/items" },
   selectAction: { event: { name: "submit-items",
                            context: { value: { path: "/items" }, via: "choice" } } } }
 ```
 
 - `mode: "matrix"` — a grid: first column is the row label, then one radio
-  point per value from `min` to `max`. One tap answers that row. The dot shows
+  point per value from `min` to `max`. One tap sets that row. The dot shows
   its numeral once selected (and on hover), so the scale is legible without
   counting.
-- `mode: "sliders"` — one label + numeric readout + slider per row. Commits on
-  thumb release (pointer) or Enter (keyboard), matching `SliderView`'s existing
-  contract in `src/a2ui/views.tsx:290`.
+- `mode: "sliders"` — one label + numeric readout + slider per row. The
+  readout tracks the thumb while dragging; the value commits on release
+  (pointer) or Enter (keyboard), matching `SliderView`'s existing contract in
+  `src/a2ui/views.tsx:290`.
+
+**Neither mode answers from a row gesture.** Both accumulate into the bound
+object and a `Done` button (`doneLabel` overrides its text) fires
+`selectAction` with every rated row. Answering on the first row tap closed the
+panel before the remaining rows could be rated, which made a multi-item
+evaluation impossible to complete — the whole point of the component. `Done` is
+disabled until one row has a number (an empty `{}` is not a verdict) but stays
+enabled for a **partial** answer: rating two of three rows is legitimate and
+must not be forced into a timeout.
+
+`Done` submits the merged map directly rather than relying on the host having
+echoed an intermediate `setValue`, so a surface that never echoes still answers
+with everything the user set.
 
 Rows carry `value` (the returned key) and `label` (display only). A row with a
 label but no value derives its key by slugifying the label, so the simplest

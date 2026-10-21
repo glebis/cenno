@@ -390,7 +390,10 @@ describe("answer encoding through the real panel", () => {
 
     // Second numeral of the second row = "useful" 3.
     fireEvent.click(screen.getAllByRole("radio", { name: "3" })[1]);
+    // Rating a row must NOT answer: the panel stays open for the other rows.
+    expect(onAnswer).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(onAnswer).toHaveBeenCalledTimes(1);
     const [, answer, via] = onAnswer.mock.calls[0];
     expect(via).toBe("choice");
