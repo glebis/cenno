@@ -97,3 +97,9 @@ tempfile = "3"
 # enter the bundle, so not stripping them costs no size in the shipped app.
 [profile.release.build-override]
 strip = false
+
+# objc 0.2's `msg_send!` expands to `#[cfg(feature = "cargo-clippy")]` in OUR
+# crate (used in convert_to_panel for the native window corners); declare it so
+# rustc's check-cfg doesn't warn on every call site.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }

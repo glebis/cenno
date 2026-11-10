@@ -16,7 +16,9 @@
         "width": 420,
         "height": 240,
         "acceptFirstMouse": true,
-        "decorations": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "alwaysOnTop": true,
         "visible": false,
         "backgroundColor": "#14171a"

@@ -538,12 +538,26 @@ fn convert_to_panel(app: &tauri::App) -> tauri::Result<()> {
     use tauri_nspanel::WebviewWindowExt as _;
 
     // NSWindowStyleMask.nonactivatingPanel (1 << 7). Replaces tao's
-    // Borderless|Resizable|Miniaturizable mask; we intentionally drop
+    // Titled|Resizable|Miniaturizable|Closable mask; we intentionally drop
     // resize/miniaturize — the USER can't resize the panel (resize_panel
     // sets the frame programmatically, which needs no style-mask bit).
     // Key-window eligibility comes from RawNSPanel's canBecomeKeyWindow
     // override, not the mask.
     const STYLE_MASK_NONACTIVATING_PANEL: i32 = 1 << 7;
+    // Titled (1 << 0) + FullSizeContentView (1 << 15): a titled window gets
+    // the system's own rounded corners and shadow — whatever radius the
+    // running macOS uses (larger on Tahoe than Sonoma) — instead of the
+    // square edges of a borderless window. The title bar is made invisible
+    // below, and full-size content lets the webview run under it, so the
+    // panel looks exactly as before, just with native corners.
+    // The window must ALREADY be titled when it is created (tauri.conf.json:
+    // decorations + titleBarStyle "Overlay"): flipping borderless → titled
+    // here, after the panel class swap, raises an AppKit exception that
+    // aborts the app inside applicationDidFinishLaunching.
+    const STYLE_MASK_TITLED: i32 = 1 << 0;
+    const STYLE_MASK_FULL_SIZE_CONTENT_VIEW: i32 = 1 << 15;
+    // NSWindowTitleHidden.
+    const TITLE_VISIBILITY_HIDDEN: i64 = 1;
     // NSFloatingWindowLevel — above normal windows, below the menu bar.
     // (Replaces the alwaysOnTop window-level from tauri.conf.json.)
     const FLOATING_WINDOW_LEVEL: i32 = 3;
@@ -552,7 +566,29 @@ fn convert_to_panel(app: &tauri::App) -> tauri::Result<()> {
         .get_webview_window("main")
         .expect("main window declared in tauri.conf.json");
     let panel = window.to_panel()?;
-    panel.set_style_mask(STYLE_MASK_NONACTIVATING_PANEL);
+    panel.set_style_mask(
+        STYLE_MASK_NONACTIVATING_PANEL | STYLE_MASK_TITLED | STYLE_MASK_FULL_SIZE_CONTENT_VIEW,
+    );
+    {
+        use tauri_nspanel::cocoa::base::{id, nil, NO, YES};
+        use tauri_nspanel::objc::{msg_send, sel, sel_impl};
+        let ns: &tauri_nspanel::raw_nspanel::RawNSPanel = &panel;
+        unsafe {
+            let _: () = msg_send![ns, setTitlebarAppearsTransparent: YES];
+            let _: () = msg_send![ns, setTitleVisibility: TITLE_VISIBILITY_HIDDEN];
+            // Titled → AppKit adds traffic lights; the panel must not show
+            // them (close/minimize/zoom = NSWindowButton 0/1/2).
+            for kind in 0u64..=2 {
+                let button: id = msg_send![ns, standardWindowButton: kind];
+                if button != nil {
+                    let _: () = msg_send![button, setHidden: YES];
+                }
+            }
+            // The title-bar strip must not become a drag handle over the
+            // panel's own controls; dragging stays opt-in via the webview.
+            let _: () = msg_send![ns, setMovableByWindowBackground: NO];
+        }
+    }
     panel.set_level(FLOATING_WINDOW_LEVEL);
     // Follow the user to whatever Space/fullscreen app they're in.
     panel.set_collection_behaviour(
