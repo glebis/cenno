@@ -92,6 +92,15 @@ body {
 /* Lowercase on purpose (matches the comps); no text-transform needed. */
 .prompt-panel__wordmark {
   letter-spacing: 0.04em;
+  /* Holds the caller's name now — keep a long one from crowding the buttons. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Drag handle: no I-beam, no accidental text selection while dragging. */
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Dim ✕ with a ≥24px hit target. Interactive — no data-tauri-drag-region —

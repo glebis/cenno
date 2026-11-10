@@ -39,7 +39,7 @@ use rmcp::{
     handler::server::{router::tool::ToolRouter, tool::ToolCallContext, wrapper::Parameters},
     model::{CallToolRequestParams, CallToolResult, ServerCapabilities, ServerInfo},
     service::RequestContext,
-    tool, tool_router, ErrorData, RoleServer, ServerHandler, ServiceExt,
+    tool, tool_router, ErrorData, Peer, RoleServer, ServerHandler, ServiceExt,
 };
 use tokio::net::UnixListener;
 
@@ -113,6 +113,16 @@ impl CennoServer {
     }
 }
 
+/// The calling agent's self-reported name from the MCP `initialize` handshake
+/// (`clientInfo.title`, else `clientInfo.name`). The `--mcp-stdio` bridge is a
+/// byte pipe, so this is the real agent's handshake, not the bridge's.
+fn caller_name(peer: &Peer<RoleServer>) -> Option<String> {
+    let info = &peer.peer_info()?.client_info;
+    let name = info.title.as_deref().unwrap_or(&info.name).trim();
+    // Bound it: it's untrusted text rendered in the header.
+    (!name.is_empty()).then(|| name.chars().take(40).collect())
+}
+
 #[tool_router]
 impl CennoServer {
     #[tool(
@@ -138,7 +148,9 @@ impl CennoServer {
     async fn ask_user(
         &self,
         Parameters(mut params): Parameters<AskRequest>,
+        peer: Peer<RoleServer>,
     ) -> Result<String, String> {
+        params.agent = caller_name(&peer);
         // Resolve the timeout against config now, so the registry and the
         // panel's auto-hide budget all see the same concrete value.
         params.timeout_s = Some(params.timeout_secs(Some(self.default_timeout_s)));
@@ -251,8 +263,10 @@ impl CennoServer {
     async fn ask_sequence(
         &self,
         Parameters(params): Parameters<SequenceRequest>,
+        peer: Peer<RoleServer>,
     ) -> Result<String, String> {
         let total = params.questions.len() as u32;
+        let agent = caller_name(&peer);
 
         // Boundary guard: validate EVERY a2ui payload up front — before any
         // prompt is registered — so a malformed step doesn't run the earlier
@@ -275,6 +289,7 @@ impl CennoServer {
             // inherit `flow`, auto-fill progress dots (1-based step), and
             // resolve the timeout against config.
             let mut question = question;
+            question.agent = agent.clone();
             if question.flow.is_none() {
                 question.flow = params.flow.clone();
             }
@@ -440,6 +455,15 @@ pub async fn start_socket_server(
 pub mod client {
     use super::*;
 
+    /// Identify as `cenno` (not rmcp's default `rmcp`) so CLI-fired prompts
+    /// carry a sensible caller name in the panel header.
+    fn cli_client_info() -> rmcp::model::ClientInfo {
+        rmcp::model::ClientInfo::new(
+            Default::default(),
+            rmcp::model::Implementation::new("cenno", env!("CARGO_PKG_VERSION")),
+        )
+    }
+
     /// Connect to the cenno MCP socket, call `ask_user` with `params`, and
     /// parse the tool's text content as JSON.
     pub async fn call_ask_user(
@@ -452,8 +476,8 @@ pub mod client {
         };
 
         let stream = tokio::net::UnixStream::connect(sock_path).await?;
-        // `()` is rmcp's no-op ClientHandler; serve() runs the initialize handshake.
-        let client = ().serve(stream).await?;
+        // ClientInfo is a no-op ClientHandler; serve() runs the initialize handshake.
+        let client = cli_client_info().serve(stream).await?;
 
         let result = client
             .call_tool(CallToolRequestParams::new("ask_user").with_arguments(args))
@@ -483,7 +507,7 @@ pub mod client {
         };
 
         let stream = tokio::net::UnixStream::connect(sock_path).await?;
-        let client = ().serve(stream).await?;
+        let client = cli_client_info().serve(stream).await?;
 
         let result = client
             .call_tool(CallToolRequestParams::new("ask_sequence").with_arguments(args))

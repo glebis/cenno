@@ -53,6 +53,8 @@ export interface Prompt {
   say?: string;
   /** Open silently (voice-mute default); the chrome offers unmute instead. */
   muted?: boolean;
+  /** Asking agent's MCP clientInfo name (server-set); shown in the header. */
+  agent?: string;
   /**
    * Native A2UI v0.9 message array (the desugar envelope shape). When
    * present it REPLACES desugaring: the payload is fed to the processor
@@ -255,11 +257,18 @@ export default function PromptPanel({
       <div className="prompt-panel__drag-strip" data-tauri-drag-region aria-hidden="true" />
       {/* Chrome layer — OUTSIDE the A2UI surface so simple and rich payloads
           both get the wordmark + dismiss ✕. Absolutely positioned across the
-          top (App.css); not a drag region (the ✕ is interactive — with
-          acceptFirstMouse the single click both keys the panel and dismisses).
-          z-index above the drag strip so the ✕ stays clickable. */}
-      <div className="prompt-panel__chrome">
-        <span className="prompt-panel__wordmark">cenno</span>
+          top (App.css). The row and the caller name ARE drag regions (Tauri
+          matches the exact mousedown target, so each needs the attribute);
+          the buttons are not, so with acceptFirstMouse a single click on ✕
+          both keys the panel and dismisses. z-index above the drag strip. */}
+      <div className="prompt-panel__chrome" data-tauri-drag-region>
+        <span
+          className="prompt-panel__wordmark"
+          data-tauri-drag-region
+          title={prompt.agent ? `Asked by ${prompt.agent}` : undefined}
+        >
+          {prompt.agent ?? "cenno"}
+        </span>
         {onReadAloud && !onStopReading && (
           <button
             type="button"

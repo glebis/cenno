@@ -26,6 +26,8 @@ interface PromptEvent {
     say?: string;
     // Voice-mute: open the panel silently; user can unmute in the chrome.
     muted?: boolean;
+    // MCP clientInfo name of the asking agent (set server-side), for the header.
+    agent?: string;
     // Native A2UI payload (already vetted by src-tauri/src/a2ui_guard.rs).
     a2ui?: unknown;
   };
@@ -60,6 +62,7 @@ function toPrompt({ id, request, seq }: PromptEvent): Prompt {
     urgency: request.urgency,
     say: request.say,
     muted: request.muted,
+    agent: request.agent,
     a2ui: request.a2ui,
     seq,
   };

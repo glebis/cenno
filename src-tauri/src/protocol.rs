@@ -165,6 +165,13 @@ pub struct AskRequest {
     /// The final mute state is echoed back on `Answered.muted`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub muted: Option<bool>,
+    /// Name of the MCP client that asked (its `initialize` clientInfo, e.g.
+    /// `claude-code`), shown in the panel header. Filled in by the server —
+    /// never read from tool arguments (skip_deserializing) and hidden from the
+    /// tool schema, so an agent can't impersonate another through `ask_user`.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    #[schemars(skip)]
+    pub agent: Option<String>,
 }
 fn default_urgency() -> Urgency {
     Urgency::Normal
@@ -294,6 +301,20 @@ pub struct ScreenContextResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_is_server_set_only() {
+        // An agent can't claim another's name through tool arguments…
+        let req: AskRequest =
+            serde_json::from_str(r#"{"title":"t","agent":"someone-else"}"#).unwrap();
+        assert_eq!(req.agent, None);
+        // …nor see the field in the advertised tool schema…
+        let schema = serde_json::to_string(&schemars::schema_for!(AskRequest)).unwrap();
+        assert!(!schema.contains("\"agent\""));
+        // …but once the server sets it, it reaches the webview.
+        let req = AskRequest { agent: Some("claude-code".into()), ..req };
+        assert_eq!(serde_json::to_value(&req).unwrap()["agent"], "claude-code");
+    }
 
     #[test]
     fn screen_context_request_defaults_and_clamps_cost() {
