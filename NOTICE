@@ -20,6 +20,8 @@ Agent marks (src/agentLogos.tsx) are vendored SVG path data:
   - DeepSeek, Kimi, Qwen, Nous Research: @lobehub/icons-static-svg 1.102.0
     (https://github.com/lobehub/lobe-icons), MIT License,
     Copyright (c) 2023 LobeHub.
+  - pi: the monochrome mark from https://pi.dev/favicon.svg
+    (earendil-works/pi, MIT License).
 The marks are trademarks of their respective owners. cenno shows them only
 to indicate which tool sent a prompt; no affiliation or endorsement is
 implied.

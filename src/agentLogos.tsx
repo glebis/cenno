@@ -7,6 +7,7 @@
  * Sources (all single-colour 24×24, tinted with currentColor; see NOTICE):
  *   CLAUDE, OPENAI                   simple-icons 15.22.0 (CC0-1.0)
  *   DEEPSEEK, KIMI, QWEN, NOUS       @lobehub/icons-static-svg 1.102.0 (MIT)
+ *   PI                               pi.dev favicon.svg (earendil-works/pi, MIT)
  * Used nominatively — to show which tool is asking, not to imply endorsement.
  *
  * To add an agent: confirm the exact name it sends (`cenno export` → `agent`),
@@ -17,6 +18,8 @@ interface Glyph {
   /** lobe-icons are drawn for fill-rule evenodd; simple-icons for nonzero. */
   evenOdd: boolean;
   paths: string[];
+  /** Defaults to the libraries' 24×24 box. */
+  viewBox?: string;
 }
 
 const CLAUDE: Glyph = {
@@ -55,6 +58,17 @@ const QWEN: Glyph = {
   ],
 };
 
+// pi.dev's monochrome favicon (the in-page logo is a tri-colour variant).
+const PI: Glyph = {
+  evenOdd: false,
+  viewBox: "0 0 560 560",
+  paths: [
+    "M420 280H280V140H0V0H420V280Z",
+    "M560 560H420V280H560V560Z",
+    "M140 560H0V140H140V280H280V420H140V560Z",
+  ],
+};
+
 const NOUS: Glyph = {
   evenOdd: true,
   paths: [
@@ -79,11 +93,13 @@ const MARKS: AgentMark[] = [
   { names: ["codex-mcp-client", "codex"], glyph: OPENAI },
   // Log-then-map: glyphs bundled, names pending a real handshake (`cenno
   // export` → agent). ChatGPT desktop → OPENAI; Hermes Agent → NOUS; Qwen
-  // Code → QWEN; Kimi CLI → KIMI; a DeepSeek client → DEEPSEEK.
+  // Code → QWEN; Kimi CLI → KIMI; a DeepSeek client → DEEPSEEK; pi (no MCP out of the box —
+  // only via an MCP adapter extension) → PI.
   { names: [], glyph: DEEPSEEK },
   { names: [], glyph: KIMI },
   { names: [], glyph: QWEN },
   { names: [], glyph: NOUS },
+  { names: [], glyph: PI },
 ];
 
 export function agentGlyph(agent: string | undefined): Glyph | null {
@@ -103,7 +119,7 @@ export function AgentMark({ agent }: { agent: string | undefined }) {
   return (
     <svg
       className="prompt-panel__agent-mark"
-      viewBox="0 0 24 24"
+      viewBox={glyph.viewBox ?? "0 0 24 24"}
       fill="currentColor"
       fillRule={glyph.evenOdd ? "evenodd" : undefined}
       aria-hidden="true"
