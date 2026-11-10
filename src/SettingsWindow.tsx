@@ -18,6 +18,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "./SettingsWindow.css";
+import {
+  DEFAULT_REOPEN_SHORTCUT,
+  comboFromKeyEvent,
+  comboGlyphs,
+} from "./shortcutRecorder";
 
 type Tab = "settings" | "integration" | "about";
 
@@ -47,9 +52,6 @@ interface RawConfig {
   shortcuts?: { reopen?: string };
   widgets?: unknown;
 }
-
-// Suggested default for the reopen-pending global shortcut (user-changeable).
-const DEFAULT_REOPEN_SHORTCUT = "Cmd+Shift+C";
 
 const FLOWS = ["question", "mood", "ema", "reminder", "ambient"] as const;
 const URGENCIES = ["low", "normal", "high"] as const;
@@ -331,21 +333,10 @@ function SettingsTab(props: {
           A global hotkey (and the “Show pending prompt” tray item) brings a
           dismissed or hidden prompt back — with whatever you’d typed restored.
         </p>
-        <Field label="Reopen shortcut">
-          <input
-            type="text"
-            value={reopenShortcut}
-            placeholder={`${DEFAULT_REOPEN_SHORTCUT} (leave blank to disable)`}
-            spellCheck={false}
-            onChange={(e) =>
-              props.onPatchShortcuts({ reopen: e.target.value || undefined })
-            }
-          />
-        </Field>
-        <p className="sw__hint">
-          Format like <code>{DEFAULT_REOPEN_SHORTCUT}</code> or{" "}
-          <code>CmdOrCtrl+Alt+P</code>. Takes effect after restarting cenno.
-        </p>
+        <ShortcutRecorder
+          value={reopenShortcut}
+          onChange={(combo) => props.onPatchShortcuts({ reopen: combo || undefined })}
+        />
       </section>
 
       <section className="sw__section">
@@ -645,6 +636,149 @@ function Toggle({
       </span>
       <span className="sw__toggle-label">{label}</span>
     </label>
+  );
+}
+
+/**
+ * Record / Reset control for the reopen-pending global hotkey.
+ *
+ * While recording, the live hotkey is unbound (so pressing the current combo
+ * reaches this window instead of firing the global action) and every keydown
+ * is swallowed. A captured combo is registered live FIRST and only persisted
+ * if registration succeeds — a combo another app already owns is reported,
+ * not silently saved as a dead hotkey.
+ */
+function ShortcutRecorder({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (combo: string) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const [held, setHeld] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  // Bind `combo` live, persisting it on success. On failure, restore the
+  // previous binding and surface the error.
+  const commit = useCallback(
+    async (combo: string) => {
+      try {
+        await invoke("set_reopen_shortcut", { combo: combo || null });
+        setError(null);
+        onChange(combo);
+      } catch (e) {
+        setError(`${String(e)} — it may already be used by another app.`);
+        invoke("set_reopen_shortcut", { combo: value || null }).catch(() => {});
+      }
+    },
+    [onChange, value],
+  );
+
+  useEffect(() => {
+    if (!recording) return;
+    // Pause the live hotkey so its keystroke reaches us.
+    invoke("set_reopen_shortcut", { combo: null }).catch(() => {});
+
+    const stop = () => {
+      setRecording(false);
+      setHeld([]);
+    };
+    const cancel = () => {
+      stop();
+      invoke("set_reopen_shortcut", { combo: value || null }).catch(() => {});
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
+      const r = comboFromKeyEvent(e);
+      switch (r.kind) {
+        case "pending":
+          setHeld(r.held);
+          return;
+        case "invalid":
+          setError(r.reason);
+          return;
+        case "cancel":
+          setError(null);
+          cancel();
+          return;
+        case "clear":
+          stop();
+          void commit("");
+          return;
+        case "combo":
+          stop();
+          void commit(r.combo);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const r = comboFromKeyEvent(e);
+      setHeld(r.kind === "pending" ? r.held : []);
+    };
+    // Clicking away / switching apps abandons the recording.
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("blur", cancel);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp, true);
+      window.removeEventListener("blur", cancel);
+    };
+  }, [recording, value, commit]);
+
+  const shown = recording ? comboGlyphs(held.join("+")) : comboGlyphs(value);
+  const isDefault = value === DEFAULT_REOPEN_SHORTCUT;
+
+  return (
+    <div className="sw__field">
+      <span className="sw__field-label">Reopen shortcut</span>
+      <div className="sw__shortcut">
+        <div
+          className={`sw__keys${recording ? " sw__keys--recording" : ""}`}
+          aria-live="polite"
+          aria-label={
+            recording ? "Recording shortcut" : value ? `Shortcut ${value}` : "No shortcut"
+          }
+        >
+          {shown.length > 0 ? (
+            shown.map((g, i) => (
+              <kbd key={i} className="sw__kbd">
+                {g}
+              </kbd>
+            ))
+          ) : (
+            <span className="sw__keys-placeholder">
+              {recording ? "Press a shortcut…" : "Disabled"}
+            </span>
+          )}
+        </div>
+        <button
+          className={`sw__btn${recording ? "" : " sw__btn--ghost"}`}
+          onClick={() => {
+            setError(null);
+            setRecording((r) => !r);
+          }}
+        >
+          {recording ? "Cancel" : "Record"}
+        </button>
+        <button
+          className="sw__btn sw__btn--ghost"
+          disabled={recording || isDefault}
+          onClick={() => void commit(DEFAULT_REOPEN_SHORTCUT)}
+          title={`Reset to ${comboGlyphs(DEFAULT_REOPEN_SHORTCUT).join("")}`}
+        >
+          Reset
+        </button>
+      </div>
+      <p className={`sw__hint${error ? " sw__hint--error" : ""}`} role={error ? "alert" : undefined}>
+        {error ??
+          (recording
+            ? "Press the new combo (with ⌘, ⌃ or ⌥). Esc cancels, ⌫ disables it."
+            : "Applies immediately.")}
+      </p>
+    </div>
   );
 }
 

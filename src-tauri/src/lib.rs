@@ -400,27 +400,56 @@ pub(crate) fn parse_reopen_shortcut(combo: &str) -> Option<tauri_plugin_global_s
 /// block startup.
 #[cfg(desktop)]
 fn register_reopen_shortcut(handle: &tauri::AppHandle, combo: Option<&str>) {
+    match apply_reopen_shortcut(handle, combo) {
+        Ok(Some(combo)) => eprintln!("cenno: reopen shortcut registered ({combo})"),
+        Ok(None) => {}
+        Err(e) => eprintln!("cenno: {e}"),
+    }
+}
+
+/// (Re)bind the reopen-pending hotkey: drop whatever is registered, then
+/// register `combo` if it is non-empty. cenno owns exactly one global
+/// shortcut, so `unregister_all` is the simplest correct "replace". Returns
+/// the registered combo (None when cleared) or a human-readable error.
+#[cfg(desktop)]
+fn apply_reopen_shortcut(
+    handle: &tauri::AppHandle,
+    combo: Option<&str>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-    let Some(combo) = combo else { return };
-    let Some(shortcut) = parse_reopen_shortcut(combo) else {
-        if !combo.trim().is_empty() {
-            eprintln!("cenno: ignoring invalid reopen shortcut {combo:?}");
+    let gs = handle.global_shortcut();
+    let _ = gs.unregister_all();
+    let combo = combo.map(str::trim).unwrap_or("");
+    if combo.is_empty() {
+        return Ok(None);
+    }
+    let shortcut = parse_reopen_shortcut(combo)
+        .ok_or_else(|| format!("invalid reopen shortcut {combo:?}"))?;
+    gs.on_shortcut(shortcut, move |app, _shortcut, event| {
+        // Fire on press only — release would double-trigger. Explicit
+        // user gesture → force past suppression (see replay_pending).
+        if event.state == ShortcutState::Pressed {
+            replay_pending(app, true);
         }
-        return;
-    };
-    let result = handle
-        .global_shortcut()
-        .on_shortcut(shortcut, move |app, _shortcut, event| {
-            // Fire on press only — release would double-trigger. Explicit
-            // user gesture → force past suppression (see replay_pending).
-            if event.state == ShortcutState::Pressed {
-                replay_pending(app, true);
-            }
-        });
-    if let Err(e) = result {
-        eprintln!("cenno: failed to register reopen shortcut {combo:?}: {e}");
-    } else {
-        eprintln!("cenno: reopen shortcut registered ({combo})");
+    })
+    .map_err(|e| format!("couldn't register reopen shortcut {combo:?}: {e}"))?;
+    Ok(Some(combo.to_string()))
+}
+
+/// Live-apply the reopen shortcut from the settings window. `None`/empty
+/// unbinds it — the recorder calls that while capturing so the current hotkey
+/// doesn't swallow the keystroke being recorded. Persisting the combo is the
+/// caller's job (`save_config_file`); this only touches the live binding.
+#[tauri::command]
+fn set_reopen_shortcut(app: tauri::AppHandle, combo: Option<String>) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        apply_reopen_shortcut(&app, combo.as_deref()).map(|_| ())
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, combo);
+        Ok(())
     }
 }
 
@@ -727,8 +756,8 @@ pub fn run() {
             let routing = user_config.routing.clone();
             let capture_policy = user_config.capture.clone();
             // Reopen-pending global shortcut — cloned out before the config moves
-            // into managed state; registered (fail-soft) just below. Takes effect
-            // on launch; a changed combo applies after the next restart.
+            // into managed state; registered (fail-soft) just below. The settings
+            // window re-binds it live via `set_reopen_shortcut`.
             let reopen_shortcut = user_config.shortcuts.reopen.clone();
             let capture_enabled_default = user_config.capture.capture_enabled();
             app.manage(geometry);
@@ -844,8 +873,7 @@ pub fn run() {
             // Register the reopen-pending global shortcut now — AFTER both the
             // registry and SuppressionState are managed, so a hotkey press in
             // the startup window can't fire replay_pending() into unmanaged
-            // state. Fail-soft; takes effect on launch (a changed combo applies
-            // after the next restart).
+            // state. Fail-soft; later changes re-bind via `set_reopen_shortcut`.
             #[cfg(desktop)]
             register_reopen_shortcut(app.handle(), reopen_shortcut.as_deref());
 
@@ -974,6 +1002,7 @@ pub fn run() {
             get_user_tokens,
             read_config_file,
             save_config_file,
+            set_reopen_shortcut,
             get_launch_at_login,
             set_launch_at_login,
             set_dock_visible,
@@ -1002,6 +1031,19 @@ mod tests {
         // Good combos parse.
         assert!(parse_reopen_shortcut("Cmd+Shift+C").is_some());
         assert!(parse_reopen_shortcut("CmdOrCtrl+Alt+P").is_some());
+        // Combos in the exact shape the settings recorder emits
+        // (src/shortcutRecorder.ts: modifiers + KeyboardEvent.code-derived key).
+        for combo in [
+            "Cmd+Shift+1",
+            "Ctrl+Alt+Space",
+            "Cmd+Alt+Comma",
+            "Cmd+Shift+ArrowUp",
+            "Cmd+F5",
+            "Ctrl+Shift+Backquote",
+            "Cmd+Alt+Slash",
+        ] {
+            assert!(parse_reopen_shortcut(combo).is_some(), "{combo} should parse");
+        }
         // Surrounding whitespace is tolerated.
         assert!(parse_reopen_shortcut("  Cmd+Shift+C  ").is_some());
         // Empty / whitespace-only → nothing to register (None, no panic).

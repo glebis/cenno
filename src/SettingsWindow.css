@@ -290,6 +290,78 @@ select:focus,
   border-color: var(--sw-coral);
 }
 
+/* ── Shortcut recorder: keycap well + Record / Reset pills ── */
+.sw__shortcut {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sw__keys {
+  flex: 1 1 180px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--sw-hair);
+  border-radius: var(--sw-radius);
+  transition: border-color 0.2s;
+}
+
+.sw__keys--recording {
+  border-color: var(--sw-coral);
+  box-shadow: 0 0 0 3px rgba(255, 98, 80, 0.18);
+}
+
+.sw__kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--sw-text);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--sw-hair);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+}
+
+.sw__keys-placeholder {
+  font-size: 14px;
+  color: var(--sw-dim);
+}
+
+.sw__keys--recording .sw__keys-placeholder {
+  animation: sw-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes sw-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sw__keys--recording .sw__keys-placeholder {
+    animation: none;
+  }
+}
+
+.sw__shortcut .sw__btn {
+  align-self: center;
+}
+
+.sw__hint--error {
+  color: var(--sw-coral);
+}
+
 /* ── Buttons = the site's pills ── */
 .sw__btn {
   appearance: none;
