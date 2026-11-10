@@ -295,6 +295,8 @@ Returns `{"answer": "...", "via": "text"|"choice"|"voice_text", "elapsed_s": 1.4
 
 **`urgency` gates whether the panel speaks and how insistently it appears.** Leave it out for a normal question; use `low` for FYI-shaped prompts you don't want announced, `high` only when the answer genuinely blocks the user's next action.
 
+**The panel header names you.** It shows the name your MCP client sent in its `initialize` handshake — `clientInfo.title` if set, else `clientInfo.name` (e.g. `claude-code`, `codex-mcp-client`; trimmed to 40 chars) — so the user can tell which agent is asking. There is no tool argument for it: an `agent` field in `ask_user`/`ask_sequence` arguments is ignored, so one agent can't speak under another's name. If you write your own client (see [raw socket](#driving-cenno-over-a-raw-socket-no-mcp-client)), set `clientInfo.title` to something the user will recognise. `cenno ask` from the CLI shows as `cenno`. The user can drag the panel by its header.
+
 **`device_hint`** (`"phone"` | `"ipad"` | `"watch"`) is a *proposal*, not a command — the user's own routing policy in `~/.cenno` decides, and can ignore it entirely. Omit it unless cross-device delivery is what you actually want.
 
 ### Choosing the input kind
@@ -700,12 +702,12 @@ If you must call cenno from a plain script (no MCP runtime), pipe JSON-RPC throu
 ```bash
 BIN=/Applications/cenno.app/Contents/MacOS/cenno
 printf '%s\n' \
- '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"x","version":"1"}}}' \
+ '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"deploy-script","title":"Deploy script","version":"1"}}}' \
  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ask_user","arguments":{"title":"Ship it?","input":{"kind":"confirm"},"timeout_s":60}}}' \
  | "$BIN" --mcp-stdio
 ```
-Read stdout line by line until the line whose `id` is `2`; its `result.content[0].text` is the answer JSON. Keep stdin open until then. Tip: if cenno is cold, the first call can lose a socket race — launch `"$BIN" --tray` and wait for `~/Library/Application Support/app.cenno/mcp.sock` to exist before the first `ask_user`.
+The `clientInfo.title` (else `name`) is what the panel header shows the user as the asker — name your script. Read stdout line by line until the line whose `id` is `2`; its `result.content[0].text` is the answer JSON. Keep stdin open until then. Tip: if cenno is cold, the first call can lose a socket race — launch `"$BIN" --tray` and wait for `~/Library/Application Support/app.cenno/mcp.sock` to exist before the first `ask_user`.
 
 If cenno isn't installed or reachable, fall back to whatever local prompt you have (e.g. `osascript` dialogs) — don't block on it.
 
