@@ -67,8 +67,8 @@ impl Db {
         self.0.lock().execute(
             "INSERT INTO prompts \
              (prompt_id, title, body_md, input_kind, flow, urgency, \
-              status, answer, via, elapsed_s, created_at, resolved_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+              status, answer, via, elapsed_s, created_at, resolved_at, agent) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 prompt_id,
                 req.title,
@@ -82,6 +82,7 @@ impl Db {
                 elapsed_s,
                 created_at_str,
                 resolved_at,
+                req.agent,
             ],
         )?;
         Ok(())
@@ -125,7 +126,7 @@ impl Db {
     ) -> rusqlite::Result<Vec<serde_json::Value>> {
         let conn = self.0.lock();
         let sql = "SELECT id, prompt_id, title, body_md, input_kind, flow, urgency, \
-                          status, answer, via, elapsed_s, created_at, resolved_at \
+                          status, answer, via, elapsed_s, created_at, resolved_at, agent \
                    FROM prompts \
                    WHERE (?1 IS NULL OR created_at >= ?1) \
                    ORDER BY created_at ASC, id ASC";
@@ -146,6 +147,7 @@ impl Db {
                 "elapsed_s":   row.get::<_, Option<f64>>(10)?,
                 "created_at":  row.get::<_, String>(11)?,
                 "resolved_at": row.get::<_, String>(12)?,
+                "agent":       row.get::<_, Option<String>>(13)?,
             }))
         })?;
         rows.collect()
@@ -175,7 +177,17 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );",
-    )
+    )?;
+    // v0.5: who asked — the MCP client's clientInfo title/name (NULL for rows
+    // written before this column existed). SQLite has no ADD COLUMN IF NOT
+    // EXISTS, so probe table_info first; idempotent across launches.
+    let has_agent: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('prompts') WHERE name = 'agent'")?
+        .exists([])?;
+    if !has_agent {
+        conn.execute_batch("ALTER TABLE prompts ADD COLUMN agent TEXT;")?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -194,6 +206,42 @@ mod tests {
 
     fn basic_req() -> AskRequest {
         serde_json::from_str(r#"{"title":"Deploy?","body_md":"Ship it?","timeout_s":30}"#).unwrap()
+    }
+
+    #[test]
+    fn agent_is_recorded_and_exported() {
+        let (db, _dir) = open_temp_db();
+        let req = AskRequest { agent: Some("claude-code".into()), ..basic_req() };
+        let outcome = AskResponse::TimedOut { answered: false, prompt_id: "p_a".into() };
+        db.record_prompt(&req, "p_a", &outcome, Utc::now()).unwrap();
+        let rows = db.export_rows(None).unwrap();
+        assert_eq!(rows[0]["agent"], "claude-code");
+    }
+
+    #[test]
+    fn migrate_adds_agent_column_to_old_db() {
+        // A pre-0.5 database: prompts table without `agent`, holding a row.
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("old.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE prompts (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   prompt_id TEXT NOT NULL, title TEXT NOT NULL,
+                   body_md TEXT NOT NULL DEFAULT '', input_kind TEXT, flow TEXT,
+                   urgency TEXT, status TEXT NOT NULL, answer TEXT, via TEXT,
+                   elapsed_s REAL, created_at TEXT NOT NULL, resolved_at TEXT NOT NULL);
+                 INSERT INTO prompts (prompt_id, title, status, created_at, resolved_at)
+                   VALUES ('p_old', 'old', 'timed_out', '2026-01-01T00:00:00Z', '2026-01-01T00:00:01Z');",
+            )
+            .unwrap();
+        }
+        // Opening twice proves the migration is idempotent.
+        drop(Db::open(&path).unwrap());
+        let db = Db::open(&path).unwrap();
+        let rows = db.export_rows(None).unwrap();
+        assert_eq!(rows[0]["prompt_id"], "p_old");
+        assert!(rows[0]["agent"].is_null());
     }
 
     #[test]
