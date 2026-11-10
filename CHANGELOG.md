@@ -6,7 +6,23 @@ All notable changes to cenno are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-10
+
 ### Added
+
+- **Panels say which agent is asking.** The header shows the name the agent's
+  MCP client reports when it connects (`claude-code`, `codex-mcp-client`, …)
+  instead of "cenno". The name comes from the connection, not from the
+  question, so one agent can't ask under another's name. `cenno ask` from the
+  command line shows as "cenno".
+- **Logos for well-known agents.** Claude Code and Codex get a small
+  monochrome mark next to their name; marks for ChatGPT, Hermes, Qwen, Kimi,
+  DeepSeek and pi are bundled and switch on once their client names are
+  confirmed. Marks come from simple-icons (CC0) and lobe-icons (MIT) — see
+  NOTICE.
+- **History remembers who asked.** Each recorded prompt now carries the asking
+  agent, and `cenno export` (JSON and CSV) includes it as `agent`. Existing
+  history is upgraded in place; older entries have no agent.
 
 - **Score one item on several dimensions.** A new `a2ui` `StepScore` scores a
   single item on up to 5 ordinal dimensions (0..max, one may lead as the
@@ -17,12 +33,21 @@ All notable changes to cenno are documented here. The format follows
 
 ### Changed
 
+- **Drag a panel by its header.** The whole header row — the agent name and
+  the empty space beside it — now moves the panel; the read-aloud and ✕
+  buttons still respond to a single click.
 - **The `cenno` agent skill is leaner and does what its setup promises.** The
   main file is a third of its former size; setup, configuration and the `a2ui`
   widget examples moved to reference files that load only when needed. When the
   skill config turns on `log_answers`, agents now actually append each answer to
   the log file. Default timeout and color theme come only from `~/.cenno`, so
   an old skill config can no longer override them.
+
+### Fixed
+
+- **Builds work with Swift 6.4.** The new SwiftPM build layout moved the voice,
+  relay and screen-context libraries, so every build failed to link; the build
+  now finds them in either place.
 
 ## [0.4.1] — 2026-08-08
 
