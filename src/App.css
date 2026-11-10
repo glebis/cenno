@@ -103,6 +103,17 @@ body {
   -webkit-user-select: none;
 }
 
+/* Known agent's mark before its name. Sized to the caption's cap height and
+   tinted by currentColor, so it reads as part of the dim chrome. Never a
+   mousedown target: the drag-region span underneath must receive it. */
+.prompt-panel__agent-mark {
+  width: 1em;
+  height: 1em;
+  margin-right: 0.4em;
+  vertical-align: -0.15em;
+  pointer-events: none;
+}
+
 /* Dim ✕ with a ≥24px hit target. Interactive — no data-tauri-drag-region —
    so acceptFirstMouse lets the single click both key the panel and dismiss. */
 .prompt-panel__dismiss {

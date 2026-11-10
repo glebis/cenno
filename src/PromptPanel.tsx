@@ -32,6 +32,7 @@ import { desugar, SURFACE_ID } from "./a2ui/desugar";
 import { clearImageCache } from "./a2ui/image";
 import { getWidgets } from "./userConfig";
 import { observePanelContent } from "./panelResize";
+import { AgentMark } from "./agentLogos";
 
 // Once at module level. Guarded: jsdom (vitest) has no adoptedStyleSheets,
 // and the helper assumes it exists.
@@ -267,6 +268,7 @@ export default function PromptPanel({
           data-tauri-drag-region
           title={prompt.agent ? `Asked by ${prompt.agent}` : undefined}
         >
+          <AgentMark agent={prompt.agent} />
           {prompt.agent ?? "cenno"}
         </span>
         {onReadAloud && !onStopReading && (

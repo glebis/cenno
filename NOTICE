@@ -14,3 +14,12 @@ LGPL code.
 
 Brand and visual assets (docs/design/) are documented in
 docs/design/BRAND.md.
+
+Agent marks (src/agentLogos.tsx) are vendored SVG path data:
+  - Claude, OpenAI: simple-icons 15.22.0 (https://simpleicons.org), CC0-1.0.
+  - DeepSeek, Kimi, Qwen, Nous Research: @lobehub/icons-static-svg 1.102.0
+    (https://github.com/lobehub/lobe-icons), MIT License,
+    Copyright (c) 2023 LobeHub.
+The marks are trademarks of their respective owners. cenno shows them only
+to indicate which tool sent a prompt; no affiliation or endorsement is
+implied.
