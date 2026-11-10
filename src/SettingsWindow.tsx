@@ -17,6 +17,11 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  agentColorOverride,
+  defaultAgentColor,
+  isHexColor,
+} from "./panelColor";
 import "./SettingsWindow.css";
 import {
   DEFAULT_REOPEN_SHORTCUT,
@@ -40,6 +45,7 @@ interface ModelStatus {
 interface RawConfig {
   panel?: unknown;
   defaults?: { timeout_s?: number; flow?: string };
+  agent_colors?: Record<string, string>;
   tts?: {
     enabled?: boolean;
     min_urgency?: string;
@@ -55,6 +61,16 @@ interface RawConfig {
 
 const FLOWS = ["question", "mood", "ema", "reminder", "ambient"] as const;
 const URGENCIES = ["low", "normal", "high"] as const;
+
+/** `<input type="color">` requires #rrggbb; expand a config-supplied #rgb. */
+function toPickerHex(hex: string): string {
+  const value = hex.trim();
+  if (/^#[0-9a-f]{3}$/i.test(value)) {
+    const h = value.slice(1);
+    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`.toLowerCase();
+  }
+  return value.toLowerCase();
+}
 
 // Supertonic voice styles shipped with the model (voice_styles/*.json).
 const SUPERTONIC_VOICES: { id: string; label: string }[] = [
@@ -87,6 +103,7 @@ export default function SettingsWindow() {
   const [cfg, setCfg] = useState<RawConfig | null>(null);
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [hideFromDock, setHideFromDock] = useState(false);
+  const [agents, setAgents] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
 
@@ -98,6 +115,9 @@ export default function SettingsWindow() {
     invoke<boolean>("get_launch_at_login")
       .then(setLaunchAtLogin)
       .catch(() => {});
+    invoke<string[]>("list_agents")
+      .then(setAgents)
+      .catch(() => setAgents([]));
   }, []);
 
   // Persist the whole config (preserving unknown blocks) and flash "Saved".
@@ -126,6 +146,19 @@ export default function SettingsWindow() {
   function patchShortcuts(p: Partial<NonNullable<RawConfig["shortcuts"]>>) {
     if (!cfg) return;
     persist({ ...cfg, shortcuts: { ...cfg.shortcuts, ...p } });
+  }
+
+  // Set (or clear, with undefined) one agent's explicit color. Keys are
+  // matched case-insensitively so a recased agent name can't orphan an entry.
+  function setAgentColor(agent: string, color: string | undefined) {
+    if (!cfg) return;
+    const key = agent.trim().toLowerCase();
+    const next: Record<string, string> = {};
+    for (const [name, value] of Object.entries(cfg.agent_colors ?? {})) {
+      if (name.trim().toLowerCase() !== key) next[name] = value;
+    }
+    if (color && isHexColor(color)) next[agent] = color;
+    persist({ ...cfg, agent_colors: next });
   }
 
   async function testVoice() {
@@ -202,9 +235,11 @@ export default function SettingsWindow() {
             testing={testing}
             launchAtLogin={launchAtLogin}
             hideFromDock={hideFromDock}
+            agents={agents}
             onPatchTts={patchTts}
             onPatchDefaults={patchDefaults}
             onPatchShortcuts={patchShortcuts}
+            onSetAgentColor={setAgentColor}
             onTest={testVoice}
             onToggleLaunch={toggleLaunchAtLogin}
             onToggleDock={toggleDock}
@@ -228,9 +263,11 @@ function SettingsTab(props: {
   testing: boolean;
   launchAtLogin: boolean;
   hideFromDock: boolean;
+  agents: string[];
   onPatchTts: (p: Partial<NonNullable<RawConfig["tts"]>>) => void;
   onPatchDefaults: (p: Partial<NonNullable<RawConfig["defaults"]>>) => void;
   onPatchShortcuts: (p: Partial<NonNullable<RawConfig["shortcuts"]>>) => void;
+  onSetAgentColor: (agent: string, color: string | undefined) => void;
   onTest: () => void;
   onToggleLaunch: (v: boolean) => void;
   onToggleDock: (v: boolean) => void;
@@ -343,9 +380,12 @@ function SettingsTab(props: {
         <h2>Defaults</h2>
         <Field label="Default flow (when an agent doesn't set one)">
           <select
-            value={cfg.defaults?.flow ?? "question"}
-            onChange={(e) => props.onPatchDefaults({ flow: e.target.value })}
+            value={cfg.defaults?.flow ?? ""}
+            onChange={(e) =>
+              props.onPatchDefaults({ flow: e.target.value || undefined })
+            }
           >
+            <option value="">None — use per-agent colors</option>
             {FLOWS.map((f) => (
               <option key={f} value={f}>
                 {f}
@@ -353,6 +393,54 @@ function SettingsTab(props: {
             ))}
           </select>
         </Field>
+        <p className="sw__hint">
+          A default flow applies to every agent and takes precedence over the
+          per-agent colors below.
+        </p>
+      </section>
+
+      <section className="sw__section">
+        <h2>Panel colors — per agent</h2>
+        <p className="sw__muted">
+          Used when an agent sends no flow, so different agents look different
+          at a glance. Known agents start near their mark; unknown agents get a
+          stable color. An explicit color here also overrides a flow the agent
+          picks.
+        </p>
+        {props.agents.length === 0 ? (
+          <p className="sw__muted">
+            No agents yet — they appear here after an agent has asked through
+            cenno.
+          </p>
+        ) : (
+          <ul className="sw__agents">
+            {props.agents.map((agent) => {
+              const override = agentColorOverride(agent, cfg.agent_colors);
+              const fallback = defaultAgentColor(agent) ?? "#1E4FD8";
+              return (
+                <li key={agent} className="sw__agent">
+                  <span className="sw__agent-name">{agent}</span>
+                  <input
+                    className="sw__color"
+                    type="color"
+                    aria-label={`Panel color for ${agent}`}
+                    value={toPickerHex(override ?? fallback)}
+                    onChange={(e) =>
+                      props.onSetAgentColor(agent, e.target.value)
+                    }
+                  />
+                  <button
+                    className="sw__btn sw__btn--ghost sw__btn--mini"
+                    disabled={!override}
+                    onClick={() => props.onSetAgentColor(agent, undefined)}
+                  >
+                    Reset to default
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </>
   );

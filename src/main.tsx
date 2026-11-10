@@ -5,13 +5,16 @@ import "./styles/tokens.css";
 import "./styles/theme.css";
 import App from "./App";
 import SettingsWindow from "./SettingsWindow";
+import HelpWindow from "./HelpWindow";
 import { loadUserConfig } from "./userConfig";
 
-// One frontend bundle serves two windows. The `main` window is the floating
-// prompt panel (App); the `settings` window (opened from the tray) renders the
-// settings/integration/about UI. Branch on the Tauri window label.
+// One frontend bundle serves three windows. The `main` window is the floating
+// prompt panel (App); `settings` and `help` (both opened from the tray) render
+// their own UI. Branch on the Tauri window label.
 function rootFor(label: string) {
-  return label === "settings" ? <SettingsWindow /> : <App />;
+  if (label === "settings") return <SettingsWindow />;
+  if (label === "help") return <HelpWindow />;
+  return <App />;
 }
 
 function mount() {

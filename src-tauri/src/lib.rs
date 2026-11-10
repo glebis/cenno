@@ -122,9 +122,22 @@ fn read_config_file() -> crate::config::Config {
 /// window round-trips the full Config (read → edit → save) so nothing else in
 /// the file is lost. `tts_speak` reads config fresh per call, so Voice/TTS
 /// changes take effect on the very next spoken prompt — no restart needed.
+/// Invalid per-agent color entries are dropped before writing so the file the
+/// app later re-reads stays clean.
 #[tauri::command]
-fn save_config_file(config: crate::config::Config) -> Result<(), String> {
+fn save_config_file(mut config: crate::config::Config) -> Result<(), String> {
+    config.sanitize();
     config.save()
+}
+
+/// Distinct agent names seen in the history DB, for the settings window's
+/// per-agent color list. Empty when history is unavailable.
+#[tauri::command]
+fn list_agents(app: tauri::AppHandle) -> Vec<String> {
+    use tauri::Manager as _;
+    app.try_state::<crate::db::Db>()
+        .and_then(|db| db.distinct_agents().ok())
+        .unwrap_or_default()
 }
 
 /// Current launch-at-login state (OS truth via the autostart plugin).
@@ -719,6 +732,41 @@ pub fn open_settings_window(app: &tauri::AppHandle) {
     }
 }
 
+/// Open (or focus) the Help & About window. Same pattern as
+/// `open_settings_window`: a normal decorated window labeled `help`; the
+/// frontend branches on that label. Idempotent.
+pub fn open_help_window(app: &tauri::AppHandle) {
+    use tauri::Manager as _;
+    if let Some(win) = app.get_webview_window("help") {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        app,
+        "help",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("cenno — Help & About")
+    .inner_size(560.0, 700.0)
+    .min_inner_size(460.0, 520.0)
+    .resizable(true);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true);
+    }
+
+    match builder.build() {
+        Ok(win) => {
+            let _ = win.set_focus();
+        }
+        Err(e) => eprintln!("cenno: failed to open help window: {e}"),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -828,6 +876,12 @@ pub fn run() {
                     None
                 }
             };
+
+            // Expose the DB handle to commands (the settings window's agent
+            // list). The async MCP task gets its own clone below.
+            if let Some(ref db) = db {
+                app.manage(db.clone());
+            }
 
             // Suppression state, seeded from persisted settings when the DB
             // is available. Defaults: not paused, hide-in-fullscreen ON.
@@ -1039,6 +1093,7 @@ pub fn run() {
             read_config_file,
             save_config_file,
             set_reopen_shortcut,
+            list_agents,
             get_launch_at_login,
             set_launch_at_login,
             set_dock_visible,

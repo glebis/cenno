@@ -34,6 +34,8 @@ export interface RawTtsConfig {
 export interface UserConfig {
   panel?: unknown;
   defaults?: { timeout_s?: number; flow?: string };
+  /** Per-agent panel surface colors, keyed by the agent's reported name. */
+  agent_colors?: Record<string, string>;
   widgets?: Record<string, WidgetTemplate>;
   tts?: RawTtsConfig;
   capture?: {
@@ -59,6 +61,7 @@ export interface ResolvedTtsConfig {
 
 let cachedWidgets: Record<string, WidgetTemplate> = {};
 let cachedDefaults: UserConfig["defaults"] = {};
+let cachedAgentColors: Record<string, string> = {};
 // Opt-in, default off; default threshold "high" so only High-urgency speaks.
 let cachedTts: ResolvedTtsConfig = { enabled: false, minUrgency: "high", engine: "system" };
 
@@ -67,6 +70,10 @@ export function getWidgets(): Record<string, WidgetTemplate> {
 }
 export function getDefaults(): UserConfig["defaults"] {
   return cachedDefaults;
+}
+/** Explicit per-agent surface overrides from `~/.cenno/config.json`. */
+export function getAgentColors(): Record<string, string> {
+  return cachedAgentColors;
 }
 export function getTts(): ResolvedTtsConfig {
   return cachedTts;
@@ -159,6 +166,7 @@ export async function loadUserConfig(): Promise<void> {
     const config = await invoke<UserConfig>("get_user_config");
     cachedWidgets = config.widgets ?? {};
     cachedDefaults = config.defaults ?? {};
+    cachedAgentColors = config.agent_colors ?? {};
     cachedTts = resolveTts(config.tts);
   } catch {
     /* not in Tauri, or command missing → built-in defaults */

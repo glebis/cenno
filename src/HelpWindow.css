@@ -1,0 +1,189 @@
+/**
+ * HelpWindow styles — shares the design language with the settings window
+ * (paper/ink, tracked uppercase captions, pill accents), but follows the
+ * system appearance: paper on light, ink on dark. Colors come from the design
+ * tokens where they exist (tokens.css is loaded globally), with literal
+ * fallbacks so the window is legible even before tokens load.
+ */
+
+/* Light is the default; the dark block below overrides. */
+.hw {
+  --hw-bg: var(--cenno-color-paper, #faf8f5);
+  --hw-text: var(--cenno-color-flow-ambient, #14171a);
+  --hw-dim: rgba(20, 23, 26, 0.62);
+  --hw-hair: rgba(20, 23, 26, 0.14);
+  --hw-code: rgba(20, 23, 26, 0.07);
+  --hw-accent: var(--cenno-color-flow-question, #1e4fd8);
+
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--hw-bg);
+  color: var(--hw-text);
+  font-family: var(
+    --cenno-font-family-default,
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    system-ui,
+    sans-serif
+  );
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  .hw {
+    --hw-bg: var(--cenno-color-flow-ambient, #14171a);
+    --hw-text: #ffffff;
+    --hw-dim: rgba(255, 255, 255, 0.6);
+    --hw-hair: rgba(255, 255, 255, 0.12);
+    --hw-code: rgba(255, 255, 255, 0.08);
+    --hw-accent: var(--cenno-color-flow-mood, #ff6250);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Header floats under the macOS overlay title bar; left padding clears the
+   traffic lights. Whole bar is a drag handle. */
+.hw__top {
+  display: flex;
+  align-items: center;
+  height: 54px;
+  padding: 0 20px 0 84px;
+  border-bottom: 1px solid var(--hw-hair);
+  -webkit-app-region: drag;
+}
+
+.hw__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  color: var(--hw-text);
+}
+
+.hw__mark {
+  display: block;
+  align-self: center;
+}
+
+.hw__title {
+  font-weight: var(--cenno-font-weight-question, 600);
+  letter-spacing: var(--cenno-font-tracking-caption, 0.08em);
+  text-transform: uppercase;
+  font-size: 13px;
+}
+
+.hw__version {
+  font-size: 12px;
+  letter-spacing: var(--cenno-font-tracking-caption, 0.08em);
+  color: var(--hw-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.hw__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 30px 36px;
+}
+
+.hw__section {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--hw-hair);
+}
+
+.hw__section:last-of-type {
+  border-bottom: 0;
+}
+
+.hw__section h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: var(--cenno-font-weight-caption, 400);
+  letter-spacing: var(--cenno-font-tracking-caption, 0.08em);
+  text-transform: uppercase;
+  color: var(--hw-dim);
+}
+
+.hw__muted {
+  margin: 0 0 12px;
+  color: var(--hw-dim);
+  line-height: 1.55;
+}
+
+.hw code {
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--hw-code);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.hw__links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hw__link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hw-text);
+  font: inherit;
+  font-size: 14px;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+  align-self: flex-start;
+  border-bottom: 1px solid var(--hw-hair);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.hw__link:hover {
+  color: var(--hw-accent);
+  border-bottom-color: currentColor;
+}
+
+/* The NOTICE text verbatim. Monospace, scrollable inside the section so a
+   long notice never breaks the window layout. */
+.hw__notice {
+  margin: 0;
+  padding: 14px 16px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--hw-code);
+  border: 1px solid var(--hw-hair);
+  border-radius: var(--cenno-radius-control, 10px);
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--hw-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hw__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 30px;
+  border-top: 1px solid var(--hw-hair);
+  font-size: 11px;
+  letter-spacing: var(--cenno-font-tracking-caption, 0.08em);
+  text-transform: uppercase;
+  color: var(--hw-dim);
+}

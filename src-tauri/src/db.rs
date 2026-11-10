@@ -95,6 +95,20 @@ impl Db {
         self.0.clone()
     }
 
+    /// Every distinct agent name recorded in the history, alphabetically.
+    /// Blank/NULL names (rows written before the `agent` column existed) are
+    /// excluded. Used by the settings window's per-agent color list.
+    pub fn distinct_agents(&self) -> rusqlite::Result<Vec<String>> {
+        let conn = self.0.lock();
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT agent FROM prompts \
+             WHERE agent IS NOT NULL AND TRIM(agent) <> '' \
+             ORDER BY agent COLLATE NOCASE ASC",
+        )?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        rows.collect()
+    }
+
     /// Read a setting value by key.
     pub fn get_setting(&self, key: &str) -> rusqlite::Result<Option<String>> {
         let conn = self.0.lock();
@@ -292,6 +306,17 @@ mod tests {
         assert_eq!(status, "timed_out");
         assert!(answer.is_none(), "answer must be NULL for timed_out, got {answer:?}");
         assert!(via.is_none(), "via must be NULL for timed_out");
+    }
+
+    #[test]
+    fn distinct_agents_lists_recorded_names_without_duplicates_or_blanks() {
+        let (db, _dir) = open_temp_db();
+        let outcome = AskResponse::TimedOut { answered: false, prompt_id: "p".into() };
+        for agent in [Some("claude-code"), Some("codex"), Some("claude-code"), None] {
+            let req = AskRequest { agent: agent.map(str::to_string), ..basic_req() };
+            db.record_prompt(&req, "p", &outcome, Utc::now()).unwrap();
+        }
+        assert_eq!(db.distinct_agents().unwrap(), vec!["claude-code", "codex"]);
     }
 
     #[test]
