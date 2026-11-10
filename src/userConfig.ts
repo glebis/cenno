@@ -159,6 +159,26 @@ function injectTokenStyles(css: string): void {
 }
 
 /**
+ * Broadcast by the settings window after every successful save, so the panel
+ * picks up per-agent colors and the default flow without a restart.
+ */
+export const CONFIG_CHANGED_EVENT = "cenno://config-changed";
+
+/**
+ * Re-read the settings-window-editable parts of `~/.cenno/config.json` from
+ * disk (`get_user_config` is the launch snapshot). Never throws.
+ */
+export async function refreshUserConfig(): Promise<void> {
+  try {
+    const config = await invoke<UserConfig>("read_config_file");
+    cachedDefaults = config.defaults ?? {};
+    cachedAgentColors = config.agent_colors ?? {};
+  } catch {
+    /* keep the previous values */
+  }
+}
+
+/**
  * Fetch and apply external config. Safe to call once at startup; never throws.
  */
 export async function loadUserConfig(): Promise<void> {

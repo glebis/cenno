@@ -13,15 +13,18 @@
  *
  * This is a first prototype — structure and wiring over polish.
  */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+  AA_CONTRAST,
   agentColorOverride,
+  contrastRatio,
   defaultAgentColor,
   isHexColor,
 } from "./panelColor";
+import { CONFIG_CHANGED_EVENT } from "./userConfig";
 import "./SettingsWindow.css";
 import {
   DEFAULT_REOPEN_SHORTCUT,
@@ -125,6 +128,8 @@ export default function SettingsWindow() {
     setCfg(next);
     try {
       await invoke("save_config_file", { config: next });
+      // Tell the panel window to re-read colors / default flow.
+      void emit(CONFIG_CHANGED_EVENT).catch(() => {});
       setSaved(true);
       window.setTimeout(() => setSaved(false), 1400);
     } catch (e) {
@@ -414,35 +419,95 @@ function SettingsTab(props: {
           </p>
         ) : (
           <ul className="sw__agents">
-            {props.agents.map((agent) => {
-              const override = agentColorOverride(agent, cfg.agent_colors);
-              const fallback = defaultAgentColor(agent) ?? "#1E4FD8";
-              return (
-                <li key={agent} className="sw__agent">
-                  <span className="sw__agent-name">{agent}</span>
-                  <input
-                    className="sw__color"
-                    type="color"
-                    aria-label={`Panel color for ${agent}`}
-                    value={toPickerHex(override ?? fallback)}
-                    onChange={(e) =>
-                      props.onSetAgentColor(agent, e.target.value)
-                    }
-                  />
-                  <button
-                    className="sw__btn sw__btn--ghost sw__btn--mini"
-                    disabled={!override}
-                    onClick={() => props.onSetAgentColor(agent, undefined)}
-                  >
-                    Reset to default
-                  </button>
-                </li>
-              );
-            })}
+            {props.agents.map((agent) => (
+              <AgentColorRow
+                key={agent}
+                agent={agent}
+                override={agentColorOverride(agent, cfg.agent_colors)}
+                onSet={(color) => props.onSetAgentColor(agent, color)}
+              />
+            ))}
           </ul>
         )}
       </section>
     </>
+  );
+}
+
+/* ─────────────────────── Per-agent color row ─────────────────────── */
+
+// Native color pickers fire onChange continuously while dragging; persist
+// only once the value has settled so the config isn't rewritten per tick.
+const COLOR_SAVE_DEBOUNCE_MS = 400;
+
+function AgentColorRow({
+  agent,
+  override,
+  onSet,
+}: {
+  agent: string;
+  override: string | null;
+  onSet: (color: string | undefined) => void;
+}) {
+  const saved = toPickerHex(override ?? defaultAgentColor(agent) ?? "#1E4FD8");
+  // Local draft so the swatch tracks the drag instantly; null = show saved.
+  const [draft, setDraft] = useState<string | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const pending = useRef<string | null>(null);
+  const onSetRef = useRef(onSet);
+  onSetRef.current = onSet;
+
+  // Flush a pending save on unmount (e.g. switching tabs mid-drag) so a
+  // picked color is never silently dropped.
+  useEffect(
+    () => () => {
+      window.clearTimeout(timer.current);
+      if (pending.current !== null) onSetRef.current(pending.current);
+    },
+    [],
+  );
+
+  const shown = draft ?? saved;
+  const lowContrast = contrastRatio(shown) < AA_CONTRAST;
+
+  return (
+    <li className="sw__agent">
+      <span className="sw__agent-name">{agent}</span>
+      <input
+        className="sw__color"
+        type="color"
+        aria-label={`Panel color for ${agent}`}
+        value={shown}
+        onChange={(e) => {
+          const color = e.target.value;
+          setDraft(color);
+          pending.current = color;
+          window.clearTimeout(timer.current);
+          timer.current = window.setTimeout(() => {
+            pending.current = null;
+            onSetRef.current(color);
+            setDraft(null);
+          }, COLOR_SAVE_DEBOUNCE_MS);
+        }}
+      />
+      <button
+        className="sw__btn sw__btn--ghost sw__btn--mini"
+        disabled={!override && draft === null}
+        onClick={() => {
+          window.clearTimeout(timer.current);
+          pending.current = null;
+          setDraft(null);
+          onSet(undefined);
+        }}
+      >
+        Reset to default
+      </button>
+      {lowContrast && (
+        <span className="sw__agent-warn" role="status">
+          Too light — white text will be hard to read.
+        </span>
+      )}
+    </li>
   );
 }
 

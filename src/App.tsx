@@ -5,7 +5,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import PromptPanel, { Prompt, Via } from "./PromptPanel";
 import { nextNotedWord } from "./notedWords";
 import { PANEL_MIN_HEIGHT } from "./panelResize";
-import { getAgentColors, getDefaults, getTts } from "./userConfig";
+import {
+  CONFIG_CHANGED_EVENT,
+  getAgentColors,
+  getDefaults,
+  getTts,
+  refreshUserConfig,
+} from "./userConfig";
 import { resolvePanelColor } from "./panelColor";
 import { useTtsPlayer } from "./tts/useTtsPlayer";
 import "./App.css";
@@ -325,6 +331,17 @@ function App() {
     });
     return () => {
       cancelled = true;
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Settings saved → re-read per-agent colors / default flow so the next
+  // prompt uses them without a restart.
+  useEffect(() => {
+    const unlisten = listen(CONFIG_CHANGED_EVENT, () => {
+      void refreshUserConfig();
+    });
+    return () => {
       unlisten.then((fn) => fn());
     };
   }, []);
