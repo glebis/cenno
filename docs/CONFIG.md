@@ -27,6 +27,10 @@ Working examples: [`docs/examples/dot-cenno/`](examples/dot-cenno/).
     "timeout_s": 90,              // when an agent omits timeout_s (built-in 120)
     "flow": "ema"                 // when an agent omits flow (mood|question|ema|reminder|ambient)
   },
+  "agent_colors": {               // per-agent panel colors (hex only)
+    "claude-code": "#A8482B",
+    "codex": "#0B6B57"
+  },
   "capture": {
     "enabled": true,              // global screen-context kill switch
     "passive_sampling": false,    // opt-in; on-demand reads still allowed
@@ -54,6 +58,42 @@ redaction default on; passive sampling defaults off.
 It sets where a fresh panel appears; cenno still remembers where you drag it.
 Unknown keys are rejected (so typos surface as "ignored malformed config" rather
 than silently doing nothing).
+
+## Per-agent panel colors
+
+`agent_colors` maps an agent name (the exact name the agent reports, e.g.
+`claude-code` or `codex-mcp-client`) to the panel surface color used for its
+prompts. Keys are matched case-insensitively; values must be opaque
+`#RGB` or `#RRGGBB` hex. Invalid entries are ignored (and logged) instead of
+poisoning the whole config.
+
+A panel's color is resolved in this order:
+
+1. **An explicit `agent_colors` entry** for the agent — user config wins.
+2. **The agent's own `flow`** — `mood`, `question`, `ema`, `reminder`, or
+   `ambient` keeps that flow's hue (`color.flow.*` in `tokens.json`).
+3. **The agent's built-in color** — only when the prompt sends no `flow`.
+   Known agents use a hue near their mark; unknown agents get a stable color
+   hashed from the name out of a fixed palette. Every built-in color clears
+   WCAG AA for the panel's white text.
+4. **`question` blue** — when there is no agent name and no flow.
+
+A configured `defaults.flow` counts as an explicit user choice, so it keeps
+its flow color for every agent (step 2) and the per-agent colors in step 3 are
+not used. Leave `defaults.flow` out of the file to let agents look different
+by default.
+
+The Settings window's **Panel colors — per agent** section lists the agents
+seen so far (from the history database) with a color picker and a reset. Like
+the rest of `~/.cenno`, changes apply on the next launch (the Settings window
+writes the file, and `agent_colors` is read at startup).
+
+```jsonc
+"agent_colors": {
+  "claude-code": "#A8482B",
+  "codex": "#0B6B57"
+}
+```
 
 ## Custom widgets (declarative)
 

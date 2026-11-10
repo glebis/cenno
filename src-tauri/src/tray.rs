@@ -185,6 +185,8 @@ pub fn setup_tray(
     let show_pending = MenuItem::with_id(app, "show_pending", &label, enabled, None::<&str>)?;
     app.manage(PendingMenuItem(show_pending.clone()));
 
+    let help = MenuItem::with_id(app, "open_help", "Help & About…", true, None::<&str>)?;
+
     let check_updates = MenuItem::with_id(
         app,
         "check_updates",
@@ -209,6 +211,7 @@ pub fn setup_tray(
             &hide_fullscreen,
             &launch_login,
             &PredefinedMenuItem::separator(app)?,
+            &help,
             &check_updates,
             &quit,
         ],
@@ -308,6 +311,9 @@ pub fn setup_tray(
                 }
                 "open_settings" => {
                     crate::open_settings_window(app);
+                }
+                "open_help" => {
+                    crate::open_help_window(app);
                 }
                 "show_pending" => {
                     // Re-show the front-of-queue parked prompt (restores its

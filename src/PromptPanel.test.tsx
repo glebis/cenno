@@ -170,6 +170,55 @@ describe("PromptPanel", () => {
     expect(container.querySelector('[data-flow="question"]')).toBeTruthy();
   });
 
+  it("colors a flow-less prompt by its agent", () => {
+    const { container } = render(
+      <PromptPanel
+        prompt={{ ...base, id: "p_agent_claude", agent: "claude-code" }}
+        onAnswer={() => {}}
+      />,
+    );
+    const root = container.querySelector(".prompt-panel") as HTMLElement;
+    expect(root.dataset.agentColor).toBe("true");
+    // Claude's built-in hue (see panelColor.ts), not the question blue.
+    expect(root.style.getPropertyValue("--cenno-surface")).toBe("#A8482B");
+    // Flow still drives layout/semantics.
+    expect(root.getAttribute("data-flow")).toBe("question");
+  });
+
+  it("gives two flow-less agents different colors", () => {
+    const colorFor = (id: string, agent: string) => {
+      const { container, unmount } = render(
+        <PromptPanel prompt={{ ...base, id, agent }} onAnswer={() => {}} />,
+      );
+      const root = container.querySelector(".prompt-panel") as HTMLElement;
+      const color = root.style.getPropertyValue("--cenno-surface");
+      unmount();
+      return color;
+    };
+    const claude = colorFor("p_c", "claude-code");
+    const codex = colorFor("p_x", "codex");
+    expect(claude).not.toBe(codex);
+    expect(colorFor("p_c2", "claude-code")).toBe(claude); // stable per agent
+  });
+
+  it("keeps the flow color when the agent also sends a flow", () => {
+    const { container } = render(
+      <PromptPanel
+        prompt={{
+          ...base,
+          id: "p_agent_flow",
+          agent: "claude-code",
+          flow: "ema",
+        }}
+        onAnswer={() => {}}
+      />,
+    );
+    const root = container.querySelector(".prompt-panel") as HTMLElement;
+    expect(root.dataset.agentColor).toBeUndefined();
+    expect(root.style.getPropertyValue("--cenno-surface")).toBe("");
+    expect(root.getAttribute("data-flow")).toBe("ema");
+  });
+
   it("renders an a2ui payload that targets a non-'main' surfaceId", () => {
     const prompt: Prompt = {
       ...base,

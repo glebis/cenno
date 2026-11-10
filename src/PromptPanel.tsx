@@ -23,16 +23,24 @@
  * /choice binding resolves to a 1-element array (unwrapped here), /scale to a
  * number (stringified here). Empty answers stay allowed (ack/skip).
  */
-import { Component, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import {
+  Component,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { MessageProcessor } from "@a2ui/web_core/v0_9";
 import { injectBasicCatalogStyles } from "@a2ui/web_core/v0_9/basic_catalog";
 import { A2uiSurface } from "@a2ui/react/v0_9";
 import { cennoCatalog } from "./a2ui/catalog";
 import { desugar, SURFACE_ID } from "./a2ui/desugar";
 import { clearImageCache } from "./a2ui/image";
-import { getWidgets } from "./userConfig";
+import { getAgentColors, getWidgets } from "./userConfig";
 import { observePanelContent } from "./panelResize";
 import { AgentMark } from "./agentLogos";
+import { resolvePanelColor, type Flow } from "./panelColor";
 
 // Once at module level. Guarded: jsdom (vitest) has no adoptedStyleSheets,
 // and the helper assumes it exists.
@@ -46,7 +54,7 @@ export interface Prompt {
   body_md: string;
   input: { kind: string };
   choices?: string[];
-  flow?: "mood" | "question" | "ema" | "reminder" | "ambient";
+  flow?: Flow;
   progress?: { step: number; total: number };
   /** Queue priority (low|normal|high); sound-out gates voice-out on it. */
   urgency?: string;
@@ -238,6 +246,25 @@ export default function PromptPanel({
     return observePanelContent(content, root);
   }, [prompt.id]);
 
+  // Surface color: explicit per-agent override → agent's flow → per-agent
+  // default → question blue (see src/panelColor.ts). The flow value also
+  // drives layout/semantics (mood choice words, EMA dots), so it is always
+  // set; only the hue comes from the agent when there is no flow.
+  const panelColor = useMemo(
+    () =>
+      resolvePanelColor({
+        agent: prompt.agent,
+        flow: prompt.flow,
+        overrides: getAgentColors(),
+      }),
+    // Keyed by prompt.id like the surface memo: config is launch-scoped.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [prompt.id],
+  );
+  const panelStyle: CSSProperties | undefined = panelColor.surface
+    ? ({ ["--cenno-surface" as string]: panelColor.surface } as CSSProperties)
+    : undefined;
+
   // The panel root owns the surface color (catalog components stay
   // transparent); data-flow switches the semantic theme.
   //
@@ -252,7 +279,9 @@ export default function PromptPanel({
     <div
       ref={rootRef}
       className="prompt-panel"
-      data-flow={prompt.flow ?? "question"}
+      data-flow={panelColor.flow}
+      data-agent-color={panelColor.fromAgent ? "true" : undefined}
+      style={panelStyle}
       data-tauri-drag-region
     >
       <div className="prompt-panel__drag-strip" data-tauri-drag-region aria-hidden="true" />

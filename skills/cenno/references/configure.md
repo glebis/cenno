@@ -101,6 +101,10 @@ cat > ~/.cenno/config.json << 'EOF'
     "timeout_s": <30|60|90|120>,
     "flow": "<mood|question|ema|reminder|ambient>"
   },
+  "agent_colors": {
+    // ONLY if they chose per-agent colors; exact agent names, hex only.
+    // e.g. "claude-code": "#A8482B", "codex": "#0B6B57"
+  },
   "widgets": {
     // ONLY if they chose a custom widget:
     "rating5": {
@@ -115,6 +119,8 @@ cat > ~/.cenno/config.json << 'EOF'
 }
 EOF
 ```
+
+`agent_colors` sets a panel color per agent (exact reported name, hex only). It is an explicit override: it wins even when the agent picks a flow. With no `defaults.flow`, an agent that sends no flow gets its own built-in color (near its mark for known agents, a stable hash for unknown ones). If `defaults.flow` IS set, that flow color applies to every agent instead. The Settings window lists agents seen so far with color pickers.
 
 For `nps`, use the same template with `"max": 10`, `"minLabel": "not likely"`, `"maxLabel": "very likely"`. For more controls per widget, see https://github.com/glebis/cenno/blob/main/docs/design/CONTROLS.md
 

@@ -27,6 +27,16 @@ fn tokens_path() -> Option<PathBuf> {
     cenno_dir().map(|d| d.join("tokens.json"))
 }
 
+/// A panel color must be `#RGB` or `#RRGGBB` (case-insensitive). Named colors
+/// and alpha are rejected: only opaque hex is guaranteed to accept the token
+/// text color, which the frontend's contrast check assumes.
+pub fn is_valid_hex_color(s: &str) -> bool {
+    let Some(hex) = s.strip_prefix('#') else {
+        return false;
+    };
+    matches!(hex.len(), 3 | 6) && hex.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
 /// Screen anchor for the default panel position.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -148,6 +158,12 @@ impl CaptureConfig {
 pub struct Config {
     pub panel: PanelConfig,
     pub defaults: DefaultsConfig,
+    /// Per-agent panel surface colors, keyed by the agent's self-reported name
+    /// (e.g. `{"claude-code": "#A8482B"}`). Used when the agent sends no
+    /// `flow`, and as an explicit override that beats a flow when it does.
+    /// Values must be `#RGB` or `#RRGGBB`; invalid entries are dropped (and
+    /// logged) on load rather than poisoning the whole config.
+    pub agent_colors: std::collections::HashMap<String, String>,
     /// Voice-out settings (sound-out). Defaults to disabled.
     pub tts: TtsConfig,
     /// Global keyboard shortcuts (e.g. reopen a pending prompt).
@@ -164,6 +180,29 @@ pub struct Config {
 }
 
 impl Config {
+    /// Drop invalid per-agent color entries (`~/.cenno` is hand-editable).
+    /// Hex-only is a hard requirement: the webview puts the value straight
+    /// into a CSS variable and checks white-text contrast on it, so a typo
+    /// must never reach the panel. Keys are trimmed; empty keys are dropped.
+    pub(crate) fn sanitize(&mut self) {
+        self.agent_colors = std::mem::take(&mut self.agent_colors)
+            .into_iter()
+            .filter_map(|(agent, color)| {
+                let agent = agent.trim().to_string();
+                let color = color.trim().to_string();
+                if agent.is_empty() || !is_valid_hex_color(&color) {
+                    eprintln!(
+                        "cenno: ignoring invalid agent_colors entry {agent:?}: {color:?} \
+                         (want #RGB or #RRGGBB)"
+                    );
+                    None
+                } else {
+                    Some((agent, color))
+                }
+            })
+            .collect();
+    }
+
     /// Load `~/.cenno/config.json`. Missing → defaults; malformed → defaults
     /// with a logged warning (returned in `.1` for the caller to surface).
     pub fn load() -> Self {
@@ -175,7 +214,10 @@ impl Config {
             Err(_) => return Self::default(), // absent (or unreadable) → defaults
         };
         match serde_json::from_str::<Config>(&raw) {
-            Ok(cfg) => cfg,
+            Ok(mut cfg) => {
+                cfg.sanitize();
+                cfg
+            }
             Err(e) => {
                 eprintln!("cenno: ignoring malformed {}: {e}", path.display());
                 Self::default()
@@ -347,6 +389,49 @@ mod tests {
         let json = serde_json::to_string(&cfg).unwrap();
         let cfg2: Config = serde_json::from_str(&json).expect("re-deserialize must parse");
         assert_eq!(cfg2.tts.model_path.as_deref(), Some("/Users/x/models/supertonic-3"));
+    }
+
+    #[test]
+    fn hex_color_validation_accepts_short_and_long_only() {
+        for good in ["#fff", "#FFF", "#a8482b", "#A8482B", "#123456"] {
+            assert!(is_valid_hex_color(good), "{good} should be valid");
+        }
+        for bad in [
+            "fff", "#ff", "#ffff", "#fffffff", "#gggggg", "#12345g", "",
+            "red", "rgb(1,2,3)", "#A8482B00",
+        ] {
+            assert!(!is_valid_hex_color(bad), "{bad} should be invalid");
+        }
+    }
+
+    #[test]
+    fn agent_colors_parse_and_are_sanitized_on_load() {
+        // Valid entries survive; keys/colors are trimmed.
+        let src = r##"{"agent_colors":{" claude-code ":" #A8482B ","codex":"#0B6B57"}}"##;
+        let mut cfg: Config = serde_json::from_str(src).unwrap();
+        cfg.sanitize();
+        assert_eq!(cfg.agent_colors.get("claude-code").map(String::as_str), Some("#A8482B"));
+        assert_eq!(cfg.agent_colors.get("codex").map(String::as_str), Some("#0B6B57"));
+        assert_eq!(cfg.agent_colors.len(), 2);
+
+        // Invalid colors and blank keys are dropped, valid siblings kept.
+        let src = r##"{"agent_colors":{"ok":"#123456","named":"red","alpha":"#11223344","":"#ffffff","bad":"nope"}}"##;
+        let mut cfg: Config = serde_json::from_str(src).unwrap();
+        cfg.sanitize();
+        assert_eq!(cfg.agent_colors.len(), 1);
+        assert_eq!(cfg.agent_colors.get("ok").map(String::as_str), Some("#123456"));
+    }
+
+    #[test]
+    fn agent_colors_absent_is_empty_and_round_trips() {
+        let cfg: Config = serde_json::from_str("{}").unwrap();
+        assert!(cfg.agent_colors.is_empty());
+
+        let src = r##"{"agent_colors":{"claude-code":"#A8482B"}}"##;
+        let cfg: Config = serde_json::from_str(src).unwrap();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let round: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(round.agent_colors.get("claude-code").map(String::as_str), Some("#A8482B"));
     }
 
     #[test]

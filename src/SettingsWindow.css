@@ -425,6 +425,61 @@ select:focus,
   text-transform: uppercase;
 }
 
+/* ── Per-agent panel colors ── */
+.sw__agents {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sw__agent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sw-hair);
+  border-radius: var(--sw-radius);
+}
+
+.sw__agent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.sw__color {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  background: transparent;
+  border: 1px solid var(--sw-hair);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.sw__color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.sw__color::-webkit-color-swatch {
+  border: 0;
+  border-radius: 4px;
+}
+
+.sw__btn--mini {
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
 /* ── Supertonic model block ── */
 .sw__model {
   display: flex;

@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import PromptPanel, { Prompt, Via } from "./PromptPanel";
 import { nextNotedWord } from "./notedWords";
 import { PANEL_MIN_HEIGHT } from "./panelResize";
-import { getDefaults, getTts } from "./userConfig";
+import { getAgentColors, getDefaults, getTts } from "./userConfig";
+import { resolvePanelColor } from "./panelColor";
 import { useTtsPlayer } from "./tts/useTtsPlayer";
 import "./App.css";
 
@@ -571,14 +572,25 @@ function App() {
   if (!active) return null;
 
   if (answered) {
-    // Same surface (class + flow theme) so the color holds steady; only the
-    // content swaps to the confirmation (one word from the rotating cycle,
-    // centered both ways by .prompt-panel--answered). data-tauri-drag-region
-    // keeps the panel draggable during the linger.
+    // Same resolved surface so the color holds steady; only the content swaps
+    // to the confirmation (one word from the rotating cycle, centered both
+    // ways by .prompt-panel--answered). data-tauri-drag-region keeps the panel
+    // draggable during the linger.
+    const answeredColor = resolvePanelColor({
+      agent: active.prompt.agent,
+      flow: active.prompt.flow,
+      overrides: getAgentColors(),
+    });
     return (
       <div
         className="prompt-panel prompt-panel--answered"
-        data-flow={active.prompt.flow ?? "question"}
+        data-flow={answeredColor.flow}
+        data-agent-color={answeredColor.fromAgent ? "true" : undefined}
+        style={
+          answeredColor.surface
+            ? ({ ["--cenno-surface" as string]: answeredColor.surface } as CSSProperties)
+            : undefined
+        }
         data-tauri-drag-region
       >
         <p className="answered-note">{confirmation}</p>
