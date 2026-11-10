@@ -62,7 +62,7 @@ Returns `{"answer": "...", "via": "text"|"choice"|"voice_text", "elapsed_s": 1.4
 
 - **`say`** is a phrase for the ear, not a copy of the title: the panel shows the long version, the speaker gets one short line.
 - **`urgency`** gates whether the panel speaks and how insistently it appears. Omit it for a normal question; `low` for FYI-shaped prompts; `high` only when the answer blocks the user's next action.
-- **The panel header names the asker** from the MCP client's `initialize` handshake (`clientInfo.title`, else `clientInfo.name`, trimmed to 40 chars). There is no argument for it — an `agent` field is ignored, so one agent can't speak under another's name. CLI calls show as `cenno`.
+- **The panel header names the asker** from the MCP client's `initialize` handshake (`clientInfo.title`, else `clientInfo.name`, trimmed to 40 chars). There is no argument for it — an `agent` field is ignored, so one agent can't speak under another's name. CLI calls show as `cenno`. Well-known clients (`claude-code`, `codex-mcp-client`) also get a small monochrome logo, matched on the exact name; the name is saved with each prompt (`agent` in `cenno export`).
 - **`device_hint`** (`"phone"` | `"ipad"` | `"watch"`) is a proposal the user's routing policy may ignore. Omit it unless cross-device delivery is the point.
 
 ### Input kinds
