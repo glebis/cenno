@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-10T14:01:22.957Z",
+        "reason": "user confirmed: Inter is the intended cenno UI face (2026-11-10)"
+      }
+    ]
+  }
+}

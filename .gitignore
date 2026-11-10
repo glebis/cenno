@@ -45,3 +45,6 @@ scripts/.release-env.local.sh
 # Local agent tool state (never shared)
 .codex/
 .commandcode/
+
+# impeccable design-hook cache (regenerated)
+.impeccable/hook.cache.json
