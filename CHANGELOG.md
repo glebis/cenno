@@ -15,6 +15,15 @@ All notable changes to cenno are documented here. The format follows
   defaults to 0. Several items chain through `ask_sequence`, one panel each.
   Built for the the-goal constraint diagnostic.
 
+### Changed
+
+- **The `cenno` agent skill is leaner and does what its setup promises.** The
+  main file is a third of its former size; setup, configuration and the `a2ui`
+  widget examples moved to reference files that load only when needed. When the
+  skill config turns on `log_answers`, agents now actually append each answer to
+  the log file. Default timeout and color theme come only from `~/.cenno`, so
+  an old skill config can no longer override them.
+
 ## [0.4.1] — 2026-08-08
 
 ### Added
