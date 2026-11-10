@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fire a demo prompt of each kind at the running (or auto-launched) cenno.
-# Usage: scripts/demo.sh [text|voice|choice|scale|confirm|mood|table|matrix|sliders|images|image-error|image-remote|all]
+# Usage: scripts/demo.sh [text|voice|choice|scale|confirm|mood|table|matrix|sliders|stepscore|images|image-error|image-remote|all]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BIN="${CENNO_BIN:-src-tauri/target/release/cenno}"
@@ -31,6 +31,7 @@ case "${1:-all}" in
   # A remote URL never reaches a panel: the guard rejects the payload
   # before a prompt is registered, so this one prints the agent-facing error.
   image-remote) ask '{"title":"This payload is rejected","a2ui":[{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"cenno:catalog/v1"}},{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Image","url":"https://example.com/a.png"}]}}],"timeout_s":60}' ;;
-  all)     for k in mood text voice choice scale confirm table matrix sliders images image-error image-remote; do "$0" "$k"; done ;;
-  *) echo "usage: $0 [text|voice|choice|scale|confirm|mood|table|matrix|sliders|images|image-error|image-remote|all]"; exit 1 ;;
+  stepscore) ask '{"title":"Score this step (0 none · 3 high)","flow":"ema","progress":{"step":1,"total":4},"a2ui":[{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"cenno:catalog/v1"}},{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Column","children":["s"]},{"id":"s","component":"StepScore","step":"Review PRs","dimensions":[{"value":"sensitivity","label":"If this step were 2× faster, would throughput rise?","decisive":true},{"value":"wait","label":"wait before"},{"value":"starve","label":"starves next"},{"value":"cap","label":"capacity gap"},{"value":"annoy","label":"annoyance"}],"flags":[{"value":"necessary","label":"necessary"},{"value":"policy_gate","label":"policy gate"}],"value":{"path":"/score"},"doneLabel":"Next","selectAction":{"event":{"name":"submit-score","context":{"value":{"path":"/score"},"via":"choice"}}}}]}},{"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/","value":{"score":{}}}}],"timeout_s":90}' ;;
+  all)     for k in mood text voice choice scale confirm table matrix sliders stepscore images image-error image-remote; do "$0" "$k"; done ;;
+  *) echo "usage: $0 [text|voice|choice|scale|confirm|mood|table|matrix|sliders|stepscore|images|image-error|image-remote|all]"; exit 1 ;;
 esac

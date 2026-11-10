@@ -1311,17 +1311,176 @@ export function MatrixView({
 function DoneBar({
   answered,
   onDone,
+  leading,
   children,
 }: {
   answered: boolean;
   onDone: () => void;
+  /** Controls set before the button on the same bar (StepScore's flags). */
+  leading?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <div className="cenno-matrix__done">
+    <div className={`cenno-matrix__done${leading ? " has-leading" : ""}`}>
+      {leading}
       <ButtonView variant="primary" disabled={!answered} onClick={onDone}>
         {children}
       </ButtonView>
+    </div>
+  );
+}
+
+/** One ordinal dimension of a `StepScore`: scored 0..max. */
+export interface StepScoreDimension {
+  value: string;
+  label: string;
+  max: number;
+  decisive?: boolean;
+}
+
+/** One boolean flag of a `StepScore`, shown as a toggle chip. */
+export interface StepScoreFlag {
+  value: string;
+  label: string;
+}
+
+export type StepScoreAnswer = Record<string, number | boolean>;
+
+/**
+ * Done is enabled only once EVERY dimension has a number. Unlike RatingMatrix,
+ * a partial score is not a verdict here: the consumer ranks steps on all
+ * dimensions at once, and 0 ("none") is a real score, so an unscored
+ * dimension must never be read as 0. Flags never block — a chip is always
+ * visibly on or off.
+ */
+export function isStepScoreComplete(
+  answer: StepScoreAnswer,
+  dimensions: StepScoreDimension[],
+): boolean {
+  return dimensions.every((d) => typeof answer[d.value] === "number");
+}
+
+/**
+ * Scores ONE work-step on several ordinal dimensions plus boolean flags — the
+ * the-goal constraint diagnostic, one step per panel. Several steps chain
+ * through `ask_sequence`; a single panel holding every step does not fit the
+ * 240-560px panel height (that was the archived ScoreMatrix's problem).
+ *
+ * The decisive dimension leads, full width, with its label as the question;
+ * the rest sit on the RatingMatrix grid (fixed label column, 44px targets) so
+ * their numerals line up. Like MatrixView, no tap answers the prompt: taps
+ * accumulate in `draft` and write the whole answer through `onSelect`; only
+ * Done completes, handing over the merged answer so a host that never echoes
+ * an `updateDataModel` still gets every score. The draft wins over the seed.
+ */
+export function StepScoreView({
+  step,
+  dimensions,
+  flags = [],
+  value,
+  onSelect,
+  onDone,
+  doneLabel = "Done",
+}: {
+  step: string;
+  dimensions: StepScoreDimension[];
+  flags?: StepScoreFlag[];
+  value?: StepScoreAnswer;
+  onSelect: (answer: StepScoreAnswer) => void;
+  onDone: (answer: StepScoreAnswer) => void;
+  doneLabel?: string;
+}) {
+  const [draft, setDraft] = useState<StepScoreAnswer>({});
+  // The latest draft, readable by a handler that fires before the re-render
+  // (two taps in one frame): merging into the closure's `draft` would drop
+  // the first tap.
+  const draftRef = useRef<StepScoreAnswer>({});
+  // Only declared keys reach the answer: a stale or misspelled seed key must
+  // not be submitted as if the user had confirmed it.
+  const build = (d: StepScoreAnswer): StepScoreAnswer => {
+    const merged = { ...(value ?? {}), ...d };
+    const out: StepScoreAnswer = {};
+    for (const dim of dimensions) {
+      if (typeof merged[dim.value] === "number") out[dim.value] = merged[dim.value];
+    }
+    for (const flag of flags) out[flag.value] = merged[flag.value] === true;
+    return out;
+  };
+  const answer = build(draft);
+  const update = (key: string, v: number | boolean) => {
+    const next = { ...draftRef.current, [key]: v };
+    draftRef.current = next;
+    setDraft(next);
+    onSelect(build(next));
+  };
+
+  // Decisive first, whatever order the payload lists them in.
+  const ordered = [
+    ...dimensions.filter((d) => d.decisive),
+    ...dimensions.filter((d) => !d.decisive),
+  ];
+  const dots = (dim: StepScoreDimension) => (
+    <div className="cenno-matrix__nums" role="radiogroup" aria-label={dim.label}>
+      {Array.from({ length: Math.max(0, dim.max) + 1 }, (_, n) => {
+        const selected = answer[dim.value] === n;
+        return (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            aria-label={String(n)}
+            className={`cenno-matrix__dot${selected ? " is-selected" : ""}`}
+            onClick={() => update(dim.value, n)}
+          >
+            <span className="cenno-matrix__dotnum">{n}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div className="cenno-stepscore">
+      <div className="cenno-text cenno-text--question-m cenno-stepscore__step">{step}</div>
+      {ordered.map((dim) =>
+        dim.decisive ? (
+          <div className="cenno-stepscore__dim is-decisive" key={dim.value}>
+            <span className="cenno-stepscore__question">{dim.label}</span>
+            {dots(dim)}
+          </div>
+        ) : (
+          <div className="cenno-matrix__row cenno-stepscore__dim" key={dim.value}>
+            <span className="cenno-matrix__label">{dim.label}</span>
+            {dots(dim)}
+          </div>
+        ),
+      )}
+      {/* Flags share the done bar: a row of their own pushed the panel past
+          the 560px clamp at the 5-dimension cap. */}
+      <DoneBar
+        answered={isStepScoreComplete(answer, dimensions)}
+        onDone={() => onDone(answer)}
+        leading={
+          flags.length > 0 && (
+            <div className="cenno-chips cenno-stepscore__flags">
+              {flags.map((flag) => (
+                <button
+                  key={flag.value}
+                  type="button"
+                  className="cenno-chip"
+                  aria-pressed={answer[flag.value] === true}
+                  onClick={() => update(flag.value, answer[flag.value] !== true)}
+                >
+                  {flag.label}
+                </button>
+              ))}
+            </div>
+          )
+        }
+      >
+        {doneLabel}
+      </DoneBar>
     </div>
   );
 }

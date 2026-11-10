@@ -75,6 +75,7 @@ views.tsx    — plain React, no A2UI imports; styled by catalog.css
 | `Dots` | custom (no standard pagination API) | — | `DotsView` |
 | `Table` | custom (no table component exists upstream in any release) | `header`, `columns[{label,align}]`, `dense` | `TableView` |
 | `RatingMatrix` | custom (several bindings in one control) | `rows`, `mode`, `min`/`max`, `minLabel`/`maxLabel` | `MatrixView` |
+| `StepScore` | custom (several 0..N scales + booleans for ONE item) | `step`, `dimensions[{value,label,max,decisive}]`, `flags[{value,label}]`, `doneLabel` | `StepScoreView` |
 | `ImageChoice` | custom (`ChoicePicker` options are strictly `{label,value}`) | `options[{value,label?,image}]`, `variant`, `fit`, `columns` | `ImageChoiceView` |
 
 `Slider` vs `Scale`: Scale is the EMA 1..N numeral row — discrete tap
@@ -85,6 +86,15 @@ questions where granularity matters more than labeled steps.
 means the numeral columns must LINE UP across rows — that alignment is the
 whole control. It caps at 3 rows × 7 points because `resize_panel` clamps the
 panel to 240–560px; more items belong in `ask_sequence`.
+
+`StepScore` vs `RatingMatrix`: RatingMatrix rates several ITEMS on one
+shared scale; StepScore scores ONE item on several dimensions, each its own
+0..max, plus boolean flag chips. It replaces the never-shipped `ScoreMatrix`
+(`archive/a2ui-score-matrix`), which put every step in one panel and needed
+~300px per step against the 560px clamp — so it is per-item, and N items go
+through `ask_sequence`. Unlike RatingMatrix, a partial answer is not a verdict:
+Done stays disabled until every dimension is scored, and nothing defaults to 0
+(0 is a real "none"). Caps: 5 dimensions, max 6, 3 flags.
 
 `Table` vs a `Column` of `Row`s: the table exists for the header rule, the
 per-column alignment (tabular numerals right-aligned), and the row/column
@@ -131,7 +141,8 @@ What the RENDERER drops silently, the GUARD must reject loudly. A component
 the catalog cannot parse is discarded by the webview without an error, so
 `src-tauri/src/a2ui_guard.rs` is authoritative for the cases where silence
 would mislead: image URLs/`data:` shapes, `ChoicePicker.displayStyle`,
-`Table` column/row caps, `RatingMatrix` row/point caps, and `ImageChoice`
+`Table` column/row caps, `RatingMatrix` row/point caps, `StepScore`
+dimension/flag caps and key clashes, and `ImageChoice`
 option count, enum props, and comma-containing values in
 `multipleSelection`. When adding a prop whose invalid value would render
 nothing (rather than something wrong), add it to the guard too — otherwise

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
@@ -17,6 +17,8 @@ import {
   ImageView,
   TableView,
   MatrixView,
+  StepScoreView,
+  isStepScoreComplete,
   ImageChoiceView,
   imageChoiceColumns,
 } from "./views";
@@ -533,6 +535,7 @@ describe("cennoCatalog", () => {
       "Row",
       "Scale",
       "Slider",
+      "StepScore",
       "Table",
       "Text",
       "TextField",
@@ -1115,5 +1118,133 @@ describe("ImageChoiceView", () => {
     const grid = container.querySelector<HTMLElement>(".cenno-ichoice")!;
     expect(grid.style.getPropertyValue("--cenno-ichoice-cols")).toBe("5");
     expect(getComputedStyle(grid).gridTemplateColumns).toMatch(/1fr/);
+  });
+});
+
+describe("StepScoreView", () => {
+  const dimensions = [
+    { value: "wait", label: "wait", max: 3 },
+    { value: "sensitivity", label: "Sensitivity", max: 3, decisive: true },
+    { value: "cap", label: "capacity", max: 3 },
+  ];
+  const flags = [
+    { value: "necessary", label: "necessary" },
+    { value: "policy_gate", label: "policy gate" },
+  ];
+  const answerAll = () => {
+    for (const d of dimensions) {
+      const group = screen.getByRole("radiogroup", { name: d.label });
+      fireEvent.click(within(group).getByRole("radio", { name: "2" }));
+    }
+  };
+
+  it("shows the step being scored", () => {
+    render(<StepScoreView step="Review PRs" dimensions={dimensions}
+      onSelect={vi.fn()} onDone={vi.fn()} />);
+    expect(screen.getByText("Review PRs")).toBeTruthy();
+  });
+
+  it("renders one 0..max radiogroup per dimension", () => {
+    render(<StepScoreView step="s" dimensions={dimensions}
+      onSelect={vi.fn()} onDone={vi.fn()} />);
+    expect(screen.getAllByRole("radiogroup")).toHaveLength(3);
+    expect(screen.getAllByRole("radio")).toHaveLength(12);
+  });
+
+  // The decisive dimension is the one the diagnostic ranks on; it leads the
+  // panel whatever order the payload lists it in.
+  it("puts the decisive dimension first and marks it", () => {
+    render(<StepScoreView step="s" dimensions={dimensions}
+      onSelect={vi.fn()} onDone={vi.fn()} />);
+    const groups = screen.getAllByRole("radiogroup");
+    expect(groups[0].getAttribute("aria-label")).toBe("Sensitivity");
+    expect(groups[0].closest(".is-decisive")).toBeTruthy();
+    expect(groups[1].closest(".is-decisive")).toBeNull();
+  });
+
+  it("writes the whole draft on each tap, flags included as false", () => {
+    const onSelect = vi.fn();
+    render(<StepScoreView step="s" dimensions={dimensions} flags={flags}
+      onSelect={onSelect} onDone={vi.fn()} />);
+    const wait = screen.getByRole("radiogroup", { name: "wait" });
+    fireEvent.click(within(wait).getByRole("radio", { name: "1" }));
+    const cap = screen.getByRole("radiogroup", { name: "capacity" });
+    fireEvent.click(within(cap).getByRole("radio", { name: "3" }));
+    expect(onSelect).toHaveBeenLastCalledWith({
+      wait: 1, cap: 3, necessary: false, policy_gate: false,
+    });
+  });
+
+  it("toggles a flag chip and carries it in the answer", () => {
+    const onDone = vi.fn();
+    render(<StepScoreView step="s" dimensions={dimensions} flags={flags}
+      onSelect={vi.fn()} onDone={onDone} />);
+    const chip = screen.getByRole("button", { name: "policy gate" });
+    fireEvent.click(chip);
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+    answerAll();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({
+      wait: 2, sensitivity: 2, cap: 2, necessary: false, policy_gate: true,
+    });
+  });
+
+  it("does not answer from a tap — only Done completes the prompt", () => {
+    const onDone = vi.fn();
+    render(<StepScoreView step="s" dimensions={dimensions}
+      onSelect={vi.fn()} onDone={onDone} />);
+    answerAll();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("a tap overrides a pre-seeded value the host never echoes", () => {
+    const onDone = vi.fn();
+    render(<StepScoreView step="s" dimensions={dimensions}
+      value={{ wait: 0, sensitivity: 3, cap: 1 }}
+      onSelect={vi.fn()} onDone={onDone} />);
+    const sens = screen.getByRole("radiogroup", { name: "Sensitivity" });
+    expect(within(sens).getByRole("radio", { name: "3" }).getAttribute("aria-checked"))
+      .toBe("true");
+    fireEvent.click(within(sens).getByRole("radio", { name: "1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({ wait: 0, sensitivity: 1, cap: 1 });
+  });
+
+  // Two taps landing before React re-renders (fast taps, key repeat) must
+  // both count; merging into the render's stale draft dropped the first.
+  it("keeps every score when taps land in the same frame", () => {
+    const onDone = vi.fn();
+    render(<StepScoreView step="s" dimensions={dimensions}
+      onSelect={vi.fn()} onDone={onDone} />);
+    const radios = dimensions.map((d) =>
+      within(screen.getByRole("radiogroup", { name: d.label })).getByRole("radio", { name: "1" }));
+    act(() => radios.forEach((r) => r.click()));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onDone).toHaveBeenCalledWith({ wait: 1, sensitivity: 1, cap: 1 });
+  });
+
+  it("uses the payload's done label (e.g. Next inside a sequence)", () => {
+    render(<StepScoreView step="s" dimensions={dimensions} doneLabel="Next"
+      onSelect={vi.fn()} onDone={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
+  });
+});
+
+describe("isStepScoreComplete", () => {
+  const dims = [
+    { value: "sensitivity", label: "S", max: 3, decisive: true },
+    { value: "wait", label: "W", max: 3 },
+  ];
+
+  it("is incomplete with nothing scored", () => {
+    expect(isStepScoreComplete({}, dims)).toBe(false);
+  });
+
+  it("is complete once every dimension has a score", () => {
+    expect(isStepScoreComplete({ sensitivity: 0, wait: 2 }, dims)).toBe(true);
+  });
+
+  it("ignores flags and stray keys when judging completeness", () => {
+    expect(isStepScoreComplete({ necessary: true, bogus: 3 }, dims)).toBe(false);
   });
 });

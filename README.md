@@ -122,12 +122,13 @@ Returns `{answer, via, elapsed_s, muted}`, or `{answered: false, prompt_id}` on 
 
 ### Rich panels (`a2ui`)
 
-For anything a title + a row of buttons cannot express, an agent can send an `a2ui` payload ([A2UI](https://a2ui.org) v0.9, catalog `cenno:catalog/v1`) and get a composed panel instead. Beyond the standard text/row/column/button/field controls, cenno adds four:
+For anything a title + a row of buttons cannot express, an agent can send an `a2ui` payload ([A2UI](https://a2ui.org) v0.9, catalog `cenno:catalog/v1`) and get a composed panel instead. Beyond the standard text/row/column/button/field controls, cenno adds five:
 
 | component | what it is for |
 |---|---|
 | **`Table`** | display-only structured comparison — ≤4 columns × ≤12 rows, per-column end alignment so numbers line up. Pair it with a widget that asks the question. |
 | **`RatingMatrix`** | rate several items in one panel — a numeral target row per item (`mode: "matrix"`) or a slider per item (`mode: "sliders"`) — ≤3 rows. Answers as JSON keyed by row value, submitted with an explicit **Done**. |
+| **`StepScore`** | score one item on up to 5 dimensions (0..max each, one may lead as the decisive question) plus up to 3 yes/no flags. Several items chain through `ask_sequence`. |
 | **`ImageChoice`** | pick one (or several) of up to 10 images in an adaptive grid. A tile that fails to load keeps its place and stays selectable. |
 | **`ChoicePicker`** | the standard control, plus `displayStyle: "checkbox"` for a real radio/checkbox list instead of chips. |
 

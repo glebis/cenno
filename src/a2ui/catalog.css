@@ -947,6 +947,78 @@
   border-top: 1px solid var(--cenno-line);
 }
 
+/* ---- step score: one work-step, several ordinals + flags ---- */
+
+/* Sized to fit the 560px clamp at its guard caps (5 dimensions, 3 flags):
+   heading + decisive block + 4 x 44px grid rows + chips + done bar. Every
+   numeral row, decisive included, starts at the same x so the columns line up
+   the way RatingMatrix's do. */
+.cenno-stepscore {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cenno-space-1);
+}
+
+.cenno-stepscore__step {
+  overflow-wrap: anywhere;
+}
+
+/* The decisive dimension is the one the diagnostic ranks on: its label is a
+   full question, so it gets the panel width instead of the 96px column, and a
+   hairline sets it apart from the supporting dimensions below. */
+.cenno-stepscore__dim.is-decisive {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--cenno-space-1);
+  border-bottom: 1px solid var(--cenno-line);
+}
+
+.cenno-stepscore__question {
+  font-size: var(--cenno-type-body);
+  line-height: var(--cenno-font-leading-body);
+  color: var(--cenno-text);
+}
+
+/* Indent the decisive numerals onto the grid's column: the label column is
+   96px plus the row gap (.cenno-matrix__row). */
+.cenno-stepscore__dim.is-decisive .cenno-matrix__nums {
+  padding-inline-start: calc(96px + var(--cenno-space-2));
+}
+
+/* Supporting labels at caption size (sentence case, not the uppercase
+   caption role): "capacity gap" must fit the 96px column on ONE line, or each
+   wrapped label adds a line of height the 560px clamp cannot spare. */
+.cenno-stepscore__dim:not(.is-decisive) .cenno-matrix__label {
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-font-leading-caption);
+  color: var(--cenno-text-dim);
+}
+
+/* Flags ride the done bar, left of the button. Chips keep their 44px height
+   (tap target) but take the tighter 16px side padding so two flags and the
+   button share one row at the default 420px width; a narrower panel wraps. */
+.cenno-matrix__done.has-leading {
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--cenno-space-1);
+}
+
+/* When a narrow panel wraps the bar, the button still ends at the right edge
+   — submit sits where every other done bar puts it. */
+.cenno-matrix__done.has-leading > :last-child {
+  margin-inline-start: auto;
+}
+
+.cenno-stepscore__flags {
+  gap: var(--cenno-space-1);
+}
+
+.cenno-stepscore__flags .cenno-chip {
+  padding-inline: var(--cenno-space-2);
+}
+
 /* ---- image choice: up to 10 square tiles, adaptive grid ---- */
 
 /* Column count is a CSS var set by the view (the adaptive lookup, or the
