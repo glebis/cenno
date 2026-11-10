@@ -17,6 +17,9 @@
  *   input cells are out of scope because every answer flattens to a string)
  * - `RatingMatrix` — several items rated in one panel, matrix or sliders
  *   (ChoicePicker and Slider both answer a single question)
+ * - `StepScore` — one work-step scored on several 0..N dimensions plus flags
+ *   (RatingMatrix holds one scale and no booleans; several steps chain
+ *   through ask_sequence, one panel each)
  * - `ImageChoice` — choose between up to 10 images (ChoicePicker options are
  *   strictly {label, value}, so there is no place to put a picture)
  *
@@ -60,7 +63,9 @@ import {
   ImageView,
   TableView,
   MatrixView,
+  StepScoreView,
   ImageChoiceView,
+  type StepScoreAnswer,
   type TextRole,
 } from "./views";
 
@@ -692,6 +697,134 @@ export const CennoRatingMatrix = createComponentImplementation(
 );
 
 /* ------------------------------------------------------------------ */
+/* StepScore — custom: one work-step, several ordinals + flags         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The the-goal constraint diagnostic scores each candidate step on several
+ * 0..N dimensions (one decisive) and a few yes/no flags. RatingMatrix cannot
+ * carry that: one shared scale, no booleans, 3 rows. A single panel holding
+ * EVERY step (the archived ScoreMatrix) overflowed the 560px panel, so this
+ * scores ONE step and the agent chains steps with `ask_sequence`.
+ *
+ * Same answer contract as RatingMatrix: `value` is written as JSON TEXT
+ * (PromptPanel forwards `String(raw)`, so a live object would arrive as
+ * "[object Object]"), keyed by dimension/flag value —
+ * `{"sensitivity":2,"wait":1,"necessary":false}`. Caps live in the guard.
+ */
+const StepScoreValueSchema = z.union([
+  z.record(z.union([z.number(), z.boolean()])),
+  z.string(),
+  DataBindingSchema,
+  FunctionCallSchema,
+]);
+
+function parseStepScoreValue(bound: unknown): StepScoreAnswer {
+  const out: StepScoreAnswer = {};
+  let source: unknown = bound;
+  if (typeof bound === "string") {
+    try {
+      source = JSON.parse(bound);
+    } catch {
+      return out;
+    }
+  }
+  if (!source || typeof source !== "object" || Array.isArray(source)) return out;
+  for (const [key, v] of Object.entries(source)) {
+    if (typeof v === "number" || typeof v === "boolean") out[key] = v;
+  }
+  return out;
+}
+
+export const StepScoreApi = {
+  name: "StepScore",
+  schema: z
+    .object({
+      ...CommonProps,
+      step: DynamicStringSchema.describe(
+        "The work-step being scored, shown as the panel heading.",
+      ),
+      dimensions: z
+        .array(
+          z
+            .object({
+              value: z
+                .string()
+                .describe("Answer key for this dimension; never displayed."),
+              label: DynamicStringSchema.optional().describe(
+                "Display label; falls back to the value. The decisive " +
+                  "dimension's label is shown as a full question.",
+              ),
+              max: z
+                .number()
+                .optional()
+                .describe("Highest score; the scale runs 0..max (default 3, at most 6)."),
+              decisive: z
+                .boolean()
+                .optional()
+                .describe("Lead with this dimension, full width (at most one)."),
+            })
+            .strict(),
+        )
+        .min(1)
+        .describe("Ordinal dimensions to score, at most 5. Every one must be scored."),
+      flags: z
+        .array(
+          z
+            .object({
+              value: z.string().describe("Answer key for this flag."),
+              label: DynamicStringSchema.optional().describe(
+                "Chip text; falls back to the value.",
+              ),
+            })
+            .strict(),
+        )
+        .optional()
+        .describe("Yes/no toggle chips, at most 3; answered as true/false."),
+      value: StepScoreValueSchema.optional().describe(
+        "Object binding, e.g. {\"path\": \"/score\"}; receives JSON text " +
+          "keyed by dimension/flag value. Seed it to re-open a prior score.",
+      ),
+      doneLabel: DynamicStringSchema.optional().describe(
+        "Submit button label (default 'Done'; 'Next' reads well in a sequence).",
+      ),
+      selectAction: ActionSchema.optional().describe(
+        "Fired by the submit button once every dimension is scored. Its " +
+          "context should carry { value: <the same path as `value`>, via: \"choice\" }.",
+      ),
+    })
+    .strict(),
+};
+
+export const CennoStepScore = createComponentImplementation(
+  StepScoreApi,
+  ({ props }) => (
+    <StepScoreView
+      step={typeof props.step === "string" ? props.step : ""}
+      dimensions={(props.dimensions ?? []).map((d) => ({
+        value: d.value,
+        label: typeof d.label === "string" ? d.label : d.value,
+        max: typeof d.max === "number" ? d.max : 3,
+        decisive: d.decisive === true,
+      }))}
+      flags={(props.flags ?? []).map((f) => ({
+        value: f.value,
+        label: typeof f.label === "string" ? f.label : f.value,
+      }))}
+      value={parseStepScoreValue(props.value)}
+      onSelect={(answer) => props.setValue(JSON.stringify(answer))}
+      onDone={(answer) => {
+        // Submit the merged answer directly: a host that never echoed an
+        // intermediate setValue still answers with every score.
+        props.setValue(JSON.stringify(answer));
+        props.selectAction?.();
+      }}
+      doneLabel={typeof props.doneLabel === "string" ? props.doneLabel : "Done"}
+    />
+  ),
+);
+
+/* ------------------------------------------------------------------ */
 /* ImageChoice — custom: choose from up to 10 images                   */
 /* ------------------------------------------------------------------ */
 
@@ -858,6 +991,7 @@ export const cennoCatalog = new Catalog(
     CennoScale,
     CennoTable,
     CennoRatingMatrix,
+    CennoStepScore,
     CennoImageChoice,
     CennoDots,
   ],

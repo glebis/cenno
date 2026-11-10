@@ -21,7 +21,7 @@
 //! `Image.url`, which rejects remote URLs and data URIs the webview cannot
 //! render (see `check_image_url`), and `ChoicePicker.displayStyle`, which must
 //! be one of the two styles the catalog can render.
-//! `Table` and `RatingMatrix` are capped, because a panel is small and fixed.
+//! `Table`, `RatingMatrix` and `StepScore` are capped, because a panel is small and fixed.
 
 use serde_json::Value;
 
@@ -54,6 +54,16 @@ pub const MAX_MATRIX_POINTS: i64 = 7;
 /// still applies: the range is a payload-supplied `i64`, and an unbounded one is
 /// a payload error, not something to render.
 pub const MAX_SLIDER_POINTS: i64 = 1000;
+
+/// Maximum `StepScore.dimensions`. A step panel holds the decisive question
+/// plus 4 grid rows of 44px targets, a chip row and the done bar inside the
+/// 560px clamp; more dimensions belong in a second panel.
+pub const MAX_STEP_SCORE_DIMENSIONS: usize = 5;
+/// Maximum `StepScore` dimension `max` (a 0..max scale, so 7 points: the same
+/// numeral-row width limit as `MAX_MATRIX_POINTS`).
+pub const MAX_STEP_SCORE_MAX: i64 = MAX_MATRIX_POINTS - 1;
+/// Maximum `StepScore.flags` (one chip row).
+pub const MAX_STEP_SCORE_FLAGS: usize = 3;
 
 /// Maximum `ImageChoice.options` (below ~58px a tile stops being a thumbnail
 /// you can judge; ten also bounds the payload at ~25 KB per tile).
@@ -215,6 +225,42 @@ fn check_matrix_seed(seed: &Value) -> Result<(), String> {
                 "has a non-numeric \"{key}\": {} — every entry must be a number, because each \
                  one is a rating; a string there blanks the whole panel",
                 type_name(n)
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Validate a `StepScore.value` seed: a key -> number|bool map, a JSON text of
+/// one, or a `{path}` / `{call}` binding. Same reasoning as
+/// `check_matrix_seed`: a shape the schema rejects blanks the panel silently,
+/// and `value` is where the answer accumulates.
+fn check_step_score_seed(seed: &Value) -> Result<(), String> {
+    if seed.get("path").is_some() || seed.get("call").is_some() {
+        return Ok(());
+    }
+    if let Some(text) = seed.as_str() {
+        return match serde_json::from_str::<Value>(text) {
+            Ok(parsed) => check_step_score_seed(&parsed),
+            Err(_) => Err(format!(
+                "is the string \"{text}\", which is not JSON — it must be an object like \
+                 {{\"wait\": 2, \"necessary\": true}}, or a binding like {{\"path\": \"/score\"}}"
+            )),
+        };
+    }
+    let Some(map) = seed.as_object() else {
+        return Err(format!(
+            "must be an object keyed by dimension/flag value (e.g. {{\"wait\": 2}}) or a \
+             binding like {{\"path\": \"/score\"}}, got {}",
+            type_name(seed)
+        ));
+    };
+    for (key, v) in map {
+        if !v.is_number() && !v.is_boolean() {
+            return Err(format!(
+                "has \"{key}\": {} — dimension scores must be numbers and flags booleans; \
+                 anything else blanks the whole panel",
+                type_name(v)
             ));
         }
     }
@@ -644,6 +690,117 @@ fn check_component(component: &Value) -> Result<(), String> {
                      mode \"sliders\" for a continuous range, or use ask_sequence to ask about \
                      each item on its own"
                 ));
+            }
+            Ok(())
+        }
+        Some("StepScore") => {
+            // One work-step scored on several 0..max dimensions plus flags.
+            // Several steps chain through ask_sequence: all of them in one
+            // panel cannot fit the 240-560px clamp, which the errors say.
+            let label = component_label(obj, "StepScore");
+            if obj.get("step").is_none() {
+                return Err(format!(
+                    "{label}: StepScore.step is missing — it is the panel heading naming \
+                     the work-step being scored, e.g. \"step\": \"Review PRs\""
+                ));
+            }
+            let dims = obj.get("dimensions").and_then(Value::as_array).ok_or_else(|| {
+                format!(
+                    "{label}: StepScore.dimensions must be an array of dimension objects \
+                     ({{ \"value\": \"wait\", \"label\": \"wait\", \"max\": 3 }}), got {}",
+                    obj.get("dimensions").map_or("nothing", type_name)
+                )
+            })?;
+            if dims.is_empty() {
+                return Err(format!(
+                    "{label}: has 0 dimensions; a step score needs at least 1 dimension"
+                ));
+            }
+            if dims.len() > MAX_STEP_SCORE_DIMENSIONS {
+                return Err(format!(
+                    "{label}: has {} dimensions; the maximum is {MAX_STEP_SCORE_DIMENSIONS} \
+                     — score the rest in a follow-up panel",
+                    dims.len()
+                ));
+            }
+            let flags: &[Value] = match obj.get("flags") {
+                None => &[],
+                Some(v) => v.as_array().map(Vec::as_slice).ok_or_else(|| {
+                    format!(
+                        "{label}: StepScore.flags must be an array of flag objects \
+                         ({{ \"value\": \"necessary\" }}), got {}",
+                        type_name(v)
+                    )
+                })?,
+            };
+            if flags.len() > MAX_STEP_SCORE_FLAGS {
+                return Err(format!(
+                    "{label}: has {} flags; the maximum is {MAX_STEP_SCORE_FLAGS} (one chip row)",
+                    flags.len()
+                ));
+            }
+            // Dimension and flag values share ONE answer object, so a
+            // duplicate anywhere across both lists overwrites a score.
+            let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+            let mut decisive = 0;
+            for (kind, list) in [("dimension", dims.as_slice()), ("flag", flags)] {
+                for (i, item) in list.iter().enumerate() {
+                    let Some(item) = item.as_object() else {
+                        return Err(format!(
+                            "{label}: {kind} {i} must be an object with a \"value\", got {}",
+                            type_name(item)
+                        ));
+                    };
+                    let key = match item.get("value").and_then(Value::as_str) {
+                        Some(k) if !k.trim().is_empty() => k,
+                        Some(_) => {
+                            return Err(format!(
+                                "{label}: {kind} {i} has an empty \"value\"; it is the key \
+                                 the answer is filed under"
+                            ))
+                        }
+                        None => {
+                            return Err(format!(
+                                "{label}: {kind} {i} has no string \"value\"; it is the key \
+                                 the answer is filed under"
+                            ))
+                        }
+                    };
+                    if !seen.insert(key) {
+                        return Err(format!(
+                            "{label}: \"{key}\" is used twice across dimensions and flags — \
+                             they share one answer object, so one would overwrite the other"
+                        ));
+                    }
+                    if kind == "flag" {
+                        continue;
+                    }
+                    if item.get("decisive").and_then(Value::as_bool) == Some(true) {
+                        decisive += 1;
+                    }
+                    if let Some(max) = item.get("max") {
+                        match max.as_i64() {
+                            Some(m) if (1..=MAX_STEP_SCORE_MAX).contains(&m) => {}
+                            _ => {
+                                return Err(format!(
+                                    "{label}: dimension \"{key}\" has max {max}; it must be \
+                                     an integer from 1 to at most {MAX_STEP_SCORE_MAX} (the \
+                                     scale runs 0..max)"
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+            if decisive > 1 {
+                return Err(format!(
+                    "{label}: has {decisive} decisive dimensions; mark at most one — it is the \
+                     one the panel leads with"
+                ));
+            }
+            if let Some(seed) = obj.get("value") {
+                check_step_score_seed(seed)
+                    .map_err(|err| format!("{label}: StepScore.value {err}"))?;
             }
             Ok(())
         }
@@ -1583,6 +1740,114 @@ mod tests {
     #[test]
     fn matrix_sliders_mode_passes() {
         matrix(json!({ "mode": "sliders", "min": 0, "max": 10 })).unwrap();
+    }
+
+    // ---- StepScore caps ----
+
+    fn step_score(extra: Value) -> Result<(), String> {
+        let mut base = json!({
+            "id": "score", "component": "StepScore",
+            "step": "Review PRs",
+            "dimensions": [
+                { "value": "sensitivity", "decisive": true },
+                { "value": "wait" },
+            ],
+        });
+        if let (Some(base), Some(extra)) = (base.as_object_mut(), extra.as_object()) {
+            for (k, v) in extra {
+                base.insert(k.clone(), v.clone());
+            }
+        }
+        validate_a2ui(&envelope_with(base))
+    }
+
+    #[test]
+    fn step_score_at_the_caps_passes() {
+        let dims: Vec<Value> = (0..5)
+            .map(|i| json!({ "value": format!("d{i}"), "max": 6, "decisive": i == 0 }))
+            .collect();
+        let flags: Vec<Value> = (0..3).map(|i| json!({ "value": format!("f{i}") })).collect();
+        step_score(json!({ "dimensions": dims, "flags": flags })).unwrap();
+    }
+
+    #[test]
+    fn step_score_over_five_dimensions_rejects() {
+        let dims: Vec<Value> = (0..6).map(|i| json!({ "value": format!("d{i}") })).collect();
+        let err = step_score(json!({ "dimensions": dims })).unwrap_err();
+        assert!(err.contains("6 dimensions") && err.contains("maximum is 5"), "{err}");
+        assert!(err.contains("score"), "must name the node: {err}");
+    }
+
+    #[test]
+    fn step_score_without_dimensions_rejects() {
+        let err = step_score(json!({ "dimensions": [] })).unwrap_err();
+        assert!(err.contains("at least 1 dimension"), "{err}");
+    }
+
+    #[test]
+    fn step_score_without_a_step_rejects() {
+        let mut c = json!({ "id": "score", "component": "StepScore",
+            "dimensions": [{ "value": "wait" }] });
+        c.as_object_mut().unwrap().remove("step");
+        let err = validate_a2ui(&envelope_with(c)).unwrap_err();
+        assert!(err.contains("StepScore.step"), "{err}");
+    }
+
+    #[test]
+    fn step_score_max_over_six_rejects() {
+        let err = step_score(json!({ "dimensions": [{ "value": "wait", "max": 7 }] }))
+            .unwrap_err();
+        assert!(err.contains("max 7") && err.contains("at most 6"), "{err}");
+    }
+
+    #[test]
+    fn step_score_max_below_one_rejects() {
+        let err = step_score(json!({ "dimensions": [{ "value": "wait", "max": 0 }] }))
+            .unwrap_err();
+        assert!(err.contains("max 0"), "{err}");
+    }
+
+    #[test]
+    fn step_score_two_decisive_dimensions_reject() {
+        let err = step_score(json!({ "dimensions": [
+            { "value": "a", "decisive": true }, { "value": "b", "decisive": true }
+        ]})).unwrap_err();
+        assert!(err.contains("decisive"), "{err}");
+    }
+
+    // The answer is one object keyed by dimension AND flag values, so a clash
+    // anywhere across the two lists silently overwrites a score.
+    #[test]
+    fn step_score_duplicate_keys_reject_across_dimensions_and_flags() {
+        let err = step_score(json!({ "flags": [{ "value": "wait" }] })).unwrap_err();
+        assert!(err.contains("\"wait\""), "{err}");
+        let err = step_score(json!({ "dimensions": [{ "value": "a" }, { "value": "a" }] }))
+            .unwrap_err();
+        assert!(err.contains("\"a\""), "{err}");
+    }
+
+    #[test]
+    fn step_score_empty_key_rejects() {
+        let err = step_score(json!({ "flags": [{ "value": " " }] })).unwrap_err();
+        assert!(err.contains("empty"), "{err}");
+    }
+
+    #[test]
+    fn step_score_over_three_flags_rejects() {
+        let flags: Vec<Value> = (0..4).map(|i| json!({ "value": format!("f{i}") })).collect();
+        let err = step_score(json!({ "flags": flags })).unwrap_err();
+        assert!(err.contains("4 flags") && err.contains("maximum is 3"), "{err}");
+    }
+
+    #[test]
+    fn step_score_value_seed_shapes() {
+        step_score(json!({ "value": { "path": "/score" } })).unwrap();
+        step_score(json!({ "value": { "wait": 2, "necessary": true } })).unwrap();
+        step_score(json!({ "value": "{\"wait\": 2}" })).unwrap();
+        let err = step_score(json!({ "value": { "wait": "2" } })).unwrap_err();
+        assert!(err.contains("StepScore.value"), "{err}");
+        let err = step_score(json!({ "value": 3 })).unwrap_err();
+        assert!(err.contains("StepScore.value"), "{err}");
     }
 
     // ---- ImageChoice + the comma rule (Task 8) ----

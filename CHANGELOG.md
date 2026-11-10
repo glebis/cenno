@@ -4,6 +4,17 @@ All notable changes to cenno are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Score one item on several dimensions.** A new `a2ui` `StepScore` scores a
+  single item on up to 5 ordinal dimensions (0..max, one may lead as the
+  decisive question) plus up to 3 yes/no flag chips, and answers with one JSON
+  object. Done enables only once every dimension is scored — nothing silently
+  defaults to 0. Several items chain through `ask_sequence`, one panel each.
+  Built for the the-goal constraint diagnostic.
+
 ## [0.4.1] — 2026-08-08
 
 ### Added

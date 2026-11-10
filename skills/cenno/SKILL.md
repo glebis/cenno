@@ -329,6 +329,7 @@ Match the *shape of the decision* to the widget. Work down this table and take t
 | a stacked list of mutually exclusive options | `a2ui` **ChoicePicker** + `"displayStyle":"checkbox"` | radio rows instead of chips — use when labels are long or there are 4–6 of them; omit `displayStyle` to keep chips |
 | pick **several** of a known list | `a2ui` **ChoicePicker** + `"variant":"multipleSelection"` | checkbox behaviour (add `displayStyle:"checkbox"` for a list, omit it for chips). No `value` may contain a comma — the answer is comma-joined |
 | several items each needing a rating, or each on a continuum | `a2ui` **RatingMatrix** | `mode:"matrix"` = one row of numeral targets per item; `mode:"sliders"` = one slider per item. ≤3 rows, ≤7 points. Answer comes back as JSON keyed by row value |
+| one item scored on **several dimensions** plus yes/no flags (e.g. a step in a constraint diagnostic) | `a2ui` **StepScore** | one item per panel: ≤5 dimensions scored 0..max (≤6), one may be `decisive`, ≤3 flag chips. Every dimension must be scored before Done. Several items → `ask_sequence`, one `StepScore` each |
 | comparing structured records (plans, candidates, diffs) | `a2ui` **Table** | display-only, ≤4 columns × ≤12 rows; the question is asked by a widget alongside it |
 | picking one (or several) of up to 10 visual artifacts | `a2ui` **ImageChoice** | adaptive grid, ≤10 tiles; a failed tile keeps its place and stays selectable |
 | judge or pick among visual artifacts | `a2ui` **Image** (+ ChoicePicker or Buttons) | one image at a time; see image conventions below |
@@ -347,6 +348,7 @@ Two rules that trump the table: **one decision per panel** (if a prompt needs tw
 | picked **one** in a `multipleSelection` | that single `value`, unwrapped — *not* an array and not `"v1,"` |
 | picked **several** in a `multipleSelection` | the values joined with `,` — `"v1,v3"` |
 | rated several rows in a **RatingMatrix** | a JSON **object** as text — `"{\"pace\":4,\"useful\":3}"`; `JSON.parse` it |
+| scored a **StepScore** | a JSON **object** as text with **every** dimension plus every flag — `"{\"sensitivity\":2,\"wait\":1,\"necessary\":false}"`; `JSON.parse` it |
 
 So a multi-select never tells you "one" by wrapping it — check for a `,` if you need to distinguish, and never put a comma inside an option `value` (the guard rejects it for exactly this reason). For a matrix, parse rather than string-match: only the rows the user actually rated appear in the object.
 
@@ -544,6 +546,43 @@ Use this instead of firing N scale prompts when the user must judge several item
 - **Nothing answers until the user presses `Done`.** Both modes accumulate, then the `Done` button (rename it with `doneLabel`) submits every rated row at once. Rating some rows and skipping others is a valid partial answer; `Done` is disabled only when nothing has been rated.
 - **The answer is JSON keyed by row `value`**: `{"answer":"{\"pace\":4,\"useful\":3}","via":"choice"}` — parse the `answer` string, don't string-match it. Only the rows the user actually touched appear.
 - Caps: **≤3 rows, ≤7 points** (the 7-point cap applies to `matrix` only; sliders are continuous). `rows[].value` is required and is what comes back; `label` is display-only. **Row values must be distinct** — the answer is an object keyed by them, so two rows sharing a value would collapse into one entry and one rating would overwrite the other. The guard rejects duplicates by name.
+
+## Score one item on several dimensions via `a2ui` `StepScore`
+
+Use this when each item needs **several** ordinal scores plus a few yes/no flags — the the-goal constraint diagnostic is the reference consumer (sensitivity, wait, starvation, capacity, annoyance; `necessary`, `policy_gate`). One panel scores **one** item; to score N items, send N `StepScore` questions through `ask_sequence` (progress dots and instant advance come free). All items in one panel do not fit the 560px panel — that is why the control is per-item.
+
+```json
+{
+  "title": "Score this step (0 none · 3 high)",
+  "flow": "ema",
+  "timeout_s": 120,
+  "a2ui": [
+    { "version": "v0.9", "createSurface": { "surfaceId": "main", "catalogId": "cenno:catalog/v1" } },
+    { "version": "v0.9", "updateComponents": { "surfaceId": "main", "components": [
+      { "id": "root", "component": "Column", "children": ["s"] },
+      { "id": "s", "component": "StepScore", "step": "Review PRs",
+        "dimensions": [
+          { "value": "sensitivity", "label": "If this step were 2× faster, would throughput rise?", "decisive": true },
+          { "value": "wait", "label": "wait before" },
+          { "value": "starve", "label": "starves next" },
+          { "value": "cap", "label": "capacity gap" },
+          { "value": "annoy", "label": "annoyance" } ],
+        "flags": [ { "value": "necessary", "label": "necessary" },
+                   { "value": "policy_gate", "label": "policy gate" } ],
+        "value": { "path": "/score" }, "doneLabel": "Next",
+        "selectAction": { "event": { "name": "submit-score",
+          "context": { "value": { "path": "/score" }, "via": "choice" } } } }
+    ] } },
+    { "version": "v0.9", "updateDataModel": { "surfaceId": "main", "path": "/", "value": { "score": {} } } }
+  ]
+}
+```
+
+- **Every dimension must be scored before Done enables.** `0` means "none" and is a real score, so nothing defaults to 0 — an untouched dimension can never be mistaken for a "none". Flags are chips that are always on or off, so they never block and always come back as `true`/`false`.
+- **The answer is JSON keyed by `value`**: `{"answer":"{\"sensitivity\":2,\"wait\":1,\"starve\":0,\"cap\":3,\"annoy\":2,\"necessary\":false,\"policy_gate\":true}","via":"choice"}` — parse it.
+- The `decisive` dimension (at most one) leads the panel full width with its label as the question; the others sit on an aligned numeral grid with short labels (≤ ~12 characters read best in the 96px label column).
+- `max` defaults to 3 (a 0–3 scale); at most 6. Seed `value` with a prior score to re-open it.
+- Caps: **≤5 dimensions, ≤3 flags**, values distinct across dimensions **and** flags (they share one answer object). The guard rejects violations by name.
 
 ## Compare records in a `Table`
 
