@@ -185,7 +185,9 @@ pub fn setup_tray(
     let show_pending = MenuItem::with_id(app, "show_pending", &label, enabled, None::<&str>)?;
     app.manage(PendingMenuItem(show_pending.clone()));
 
-    let help = MenuItem::with_id(app, "open_help", "Help & About…", true, None::<&str>)?;
+    // `&&`: muda treats a single `&` as a mnemonic marker and strips it
+    // (the item rendered as "Help  About…").
+    let help = MenuItem::with_id(app, "open_help", "Help && About…", true, None::<&str>)?;
 
     let check_updates = MenuItem::with_id(
         app,
