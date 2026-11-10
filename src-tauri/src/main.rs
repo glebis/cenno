@@ -76,7 +76,7 @@ fn run_export(format: cenno_lib::cli::ExportFormat, since_str: Option<String>) -
             // Fixed column order matching the schema.
             const COLUMNS: &[&str] = &[
                 "id", "prompt_id", "title", "body_md", "input_kind", "flow", "urgency",
-                "status", "answer", "via", "elapsed_s", "created_at", "resolved_at",
+                "status", "answer", "via", "elapsed_s", "created_at", "resolved_at", "agent",
             ];
             let mut wtr = csv::Writer::from_writer(std::io::stdout());
             wtr.write_record(COLUMNS).expect("csv header write failed");
