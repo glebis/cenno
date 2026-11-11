@@ -29,7 +29,7 @@ Working examples: [`docs/examples/dot-cenno/`](examples/dot-cenno/).
   },
   "agent_colors": {               // per-agent panel colors (hex only)
     "claude-code": "#A8482B",
-    "codex": "#0B6B57"
+    "codex": "#6E5A12"
   },
   "capture": {
     "enabled": true,              // global screen-context kill switch
@@ -91,7 +91,7 @@ writes the file, and `agent_colors` is read at startup).
 ```jsonc
 "agent_colors": {
   "claude-code": "#A8482B",
-  "codex": "#0B6B57"
+  "codex": "#6E5A12"
 }
 ```
 

@@ -103,7 +103,7 @@ cat > ~/.cenno/config.json << 'EOF'
   },
   "agent_colors": {
     // ONLY if they chose per-agent colors; exact agent names, hex only.
-    // e.g. "claude-code": "#A8482B", "codex": "#0B6B57"
+    // e.g. "claude-code": "#A8482B", "codex": "#6E5A12"
   },
   "widgets": {
     // ONLY if they chose a custom widget:

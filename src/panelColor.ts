@@ -41,8 +41,10 @@ export const AA_CONTRAST = 4.5;
 export const KNOWN_AGENT_COLORS: Record<string, string> = {
   "claude-code": "#A8482B", // Claude — clay/orange
   "claude code": "#A8482B",
-  codex: "#0B6B57", // OpenAI/Codex — deep green
-  "codex-mcp-client": "#0B6B57",
+  // OpenAI/Codex — olive-gold. Not green: the obvious OpenAI green sits
+  // within ΔE 7 of the `ema` flow teal and read as the same panel.
+  codex: "#6E5A12",
+  "codex-mcp-client": "#6E5A12",
   deepseek: "#1B4BA8", // DeepSeek — blue
   kimi: "#6A3FA0", // Kimi — violet
   qwen: "#7A2F6B", // Qwen — plum
@@ -52,19 +54,23 @@ export const KNOWN_AGENT_COLORS: Record<string, string> = {
 };
 
 /**
- * Fixed palette for unknown agents. All entries pass AA against white; the
- * hash makes the assignment stable across launches. Order is append-only —
+ * Fixed palette for unknown agents. All entries pass AA against white and sit
+ * at least ΔE 20 (CIE Lab) from every flow color and every known-agent color,
+ * so an unknown agent never looks like a flow-themed prompt or a known agent
+ * (`panelColor.test.ts` enforces both). Picked greedily for distinctness
+ * within muted chroma (Lab C* 25–45) to match the flow palette's tone.
+ * The hash maps names onto positions, so once shipped, only append —
  * reordering changes every existing unknown agent's color.
  */
 export const UNKNOWN_AGENT_PALETTE: readonly string[] = [
-  "#1E4FD8", // cobalt
-  "#0E7C6B", // teal
-  "#8A2E5C", // wine
-  "#6B4E2E", // bronze
-  "#3D4B8C", // slate blue
-  "#7A3B1E", // rust
-  "#2E5A2E", // moss
-  "#5A2E6B", // aubergine
+  "#A05864", // dusty rose
+  "#1070AC", // azure
+  "#704028", // umber
+  "#7C6494", // lavender grey
+  "#64344C", // mulberry
+  "#344070", // navy
+  "#107088", // petrol
+  "#882834", // oxblood
 ];
 
 export interface PanelColor {
@@ -162,6 +168,21 @@ function parseHex(hex: string): [number, number, number] {
     parseInt(h.slice(2, 4), 16),
     parseInt(h.slice(4, 6), 16),
   ];
+}
+
+/** CIE76 ΔE between two hex colors (sRGB → Lab, D65). ~20+ reads as clearly different. */
+export function deltaE(a: string, b: string): number {
+  const lab = (hex: string): [number, number, number] => {
+    const [r, g, b2] = parseHex(hex).map(channel);
+    const x = (0.4124 * r + 0.3576 * g + 0.1805 * b2) / 0.95047;
+    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b2;
+    const z = (0.0193 * r + 0.1192 * g + 0.9505 * b2) / 1.08883;
+    const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+    return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+  };
+  const [l1, a1, b1] = lab(a);
+  const [l2, a2, bb2] = lab(b);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - bb2);
 }
 
 /** WCAG relative luminance of an `#RGB`/`#RRGGBB` color. */

@@ -8,6 +8,7 @@ import {
   agentColorOverride,
   contrastRatio,
   defaultAgentColor,
+  deltaE,
   isHexColor,
   relativeLuminance,
   resolvePanelColor,
@@ -36,6 +37,50 @@ describe("default agent colors are legible white-on-color", () => {
         AA_CONTRAST,
       );
     }
+  });
+
+  // Distinct from flows: an agent color that looks like a flow color makes a
+  // no-flow prompt indistinguishable from a flow-themed one.
+  const flowColors = Object.entries(tokens.color.flow)
+    .filter(([, v]) => typeof v === "object" && v !== null && "$value" in v)
+    .map(([k, v]) => [k, (v as { $value: string }).$value] as const);
+  const MIN_DELTA_E = 20;
+
+  it("reads all five flow colors from tokens", () => {
+    expect(flowColors.map(([k]) => k).sort()).toEqual(
+      ["ambient", "ema", "mood", "question", "reminder"],
+    );
+  });
+
+  it("no agent color is a look-alike of a flow color", () => {
+    const agentColors = [
+      ...Object.entries(KNOWN_AGENT_COLORS),
+      ...UNKNOWN_AGENT_PALETTE.map((c) => ["palette", c] as const),
+    ];
+    for (const [who, color] of agentColors) {
+      for (const [flow, flowColor] of flowColors) {
+        expect(deltaE(color, flowColor), `${who} ${color} vs ${flow}`).toBeGreaterThanOrEqual(
+          MIN_DELTA_E,
+        );
+      }
+    }
+  });
+
+  it("unknown-agent colors don't mimic known agents or each other", () => {
+    const known = [...new Set(Object.values(KNOWN_AGENT_COLORS))];
+    UNKNOWN_AGENT_PALETTE.forEach((c, i) => {
+      for (const k of known) {
+        expect(deltaE(c, k), `${c} vs known ${k}`).toBeGreaterThanOrEqual(MIN_DELTA_E);
+      }
+      for (const other of UNKNOWN_AGENT_PALETTE.slice(i + 1)) {
+        expect(deltaE(c, other), `${c} vs ${other}`).toBeGreaterThanOrEqual(MIN_DELTA_E);
+      }
+    });
+  });
+
+  it("computes ΔE sanely", () => {
+    expect(deltaE("#123456", "#123456")).toBe(0);
+    expect(deltaE("#000000", "#FFFFFF")).toBeCloseTo(100, 0);
   });
 
   it("computes WCAG extremes correctly", () => {
