@@ -6,6 +6,31 @@ All notable changes to cenno are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-11
+
+### Added
+
+- **Panels are colored by the agent that asks.** When an agent sends no
+  `flow`, its panel takes that agent's color — Claude Code clay, Codex
+  olive-gold, any other agent a stable color of its own — so you can tell
+  agents apart at a glance. A `flow` the agent picks (mood, EMA, …) still
+  wins. Set your own per agent in Settings → Panel colors, or as
+  `agent_colors` in `~/.cenno/config.json`; changes apply to the next prompt
+  without a restart. Every built-in color keeps white text readable (WCAG AA)
+  and is clearly distinct from every flow color.
+- **Help & About window.** A new tray item shows the running version, the
+  author, links to the docs, and the acknowledgements from NOTICE.
+- **Record the reopen shortcut.** Settings → Shortcut now has Record and Reset
+  buttons instead of a text field: press the combination you want and it
+  applies immediately — no restart. A combination another app already owns is
+  reported instead of saved as a dead hotkey.
+
+### Changed
+
+- **Rounded panel corners.** The prompt panel now uses macOS's own window
+  corners and shadow, matching whatever version of macOS you run.
+- The "Default flow" setting gains a "None — use per-agent colors" option.
+
 ## [0.5.0] — 2026-11-10
 
 ### Added
