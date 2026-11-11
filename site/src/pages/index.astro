@@ -1392,6 +1392,8 @@ const panels = [
 
       /* ——— small screens ——————————————————————————————————— */
       @media (max-width: 640px) {
+        /* No room for a fixed dot rail on phones: it sat on top of text. */
+        .dots { display: none; }
         .shot-offset { margin-top: 0; }
         .panel { padding-bottom: calc(var(--cenno-space-5) + var(--cenno-space-3)); }
       }
