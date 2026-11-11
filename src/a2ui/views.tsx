@@ -1187,8 +1187,14 @@ export function MatrixView({
             <div className="cenno-matrix__slider" key={row.value}>
               <div className="cenno-matrix__slider-head">
                 <span className="cenno-matrix__label">{row.label}</span>
-                <span className="cenno-matrix__readout">
-                  {current ?? Math.round((min + max) / 2)}
+                {/* Unrated reads as a dash, not the thumb's resting midpoint:
+                    Done stays disabled until a row is rated, so a number here
+                    made the panel look answered when it was not. Tapping the
+                    thumb in place commits the midpoint. */}
+                <span
+                  className={`cenno-matrix__readout${current === undefined ? " is-unrated" : ""}`}
+                >
+                  {current ?? "–"}
                 </span>
               </div>
               <SliderView

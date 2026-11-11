@@ -989,6 +989,18 @@ describe("MatrixView", () => {
     expect(onDone).toHaveBeenCalledWith({ pace: 7 });
   });
 
+  it("sliders mode shows an unrated row as unrated, not as the midpoint", () => {
+    render(<MatrixView rows={rows} mode="sliders" min={1} max={5}
+      onSelect={vi.fn()} onDone={vi.fn()} />);
+    // Done is disabled until a row is rated, so a readout of "3" would make
+    // the panel look answered when it is not.
+    expect(screen.queryByText("3")).toBeNull();
+    expect(screen.getAllByText("–")).toHaveLength(rows.length);
+    fireEvent.change(screen.getAllByRole("slider")[0], { target: { value: "4" } });
+    expect(screen.getByText("4")).toBeTruthy();
+    expect(screen.getAllByText("–")).toHaveLength(rows.length - 1);
+  });
+
   it("marks the bound values as checked", () => {
     render(<MatrixView rows={rows} mode="matrix" min={1} max={3}
       value={{ pace: 2 }} onSelect={vi.fn()} onDone={vi.fn()} />);

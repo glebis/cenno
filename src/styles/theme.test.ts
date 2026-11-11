@@ -15,3 +15,13 @@ describe("theme.css", () => {
   it("defines the semantic line var", () =>
     expect(css).toContain("--cenno-line: var(--cenno-color-line)"));
 });
+
+describe("theme.css dim text contrast", () => {
+  // 60% white fails 4.5:1 on every flow except ambient, so each colored flow
+  // must re-set the semantic dim var (cenno-7ls).
+  for (const flow of ["mood", "question", "ema", "reminder"] as const)
+    it(`re-sets --cenno-text-dim for data-flow=${flow}`, () => {
+      const block = css.slice(css.indexOf(`[data-flow="${flow}"]`));
+      expect(block.slice(0, block.indexOf("}"))).toContain("--cenno-text-dim:");
+    });
+});

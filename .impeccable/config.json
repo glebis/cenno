@@ -8,6 +8,15 @@
         "value": "inter",
         "createdAt": "2026-11-10T14:01:22.957Z",
         "reason": "user confirmed: Inter is the intended cenno UI face (2026-11-10)"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "src/a2ui/views.tsx"
+        ],
+        "createdAt": "2026-11-11T02:43:03.424Z",
+        "reason": "agent triage: L716 is the ImageView loading placeholder div (role=img while loading), not an <img> with empty src; real images resolve via resolveImageUrl"
       }
     ]
   }

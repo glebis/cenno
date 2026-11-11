@@ -876,11 +876,10 @@
      nudges the whole row. */
   border: 1px solid transparent;
   border-radius: 50%;
-  /* Visible without hover, but quiet — the numerals read as a scale you can
-     scan against, not as a row of buttons competing with the labels. 32% is
-     the floor: past that the scale stops being scannable at rest, which is the
-     whole reason the numerals are shown at all. */
-  color: color-mix(in srgb, var(--cenno-text) 32%, transparent);
+  /* Visible without hover, but quieter than the labels. Was 32% white, which
+     measured ~1.5:1 — unreadable text on every flow. The per-flow dim var is
+     the faintest white that clears 4.5:1 (theme.css, cenno-7ls). */
+  color: var(--cenno-text-dim);
   font-size: var(--cenno-type-caption);
   font-variant-numeric: tabular-nums;
 }
@@ -934,6 +933,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--cenno-text);
 }
+.cenno-matrix__readout.is-unrated { color: var(--cenno-text-dim); }
 
 /* Submit bar. `flex: none` so the button keeps its height in a panel that is
    already at the 560px clamp; the top hairline separates it from the last row

@@ -4,6 +4,11 @@
  * Components consume ONLY semantic vars: --cenno-surface, --cenno-text,
  * --cenno-text-dim, --cenno-line. Never reference flow colors directly.
  * Flows are switched by setting data-flow on any ancestor element.
+ *
+ * --cenno-text-dim is re-set per flow: the 60% white token clears 4.5:1 only
+ * on ambient ink. Each value is the faintest white measured to pass on that
+ * flow (question .76, reminder .68, ema .91, rounded up). Coral cannot reach
+ * 4.5:1 even with pure white (2.95:1) — it gets full white; see cenno-4et.
  */
 
 :root {
@@ -15,18 +20,22 @@
 
 [data-flow="mood"] {
   --cenno-surface: var(--cenno-color-flow-mood);
+  --cenno-text-dim: var(--cenno-color-text-default);
 }
 
 [data-flow="question"] {
   --cenno-surface: var(--cenno-color-flow-question);
+  --cenno-text-dim: rgb(255 255 255 / 80%);
 }
 
 [data-flow="ema"] {
   --cenno-surface: var(--cenno-color-flow-ema);
+  --cenno-text-dim: rgb(255 255 255 / 92%);
 }
 
 [data-flow="reminder"] {
   --cenno-surface: var(--cenno-color-flow-reminder);
+  --cenno-text-dim: rgb(255 255 255 / 75%);
 }
 
 [data-flow="ambient"] {
