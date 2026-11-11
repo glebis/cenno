@@ -614,7 +614,10 @@ const panels = [
             nav?.classList.toggle("dots-ink", (e.target as HTMLElement).dataset.flow === "paper");
           }
         },
-        { threshold: 0.51 }
+        // The section crossing the viewport's centre line is the current one.
+        // A ratio threshold (was 0.51) can never fire for a section taller
+        // than twice the viewport — the widget gallery on a phone.
+        { rootMargin: "-50% 0px -50% 0px", threshold: 0 }
       );
       document.querySelectorAll(".panel").forEach((s) => observer.observe(s));
 
@@ -627,7 +630,10 @@ const panels = [
             revealer.unobserve(e.target);
           }
         },
-        { threshold: 0.2 }
+        // Reveal once the block's top is 15% into the viewport. A ratio
+        // threshold (was 0.2) never fires for a block taller than five
+        // viewports, which left the phone widget gallery invisible.
+        { rootMargin: "0px 0px -15% 0px", threshold: 0 }
       );
       document.querySelectorAll(".reveal").forEach((el) => revealer.observe(el));
 
