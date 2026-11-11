@@ -1,0 +1,84 @@
+/* Gallery chrome around the app's own panels. The panels themselves are
+   styled by src/a2ui/catalog.css (imported via views.tsx); everything here is
+   prefixed wg- so it cannot collide with the landing page's classes. The
+   gallery sits on the paper section, so its own text is ink. */
+
+.wg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 420px));
+  justify-content: space-between;
+  gap: var(--cenno-space-5) var(--cenno-space-3);
+  align-items: start;
+  margin-top: var(--cenno-space-4);
+}
+@media (max-width: 920px) {
+  .wg-grid { justify-content: center; }
+}
+
+.wg-card { min-width: 0; width: 100%; max-width: 420px; }
+
+.wg-card__name {
+  font-size: var(--cenno-type-question-m);
+  line-height: var(--cenno-font-leading-question-m);
+  font-weight: var(--cenno-font-weight-question);
+  margin: 0 0 var(--cenno-space-1);
+}
+.wg-card__note {
+  margin: 0 0 var(--cenno-space-2);
+  font-size: 15px;
+  line-height: 1.45;
+  color: rgb(20 23 26 / 75%);
+  max-width: 44ch;
+}
+
+/* Mirrors the app's .prompt-panel: 420px wide, flow surface, chrome row. */
+.wg-panel {
+  position: relative;
+  padding: calc(var(--cenno-space-4) + var(--cenno-space-1)) var(--cenno-space-3) var(--cenno-space-3);
+  background: var(--cenno-surface);
+  color: var(--cenno-text);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+  box-shadow: 0 18px 44px -20px rgb(20 23 26 / 45%);
+  font-size: var(--cenno-type-body);
+  line-height: 1.45;
+}
+.wg-panel__chrome {
+  position: absolute;
+  top: 14px;
+  left: var(--cenno-space-3);
+  right: var(--cenno-space-3);
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--cenno-type-caption);
+  color: var(--cenno-text-dim);
+}
+.wg-panel__q { margin: 0 0 var(--cenno-space-2); }
+
+.wg-card__meta {
+  margin: var(--cenno-space-2) 0 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px var(--cenno-space-2);
+  align-items: baseline;
+  font-size: var(--cenno-type-caption);
+}
+.wg-card__meta dt { color: rgb(20 23 26 / 75%); white-space: nowrap; }
+.wg-card__meta dd { margin: 0; min-width: 0; }
+.wg-card__meta code {
+  display: block;
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgb(20 23 26 / 6%);
+  color: var(--cenno-color-flow-ambient);
+  overflow-wrap: anywhere;
+}
+.wg-card__meta code.is-empty { color: rgb(20 23 26 / 75%); }
+
+/* The panels' controls need a visible keyboard ring on the gallery too. */
+.wg-panel button:focus-visible {
+  outline: 2px solid var(--cenno-text);
+  outline-offset: 2px;
+}
