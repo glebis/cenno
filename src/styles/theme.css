@@ -7,8 +7,8 @@
  *
  * --cenno-text-dim is re-set per flow: the 60% white token clears 4.5:1 only
  * on ambient ink. Each value is the faintest white measured to pass on that
- * flow (question .76, reminder .68, ema .91, rounded up). Coral cannot reach
- * 4.5:1 even with pure white (2.95:1) — it gets full white; see cenno-4et.
+ * flow (question .76, reminder .68, ema .91, rounded up). Coral (#D63B2D)
+ * passes only at full white (4.64:1), so its dim text is full white.
  */
 
 :root {

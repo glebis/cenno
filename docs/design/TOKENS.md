@@ -11,7 +11,7 @@ Brand — the mark and the typographic solution: [BRAND.md](BRAND.md).
 
 | Token | Hex | Used for |
 |---|---|---|
-| `color.flow.mood` | `#FF6250` coral | mood check-ins |
+| `color.flow.mood` | `#D63B2D` coral (was `#FF6250`; darkened for 4.5:1 white text) | mood check-ins |
 | `color.flow.question` | `#1E4FD8` cobalt | free-text and choice questions |
 | `color.flow.ema` | `#0E7C6B` teal | EMA multi-step flows |
 | `color.flow.reminder` | `#4A5568` slate | reminders |

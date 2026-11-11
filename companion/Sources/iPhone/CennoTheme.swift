@@ -7,7 +7,7 @@ enum CennoTheme {
     // Flow surface hues (tokens: color.flow.*)
     static func surface(for flow: String?) -> Color {
         switch flow {
-        case "mood":     return Color(hex: 0xFF6250) // coral
+        case "mood":     return Color(hex: 0xD63B2D) // coral (white text 4.64:1)
         case "ema":      return Color(hex: 0x0E7C6B) // teal
         case "reminder": return Color(hex: 0x4A5568) // slate
         case "ambient":  return Color(hex: 0x14171A) // ink

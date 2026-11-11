@@ -13,7 +13,7 @@
   --sw-ink: #14171a; /* ambient flow — the site background */
   --sw-ink-bar: #0d0f11; /* slightly deeper header bar (the "black" header) */
   --sw-paper: #faf8f5;
-  --sw-coral: #ff6250; /* mood / hero / <meta theme-color> — the brand accent */
+  --sw-coral: #d63b2d; /* mood / hero / <meta theme-color> — the brand accent */
   --sw-cobalt: #1e4fd8; /* question flow */
   --sw-teal: #0e7c6b; /* ema flow */
 
@@ -313,7 +313,7 @@ select:focus,
 
 .sw__keys--recording {
   border-color: var(--sw-coral);
-  box-shadow: 0 0 0 3px rgba(255, 98, 80, 0.18);
+  box-shadow: 0 0 0 3px rgba(214, 59, 45, 0.18);
 }
 
 .sw__kbd {

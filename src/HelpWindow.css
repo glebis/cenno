@@ -39,7 +39,7 @@
     --hw-dim: rgba(255, 255, 255, 0.6);
     --hw-hair: rgba(255, 255, 255, 0.12);
     --hw-code: rgba(255, 255, 255, 0.08);
-    --hw-accent: var(--cenno-color-flow-mood, #ff6250);
+    --hw-accent: var(--cenno-color-flow-mood, #d63b2d);
   }
 }
 

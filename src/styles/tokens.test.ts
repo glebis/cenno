@@ -7,7 +7,7 @@ const css = readFileSync(new URL("./tokens.css", import.meta.url), "utf8");
 describe("generated tokens.css", () => {
   it("contains every flow color from TOKENS.md", () => {
     for (const [name, hex] of [
-      ["--cenno-color-flow-mood", "#FF6250"],
+      ["--cenno-color-flow-mood", "#D63B2D"],
       ["--cenno-color-flow-question", "#1E4FD8"],
       ["--cenno-color-flow-ema", "#0E7C6B"],
       ["--cenno-color-flow-reminder", "#4A5568"],
