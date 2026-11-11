@@ -84,8 +84,6 @@ Use the reminder flow theme. Save answers to goals-checkin.md and return a short
 
 const panels = [
   { id: "hero", flow: "mood", label: "Introduction" },
-  { id: "panels", flow: "paper", label: "What it looks like" },
-  { id: "how", flow: "reminder", label: "How it works" },
   { id: "widgets", flow: "paper", label: "Ways to answer" },
   { id: "voice", flow: "ema", label: "Voice and sound-out" },
   { id: "companion", flow: "mood", label: "iPhone and Apple Watch" },
@@ -108,7 +106,7 @@ const panels = [
     <link rel="canonical" href="https://cenno.salient.community/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="theme-color" content="#ff6250" />
+    <meta name="theme-color" content="#d63b2d" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="cenno" />
     <meta property="og:title" content={TITLE} />
@@ -208,52 +206,6 @@ const panels = [
       </div>
     </section>
 
-    <!-- 2 · PAPER — show, don't tell -->
-    <section class="panel" id="panels" data-flow="paper" aria-label="What it looks like">
-      <div class="panel-body reveal">
-        <h2>One question per screen<br />The answer is the interface</h2>
-        <div class="shots" data-stagger>
-          <figure>
-            <img src="/qa-mood.png" alt="cenno mood check-in panel: 'How are you feeling right now?' over a coral background with five mood words" width="840" height="480" loading="lazy" />
-            <figcaption>A mood check-in. Tap a word, done.</figcaption>
-          </figure>
-          <figure class="shot-offset">
-            <img src="/qa-scale.png" alt="cenno EMA scale panel: a 1-to-7 scale question on teal with dot pagination" width="840" height="480" loading="lazy" />
-            <figcaption>A multi-step check-in, with dots for progress.</figcaption>
-          </figure>
-        </div>
-        <p class="etym">
-          <em>Fare un cenno</em> — Italian: to give a small sign. To nod, to
-          mention briefly, to beckon silently. That's the whole interaction
-          model: agents make a small sign, you answer with one.
-        </p>
-      </div>
-    </section>
-
-    <!-- 3 · REMINDER — how it works -->
-    <section class="panel" id="how" data-flow="reminder" aria-label="How it works">
-      <div class="panel-body reveal">
-        <h2>Three small signs</h2>
-        <ol class="steps" data-stagger>
-          <li>
-            <span class="step-n">01</span>
-            <h3>The agent asks</h3>
-            <p>Claude Code, Claude Desktop, OpenClaw, Hermes, or any other agent that speaks MCP calls the <code>ask_user</code> tool — text, choice, scale, or confirm.</p>
-          </li>
-          <li>
-            <span class="step-n">02</span>
-            <h3>A panel slides in</h3>
-            <p>A non-activating macOS panel floats above your work. It never grabs your keyboard — you answer when you glance at it, not when it interrupts.</p>
-          </li>
-          <li>
-            <span class="step-n">03</span>
-            <h3>Structured data comes back</h3>
-            <p>The agent receives <code>{'{answer, via, elapsed_s}'}</code> — typed results, not parsed strings. Timeouts are part of the contract.</p>
-          </li>
-        </ol>
-      </div>
-    </section>
-
     <!-- 3a · PAPER — every way to answer, live: the app's own components -->
     <section class="panel" id="widgets" data-flow="paper" aria-label="Ways to answer">
       <div class="panel-body reveal">
@@ -262,6 +214,8 @@ const panels = [
           When a single choice won't do, the agent sends a richer panel: a checklist,
           a grid of images, a few things to rate at once. These are the app's own
           controls, live — answer one and see exactly what the agent gets back.
+          Every panel also names the agent that's asking, with its logo and its own
+          color, so Claude Code and Codex never look alike.
         </p>
         <div id="widget-gallery">
           <noscript><p class="code-note">The live panels need JavaScript.</p></noscript>
@@ -308,65 +262,51 @@ const panels = [
       </div>
     </section>
 
-    <!-- 3c · MOOD — iPhone & Apple Watch companion (in TestFlight beta) -->
+    <!-- MOOD — iPhone & Apple Watch companion (TestFlight beta) -->
     <section class="panel" id="companion" data-flow="mood" aria-label="iPhone and Apple Watch">
-      <div class="panel-body reveal">
-        <h2>Answer from your wrist</h2>
-        <p class="lede">
-          The iPhone and Apple Watch companion is in beta. When you step away
-          from the Mac, cenno can hand the question to your phone or Watch. The agent asks once; you answer wherever you are, and
-          the result flows back the same way.
-        </p>
-        <div class="companion-shots" data-stagger>
-          <figure class="device device--phone">
-            <img src="/companion-iphone.png" alt="cenno companion on iPhone showing an agent prompt with answer buttons" width="320" height="660" loading="lazy" />
-            <figcaption>iPhone — the prompt arrives as a card; tap to answer.</figcaption>
-          </figure>
-          <figure class="device device--watch">
-            <img src="/companion-watch.png" alt="cenno companion on Apple Watch showing a compact prompt with choices" width="324" height="396" loading="lazy" />
-            <figcaption>Apple Watch — a glance and a tap.</figcaption>
-          </figure>
-        </div>
-
-        <figure class="secondscreen">
-          <div class="secondscreen-strip" data-stagger>
-            <img src="/secondscreen-scale.png" alt="cenno second-screen mode: a 1-to-7 focus scale prompt filling the display" width="1100" height="688" loading="lazy" />
-            <img src="/secondscreen-choice.png" alt="cenno second-screen mode: an attention check-in with choice chips" width="1100" height="688" loading="lazy" />
-            <img src="/secondscreen-voice.png" alt="cenno second-screen mode: a voice-or-type prompt with an ambient sound level" width="1100" height="688" loading="lazy" />
-          </div>
-          <figcaption>Real screens from the companion's second-screen mode — the same prompts, full-bleed on a parked device.</figcaption>
-        </figure>
-        <ul class="voice-points companion-points" data-stagger>
-          <li>
-            <h3>Your iCloud, end to end</h3>
-            <p>Prompts travel through <em>your</em> private iCloud (CloudKit). The developer never sees them — same local-first promise as the Mac.</p>
-          </li>
-          <li>
-            <h3>You decide what routes where</h3>
-            <p>Per device: <strong>off</strong>, <strong>fallback</strong> (only if you don't answer on the Mac in time), or <strong>mirror</strong> (live). iPhone fallback by default; Watch off until you turn it on.</p>
-          </li>
-          <li>
-            <h3>Second-screen mode</h3>
-            <p>Park an old iPhone on your desk as an ambient display — it shows a quiet clock until an agent needs you, then lights up with the question.</p>
-          </li>
-        </ul>
-
-        <div class="beta-block" id="beta">
-          <h3>Want the iPhone &amp; Watch beta?</h3>
-          <p>The companion app is in <strong>TestFlight beta</strong> while the iCloud relay is tested. Email me and I'll add you.</p>
-          <div class="cta-row">
-            <a class="btn btn-solid" href={`mailto:${EMAIL}?subject=cenno%20companion%20beta&body=Hi%20Gleb%20%E2%80%94%20I%27d%20like%20to%20try%20the%20cenno%20iPhone%20%26%20Watch%20beta.`}>Email to join →</a>
-            {TESTFLIGHT ? (
-              <a class="btn btn-ghost" href={TESTFLIGHT}>Open the beta in TestFlight →</a>
-            ) : (
-              <a class="btn btn-ghost" href="https://apps.apple.com/app/testflight/id899247664">Get TestFlight →</a>
-            )}
-          </div>
-          <p class="fine">
-            Testing happens over Apple <a href="https://testflight.apple.com/">TestFlight</a> —
-            email me and I'll send your invite. Beta requests: <a href={`mailto:${EMAIL}`}>{EMAIL}</a>
+      <div class="panel-body companion-body reveal">
+        <div class="companion-copy">
+          <h2>Answer away from your Mac</h2>
+          <p class="lede">
+            Step away and cenno can hand the question to your iPhone or Apple
+            Watch. The agent asks once; you answer wherever you are, and the
+            result flows back the same way.
           </p>
+          <ul class="companion-points">
+            <li>
+              <h3>Through your own iCloud</h3>
+              <p>Prompts travel through <em>your</em> private iCloud (CloudKit). The developer never sees them.</p>
+            </li>
+            <li>
+              <h3>You choose what goes where</h3>
+              <p>Per device: <strong>off</strong>, <strong>fallback</strong> (only if you don't answer on the Mac in time) or <strong>mirror</strong> (live). iPhone falls back by default; the Watch stays off until you turn it on.</p>
+            </li>
+            <li>
+              <h3>A second screen on your desk</h3>
+              <p>Park an old iPhone by the keyboard: it shows a quiet clock until an agent needs you, then lights up with the question.</p>
+            </li>
+          </ul>
+          <div class="beta" id="beta">
+            <p>
+              <strong>In beta on TestFlight.</strong> Email me and I'll send you an invite.
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-solid" href={`mailto:${EMAIL}?subject=cenno%20companion%20beta&body=Hi%20Gleb%20%E2%80%94%20I%27d%20like%20to%20try%20the%20cenno%20iPhone%20%26%20Watch%20beta.`}>Email to join</a>
+              {TESTFLIGHT ? (
+                <a class="btn btn-ghost" href={TESTFLIGHT}>Open in TestFlight</a>
+              ) : (
+                <a class="btn btn-ghost" href="https://apps.apple.com/app/testflight/id899247664">Get TestFlight</a>
+              )}
+            </div>
+          </div>
         </div>
+
+        <figure class="companion-shots" data-stagger>
+          <img class="companion-shot companion-shot--lead" src="/secondscreen-scale.png" alt="iPhone in second-screen mode showing a 1-to-7 focus scale question" width="1100" height="688" loading="lazy" />
+          <img class="companion-shot" src="/secondscreen-choice.png" alt="iPhone in second-screen mode showing an attention check-in with four choice chips" width="1100" height="688" loading="lazy" />
+          <img class="companion-shot" src="/secondscreen-voice.png" alt="iPhone in second-screen mode showing a type-or-speak prompt with the ambient sound level" width="1100" height="688" loading="lazy" />
+          <figcaption>Real captures from an iPhone in second-screen mode: one check-in, three questions.</figcaption>
+        </figure>
       </div>
     </section>
 
@@ -458,10 +398,10 @@ const panels = [
     <section class="panel" id="data" data-flow="reminder" aria-label="Privacy and policy">
       <div class="panel-body reveal">
         <h2>Whose data?<br />Yours, all of it</h2>
-        <ul class="claims">
+        <ul class="claims claims--four">
           <li>
             <h3>Local by design</h3>
-            <p>Every exchange lands in a local SQLite file with user-only permissions. cenno makes no network connections on its own.</p>
+            <p>Every exchange lands in a local SQLite file with user-only permissions. cenno goes online only when you ask: an update check, or the one-time voice download.</p>
           </li>
           <li>
             <h3>Queryable history</h3>
@@ -470,6 +410,10 @@ const panels = [
           <li>
             <h3>Respectful by policy</h3>
             <p>Pause prompts from the tray — 15 minutes to “until tomorrow”. Fullscreen keeps panels quiet automatically. Agents just see a normal timeout.</p>
+          </li>
+          <li>
+            <h3>Screen context, on request</h3>
+            <p>An agent can ask what's in the app you're using. cenno reads text through Accessibility only — no pixels, no recording, nothing stored — and the tray has an off switch.</p>
           </li>
         </ul>
       </div>
@@ -502,9 +446,11 @@ const panels = [
           <li>
             <h3>Or speak MCP</h3>
             <p>
-              One <code>ask_user</code> tool covers text, choice, scale, and
-              confirm — plus flow color, progress dots, timeouts, and full A2UI
-              layouts when a simple form isn't enough.
+              <code>ask_user</code> covers text, choice, scale, and confirm, plus
+              full A2UI layouts when a simple form isn't enough.
+              <code>ask_sequence</code> runs several questions in one panel,
+              <code>get_screen_context</code> reads the focused app, and
+              <code>dismiss_pending</code> withdraws a question.
               <a href={`${GITHUB}#the-ask_user-tool`}>The contract is in the README.</a>
             </p>
           </li>
@@ -569,9 +515,13 @@ const panels = [
             <p>
               Built by <a href="https://glebkalinin.com">Gleb Kalinin</a>
               (<a href="https://www.linkedin.com/in/glebkalinin/">LinkedIn</a>) —
-              designed, built, and reviewed end-to-end with AI agents in two days.
+              the first version designed, built, and reviewed with AI agents in two days.
               The full spec&nbsp;→&nbsp;plan&nbsp;→&nbsp;review trail
               <a href={`${GITHUB}/tree/main/docs/superpowers`}>ships in the repo</a>.
+            </p>
+            <p class="etym">
+              <em>Fare un cenno</em> — Italian: to give a small sign. Agents make a
+              small sign; you answer with one.
             </p>
           </div>
           <p class="footer-meta">
@@ -857,8 +807,7 @@ const panels = [
         color: var(--cenno-color-flow-ambient);
       }
       /* Secondary text: the lightest white that still clears 4.5:1 on each
-         flow (measured). Coral can't reach 4.5:1 even with pure white, so it
-         gets full white. */
+         flow (measured). Coral passes only at full white (4.64:1). */
       .panel[data-flow="question"] { --cenno-color-text-dim: rgb(255 255 255 / 80%); }
       .panel[data-flow="reminder"] { --cenno-color-text-dim: rgb(255 255 255 / 75%); }
       .panel[data-flow="ema"]      { --cenno-color-text-dim: rgb(255 255 255 / 92%); }
@@ -1045,40 +994,7 @@ const panels = [
         color: var(--cenno-color-text-dim);
       }
 
-      /* ——— screenshots ————————————————————————————————————— */
-      .shots {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
-        gap: var(--cenno-space-4);
-        align-items: start;
-        margin-block: var(--cenno-space-4);
-      }
-      .shot-offset { margin-top: var(--cenno-space-5); }
-      .shots img {
-        width: 100%; height: auto; display: block;
-        border-radius: var(--cenno-radius-control);
-        box-shadow: 0 24px 64px rgb(20 23 26 / 18%);
-      }
       figcaption { margin-top: var(--cenno-space-2); color: rgb(20 23 26 / 75%); }
-      .etym { max-width: 52ch; color: rgb(20 23 26 / 75%); }
-
-      /* ——— steps ——————————————————————————————————————————— */
-      .steps {
-        list-style: none; padding: 0;
-        display: grid; gap: var(--cenno-space-4);
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-      }
-      .steps p { color: var(--cenno-color-text-dim); max-width: 36ch; }
-      .steps code { font-size: 15px; color: var(--cenno-color-text-default); }
-      .step-n {
-        display: block;
-        font-size: var(--cenno-type-caption);
-        letter-spacing: var(--cenno-font-tracking-caption);
-        color: var(--cenno-color-text-dim);
-        border-top: 1px solid var(--cenno-color-line);
-        padding-top: var(--cenno-space-2);
-        margin-bottom: var(--cenno-space-2);
-      }
 
       /* ——— voice / sound-out points ———————————————————————— */
       .voice-points {
@@ -1126,48 +1042,47 @@ const panels = [
       .voice-label { font-size: 15px; }
       .voice-note { margin-top: var(--cenno-space-2); color: var(--cenno-color-text-dim); max-width: 44ch; }
 
-      /* ——— companion (iPhone + Watch) ——————————————————————— */
-      .companion-shots {
-        display: flex; flex-wrap: wrap; gap: var(--cenno-space-4);
-        align-items: flex-end; margin: var(--cenno-space-4) 0;
+      /* ——— companion: copy beside the real captures ———————— */
+      .companion-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+        gap: clamp(var(--cenno-space-4), 5vw, calc(var(--cenno-space-5) * 1.25));
+        align-items: center;
+        max-width: 72rem;
       }
-      .device { margin: 0; }
-      .device img {
-        display: block; height: auto; border-radius: 22px;
-        box-shadow: 0 18px 50px rgb(0 0 0 / 28%);
-        background: rgb(0 0 0 / 15%);
-      }
-      .device--phone img { width: clamp(180px, 42vw, 260px); }
-      .device--watch img { width: clamp(130px, 30vw, 190px); border-radius: 34px; }
-      .device figcaption { margin-top: var(--cenno-space-2); color: var(--cenno-color-text-dim); font-size: 15px; }
-      .companion-points { margin-top: var(--cenno-space-3); }
-
-      /* Real second-screen captures — a row of the actual full-bleed app frames. */
-      .secondscreen { margin: var(--cenno-space-4) 0 0; }
-      .secondscreen-strip {
+      .companion-copy h2 { margin-top: 0; }
+      .companion-points {
+        list-style: none; padding: 0;
+        margin-top: var(--cenno-space-4);
         display: grid; gap: var(--cenno-space-2);
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
       }
-      .secondscreen-strip img {
+      .companion-points li {
+        border-top: 1px solid var(--cenno-color-line);
+        padding-top: var(--cenno-space-2);
+      }
+      .companion-points h3 { font-size: 19px; margin-bottom: 4px; }
+      .companion-points p { color: var(--cenno-color-text-dim); max-width: 44ch; font-size: 16px; }
+      .beta { margin-top: var(--cenno-space-4); }
+      .beta .cta-row { margin-top: var(--cenno-space-2); }
+      .companion-shots {
+        margin: 0;
+        display: grid; gap: var(--cenno-space-2);
+        grid-template-columns: 1fr 1fr;
+      }
+      .companion-shot {
         width: 100%; height: auto; display: block;
-        border-radius: 12px; border: 1px solid var(--cenno-color-line);
-        box-shadow: 0 10px 30px rgb(0 0 0 / 16%);
+        border-radius: 14px;
+        box-shadow: 0 18px 44px -12px rgb(20 23 26 / 45%);
       }
-      .secondscreen figcaption { margin-top: var(--cenno-space-2); color: var(--cenno-color-text-dim); font-size: 15px; }
-
-      /* ——— beta / contact block ———————————————————————————— */
-      .beta-block {
-        margin-top: var(--cenno-space-5);
-        padding: var(--cenno-space-4);
-        border: 1px solid var(--cenno-color-line);
-        border-radius: var(--cenno-radius-control);
-        background: rgb(255 255 255 / 7%);
+      .companion-shot--lead { grid-column: 1 / -1; }
+      .companion-shots figcaption {
+        grid-column: 1 / -1;
+        margin-top: 0;
+        color: var(--cenno-color-text-dim);
       }
-      .beta-block h3 { margin-bottom: var(--cenno-space-1); }
-      .beta-block p { color: var(--cenno-color-text-dim); max-width: 48ch; }
-      .beta-block .cta-row { margin-top: var(--cenno-space-3); }
-      .beta-block .fine { margin-top: var(--cenno-space-2); }
-      .beta-block .fine a { color: inherit; }
+      @media (max-width: 960px) {
+        .companion-body { grid-template-columns: minmax(0, 1fr); }
+      }
 
       /* ——— presentation preview (slide cards) ——————————————— */
       .slide {
@@ -1199,7 +1114,7 @@ const panels = [
         grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
       }
 
-      .slide--coral { background: linear-gradient(155deg, #ff7a68, #ff5a46); color: #fff; }
+      .slide--coral { background: var(--cenno-color-flow-mood); color: #fff; }
       .slide--ink   { background: #14171a; color: #f3efea; }
       .slide--teal  { background: linear-gradient(155deg, #129e8c, #0e7c6b); color: #fff; }
       .slide--paper { background: #faf8f5; color: #14171a; border-color: rgb(0 0 0 / 12%); }
@@ -1231,6 +1146,7 @@ const panels = [
       }
       .claims p { color: var(--cenno-color-text-dim); max-width: 36ch; }
       .claims code { color: var(--cenno-color-text-default); font-size: 15px; }
+      .claims--four { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
 
       /* dev section sits on paper: ink text, not white */
       .panel[data-flow="paper"] .claims p { color: rgb(20 23 26 / 75%); }
@@ -1291,7 +1207,8 @@ const panels = [
         display: grid; gap: var(--cenno-space-3);
         text-align: left;
       }
-      .builtby p:last-child { max-width: 56ch; margin-top: var(--cenno-space-1); }
+      .builtby p { max-width: 56ch; margin-top: var(--cenno-space-1); }
+      .builtby .etym { color: var(--cenno-color-text-dim); }
       .footer a { color: inherit; }
       .footer-meta { color: var(--cenno-color-text-dim); font-size: var(--cenno-type-caption); }
 
@@ -1394,7 +1311,6 @@ const panels = [
       @media (max-width: 640px) {
         /* No room for a fixed dot rail on phones: it sat on top of text. */
         .dots { display: none; }
-        .shot-offset { margin-top: 0; }
         .panel { padding-bottom: calc(var(--cenno-space-5) + var(--cenno-space-3)); }
       }
     </style>

@@ -4,7 +4,7 @@
  */
 
 :root {
-  --cenno-color-flow-mood: #ff6250; /** Coral — mood check-ins */
+  --cenno-color-flow-mood: #d63b2d; /** Coral — mood check-ins. Darkened from #FF6250 (lightness only, OKLCH) so white text clears 4.5:1 (4.64) */
   --cenno-color-flow-question: #1e4fd8; /** Cobalt — free-text and choice questions */
   --cenno-color-flow-ema: #0e7c6b; /** Teal — EMA multi-step flows */
   --cenno-color-flow-reminder: #4a5568; /** Slate — reminders */
