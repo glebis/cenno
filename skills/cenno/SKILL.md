@@ -88,7 +88,8 @@ Take the first row that fits. Prefer a built-in `input.kind` over `a2ui` wheneve
 | pick one of 2–5 named options | `choice` | short labels; >5 crowds the panel |
 | pick one of 6+ / an open set | `text` (or `choice` with the top 4, text catches the rest) | don't scroll the user through a long list |
 | a rating, 1–7 fits | `scale` | hard-wired 1–7, discrete |
-| a rating with another range or labeled ends (1–5, NPS 0–10) | a2ui **Scale** | `min`/`max`/`minLabel`/`maxLabel` |
+| a rating with 2–7 points or labeled ends (1–3, 1–5) | a2ui **Scale** | `min`/`max`/`minLabel`/`maxLabel` |
+| a rating with 8+ points (1–10, NPS 0–10) | a2ui **Slider** with `step: 1` | ten buttons in a row do not fit the panel; put the end labels in `body_md` |
 | a continuous quantity (percent, budget) | a2ui **Slider** | `min`/`max`/`step` |
 | open-ended, a sentence or more | `voice_text` | default over `text` when the answer is likely more than a few words |
 | a date, time, or deadline | a2ui **DateTimeInput** | `enableDate`/`enableTime` |
