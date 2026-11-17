@@ -1,6 +1,6 @@
 ---
 name: cenno
-description: This skill should be used when an agent needs a decision, confirmation, rating, choice, or free-text answer from the human user. It asks through a cenno panel on macOS and returns a structured answer instead of guessing or blocking. Use it before risky or irreversible actions, for 1–N ratings, pick-one-of-N choices, scoring several items, and check-ins or questionnaires. Also use it to install cenno or add it to a project's MCP config when ask_user is missing or fails with "not running", and to configure the cenno app (panel size, position, theme, timeout, custom widgets, colors). Triggers on "ask me", "check with me first", "let me decide", "rate this", "confirm before", mood/EMA check-ins, "set up cenno", "configure cenno", "add cenno to this project", and any moment a human judgment call beats an assumption.
+description: This skill should be used when an agent needs a decision, confirmation, rating, choice, or free-text answer from the human user. It asks through a cenno panel on macOS and returns a structured answer instead of guessing or blocking. Use it before risky or irreversible actions, for 1–N ratings, pick-one-of-N choices, scoring several items, and check-ins or questionnaires. Also use it to install cenno or add it to a project's MCP config when ask_user is missing or fails with "not running", and to configure the cenno app (panel size, position, theme, timeout, custom widgets, colors). Also use it to play a clip the user has to hear before answering (a rendered mix, a jingle, a TTS take) — pass it as `audio`. Triggers on "ask me", "check with me first", "let me decide", "rate this", "confirm before", "play this and ask", mood/EMA check-ins, "set up cenno", "configure cenno", "add cenno to this project", and any moment a human judgment call beats an assumption.
 ---
 
 # Asking the user through cenno
@@ -65,7 +65,7 @@ Returns `{"answer": "...", "via": "text"|"choice"|"voice_text", "elapsed_s": 1.4
 - **`urgency`** gates whether the panel speaks and how insistently it appears. Omit it for a normal question; `low` for FYI-shaped prompts; `high` only when the answer blocks the user's next action.
 - **The panel header names the asker** from the MCP client's `initialize` handshake (`clientInfo.title`, else `clientInfo.name`, trimmed to 40 chars). There is no argument for it — an `agent` field is ignored, so one agent can't speak under another's name. CLI calls show as `cenno`. Well-known clients (`claude-code`, `codex-mcp-client`) also get a small monochrome logo, matched on the exact name; the name is saved with each prompt (`agent` in `cenno export`).
 - **`device_hint`** (`"phone"` | `"ipad"` | `"watch"`) is a proposal the user's routing policy may ignore. Omit it unless cross-device delivery is the point.
-- **`audio`** attaches one clip the panel plays above the question — a generated jingle, a TTS take, a reference recording. Pass an absolute local path or a `data:audio/…;base64,` URI; mp3, wav, m4a or ogg, ≤ 5 MiB. It autoplays unless `muted`, and the countdown pauses while it plays. No remote URLs (cenno never fetches) and an oversize clip does not fail the question — the panel says so and offers Open in Finder.
+- **`audio`** attaches one clip for the panel to play above the question. Full rules, formats and failure modes: [Attaching audio](#attaching-audio).
 
 ### Input kinds
 
@@ -104,7 +104,7 @@ Take the first row that fits. Prefer a built-in `input.kind` over `a2ui` wheneve
 | judge one visual artifact | a2ui **Image** + ChoicePicker | one image at a time |
 | several related questions | `ask_sequence` | hand-roll a loop only when a later question depends on an earlier answer |
 | FYI only | `none` | don't dress information up as a question |
-| the user must **hear** something (a mix, a jingle, a take) | `audio` + the matching question | the clip is an argument, not decoration: never attach one to a question that does not depend on hearing it |
+| the user must **hear** something (a mix, a jingle, a take) | `audio` + the matching question | see [Attaching audio](#attaching-audio); the clip is an argument, not decoration — never attach one to a question that does not depend on hearing it |
 
 Two rules trump the table: **one decision per panel** (two things to answer is two questions — use `ask_sequence`), and **the widget must constrain the answer to something actionable** (if the answer would need parsing or a re-ask, the widget is too loose).
 
@@ -161,6 +161,34 @@ For a few related questions, call `ask_sequence` instead of N `ask_user` calls: 
 - **Returns** `{"answers": [{"answer": "5", "via": "choice", "elapsed_s": 2.1}, {"answer": "Work", …}, {"answer": "…", …}]}`, ordered like `questions`.
 - **A timeout ends the run.** `answers` is as long as the user got; its last entry is then `{answered: false, prompt_id}`, and later questions are never shown. Don't record a partial run as complete.
 - When a later question depends on an earlier answer, chain single `ask_user` calls instead, carrying `progress` explicitly.
+
+## Attaching audio
+
+When the answer depends on *hearing* something — a mix you rendered, a jingle, a TTS take, a reference recording — send the clip with the question instead of describing it or handing over a path in prose.
+
+```json
+{ "title": "Which mix lands better?",
+  "input": { "kind": "choice" }, "choices": ["A", "B"],
+  "audio": "/Users/me/Music/take-3.mp3" }
+```
+
+- **One string, two shapes.** An absolute local path, or an inline `data:audio/…;base64,` URI. The `data:` prefix decides which; there is no second field to set.
+- **Formats and cap:** mp3, wav, m4a, ogg — ≤ 5 MiB decoded. Bigger than that and the panel refuses to play it.
+- **The clip autoplays** unless the prompt is `muted` (mute silences both voice-out and audio autoplay). The user can still press ▶ on a muted panel.
+- **The countdown pauses while it plays** — a 40-second clip does not eat the user's answer budget. This is why attaching audio is safe on a short `timeout_s`; you still do not need to inflate the timeout.
+- **No remote URLs.** cenno never fetches. Download the file and pass the path, or inline the bytes.
+- **Voice and audio coexist:** `say` is spoken, the clip is played. Use both only when both carry information; otherwise pick one.
+
+Failure modes, all at the boundary before the panel opens:
+
+| you sent | what happens |
+|---|---|
+| a path that does not exist, a relative path, a non-audio extension, or bytes that disagree with the extension | the tool returns an error naming the problem — **fix it and retry**, don't re-send the same call |
+| a malformed `data:` URI, or a MIME type that lies about the payload | same: an actionable error, no panel |
+| a clip over 5 MiB | the question is **still asked**, silently, with a *"Audio too large (8.0 MB > 5.0 MB)"* note and **Open in Finder** for a path. This is not an error — don't retry, and don't assume the user heard anything |
+| a remote `https://` URL | rejected. The panel cannot fetch, so this is never right |
+
+In `ask_sequence`, each question may carry its own clip; they play one at a time as that question's panel renders.
 
 ## Logging answers
 
