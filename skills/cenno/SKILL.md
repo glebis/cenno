@@ -54,6 +54,7 @@ Fallback order — take the first that works:
   "urgency": "normal", // low | normal | high — how hard the panel asks for attention
   "say": "Deploy question needs you",  // short spoken line instead of reading the panel
   "muted": false,      // true = open silently regardless of urgency
+  "audio": "/Users/me/clip.mp3",  // optional clip: absolute path or data:audio/…;base64 (mp3|wav|m4a|ogg, ≤5 MiB)
   "a2ui": [ /* rich widget payload — see references/a2ui-widgets.md */ ]
 }
 ```
@@ -64,6 +65,7 @@ Returns `{"answer": "...", "via": "text"|"choice"|"voice_text", "elapsed_s": 1.4
 - **`urgency`** gates whether the panel speaks and how insistently it appears. Omit it for a normal question; `low` for FYI-shaped prompts; `high` only when the answer blocks the user's next action.
 - **The panel header names the asker** from the MCP client's `initialize` handshake (`clientInfo.title`, else `clientInfo.name`, trimmed to 40 chars). There is no argument for it — an `agent` field is ignored, so one agent can't speak under another's name. CLI calls show as `cenno`. Well-known clients (`claude-code`, `codex-mcp-client`) also get a small monochrome logo, matched on the exact name; the name is saved with each prompt (`agent` in `cenno export`).
 - **`device_hint`** (`"phone"` | `"ipad"` | `"watch"`) is a proposal the user's routing policy may ignore. Omit it unless cross-device delivery is the point.
+- **`audio`** attaches one clip the panel plays above the question — a generated jingle, a TTS take, a reference recording. Pass an absolute local path or a `data:audio/…;base64,` URI; mp3, wav, m4a or ogg, ≤ 5 MiB. It autoplays unless `muted`, and the countdown pauses while it plays. No remote URLs (cenno never fetches) and an oversize clip does not fail the question — the panel says so and offers Open in Finder.
 
 ### Input kinds
 
@@ -102,6 +104,7 @@ Take the first row that fits. Prefer a built-in `input.kind` over `a2ui` wheneve
 | judge one visual artifact | a2ui **Image** + ChoicePicker | one image at a time |
 | several related questions | `ask_sequence` | hand-roll a loop only when a later question depends on an earlier answer |
 | FYI only | `none` | don't dress information up as a question |
+| the user must **hear** something (a mix, a jingle, a take) | `audio` + the matching question | the clip is an argument, not decoration: never attach one to a question that does not depend on hearing it |
 
 Two rules trump the table: **one decision per panel** (two things to answer is two questions — use `ask_sequence`), and **the widget must constrain the answer to something actionable** (if the answer would need parsing or a re-ask, the widget is too loose).
 

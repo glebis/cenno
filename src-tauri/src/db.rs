@@ -52,6 +52,11 @@ impl Db {
             .ok()
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_default();
+        // Persist the audio SOURCE, never the payload: a file path when the
+        // agent pointed at a file, NULL for a data URI (nothing durable to
+        // record) and for prompts without audio. Keeps the DB small and avoids
+        // parking megabytes of base64 in a file the user backs up.
+        let audio_path: Option<&str> = req.audio_path.as_deref();
 
         let (status, answer, via, elapsed_s): (&str, Option<String>, Option<String>, Option<f64>) =
             match outcome {
@@ -67,8 +72,8 @@ impl Db {
         self.0.lock().execute(
             "INSERT INTO prompts \
              (prompt_id, title, body_md, input_kind, flow, urgency, \
-              status, answer, via, elapsed_s, created_at, resolved_at, agent) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+              status, answer, via, elapsed_s, created_at, resolved_at, agent, audio_path) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 prompt_id,
                 req.title,
@@ -83,6 +88,7 @@ impl Db {
                 created_at_str,
                 resolved_at,
                 req.agent,
+                audio_path,
             ],
         )?;
         Ok(())
@@ -140,7 +146,7 @@ impl Db {
     ) -> rusqlite::Result<Vec<serde_json::Value>> {
         let conn = self.0.lock();
         let sql = "SELECT id, prompt_id, title, body_md, input_kind, flow, urgency, \
-                          status, answer, via, elapsed_s, created_at, resolved_at, agent \
+                          status, answer, via, elapsed_s, created_at, resolved_at, agent, audio_path \
                    FROM prompts \
                    WHERE (?1 IS NULL OR created_at >= ?1) \
                    ORDER BY created_at ASC, id ASC";
@@ -162,6 +168,7 @@ impl Db {
                 "created_at":  row.get::<_, String>(11)?,
                 "resolved_at": row.get::<_, String>(12)?,
                 "agent":       row.get::<_, Option<String>>(13)?,
+                "audio_path":  row.get::<_, Option<String>>(14)?,
             }))
         })?;
         rows.collect()
@@ -200,6 +207,14 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         .exists([])?;
     if !has_agent {
         conn.execute_batch("ALTER TABLE prompts ADD COLUMN agent TEXT;")?;
+    }
+    // v0.7: audio attached to a prompt — the file PATH only (never the payload),
+    // NULL for data URIs and for prompts with no audio. Same idempotent probe.
+    let has_audio_path: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('prompts') WHERE name = 'audio_path'")?
+        .exists([])?;
+    if !has_audio_path {
+        conn.execute_batch("ALTER TABLE prompts ADD COLUMN audio_path TEXT;")?;
     }
     Ok(())
 }

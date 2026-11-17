@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fire a demo prompt of each kind at the running (or auto-launched) cenno.
-# Usage: scripts/demo.sh [text|voice|choice|scale|confirm|mood|table|matrix|sliders|stepscore|images|image-error|image-remote|all]
+# Usage: scripts/demo.sh [text|voice|choice|scale|confirm|mood|table|matrix|sliders|stepscore|images|image-error|image-remote|audio|audio-oversize|all]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BIN="${CENNO_BIN:-src-tauri/target/release/cenno}"
@@ -32,6 +32,37 @@ case "${1:-all}" in
   # before a prompt is registered, so this one prints the agent-facing error.
   image-remote) ask '{"title":"This payload is rejected","a2ui":[{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"cenno:catalog/v1"}},{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Image","url":"https://example.com/a.png"}]}}],"timeout_s":60}' ;;
   stepscore) ask '{"title":"Score this step (0 none · 3 high)","flow":"ema","progress":{"step":1,"total":4},"a2ui":[{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"cenno:catalog/v1"}},{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Column","children":["s"]},{"id":"s","component":"StepScore","step":"Review PRs","dimensions":[{"value":"sensitivity","label":"If this step were 2× faster, would throughput rise?","decisive":true},{"value":"wait","label":"wait before"},{"value":"starve","label":"starves next"},{"value":"cap","label":"capacity gap"},{"value":"annoy","label":"annoyance"}],"flags":[{"value":"necessary","label":"necessary"},{"value":"policy_gate","label":"policy gate"}],"value":{"path":"/score"},"doneLabel":"Next","selectAction":{"event":{"name":"submit-score","context":{"value":{"path":"/score"},"via":"choice"}}}}]}},{"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/","value":{"score":{}}}}],"timeout_s":90}' ;;
-  all)     for k in mood text voice choice scale confirm table matrix sliders stepscore images image-error image-remote; do "$0" "$k"; done ;;
-  *) echo "usage: $0 [text|voice|choice|scale|confirm|mood|table|matrix|sliders|stepscore|images|image-error|image-remote|all]"; exit 1 ;;
+  # Generates the clip locally (python3, no network) so the demo never depends
+  # on a checked-in binary. Pass your own with CENNO_DEMO_AUDIO=/path/clip.mp3.
+  audio)
+    AUDIO="${CENNO_DEMO_AUDIO:-${TMPDIR:-/tmp}/cenno-demo-audio.wav}"
+    if [ -z "${CENNO_DEMO_AUDIO:-}" ]; then
+      python3 - "$AUDIO" <<'PY'
+import math, struct, sys, wave
+path = sys.argv[1]
+w = wave.open(path, 'wb')
+w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
+rate, dur = 22050, 1.5
+frames = bytearray()
+for i in range(int(rate * dur)):
+    t = i / rate
+    # Three plucks, so the scrubber and the countdown-pause have something to do.
+    note = 523.25 if t < 0.5 else (659.25 if t < 1.0 else 783.99)
+    local = t % 0.5
+    env = min(1.0, local * 40) * math.exp(-6 * local)
+    frames += struct.pack('<h', int(11000 * env * math.sin(2 * math.pi * note * t)))
+w.writeframes(bytes(frames)); w.close()
+PY
+    fi
+    ask "{\"title\":\"Listen to this\",\"body_md\":\"A generated clip sits above the body. Playback pauses the countdown.\",\"audio\":\"$AUDIO\",\"timeout_s\":60}"
+    ;;
+  # 8 MB of garbage behind a .mp3 name: refused as oversize, so the prompt is
+  # still asked, saying so and offering Open in Finder.
+  audio-oversize)
+    BIG="${TMPDIR:-/tmp}/cenno-demo-big.mp3"
+    [ -f "$BIG" ] || dd if=/dev/zero of="$BIG" bs=1m count=8 2>/dev/null
+    ask "{\"title\":\"Too big to play\",\"body_md\":\"The prompt survives an oversized clip.\",\"audio\":\"$BIG\",\"timeout_s\":60}"
+    ;;
+  all)     for k in mood text voice choice scale confirm table matrix sliders stepscore images image-error image-remote audio; do "$0" "$k"; done ;;
+  *) echo "usage: $0 [text|voice|choice|scale|confirm|mood|table|matrix|sliders|stepscore|images|image-error|image-remote|audio|audio-oversize|all]"; exit 1 ;;
 esac

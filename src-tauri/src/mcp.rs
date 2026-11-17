@@ -47,7 +47,8 @@ use chrono::Utc;
 
 use crate::db::Db;
 use crate::protocol::{
-    AskRequest, Progress, ScreenContextRequest, SeqMeta, SequenceRequest, SequenceResponse,
+    AskRequest, AudioOversizeNote, Progress, ScreenContextRequest, SeqMeta,
+    SequenceRequest, SequenceResponse,
 };
 use crate::registry::PromptRegistry;
 use crate::screen_context::ScreenContextServices;
@@ -123,6 +124,48 @@ fn caller_name(peer: &Peer<RoleServer>) -> Option<String> {
     (!name.is_empty()).then(|| name.chars().take(40).collect())
 }
 
+/// Resolve a request's `audio` field into the two server-set fields the panel
+/// reads: `audio_uri` (a validated, ready-to-decode data URI) or
+/// `audio_oversize` (a notice, so the question is still asked).
+///
+/// `audio` itself is cleared afterwards — the webview never resolves a path or
+/// decodes base64 itself, and keeping the raw reference around would let it
+/// travel into the relay payload and the DB row.
+///
+/// The one refusal that is NOT an error is `Oversize`: the agent asked a real
+/// question, and losing the whole prompt because a jingle exported at 8 MB
+/// would be a worse outcome than asking it silently. Every other failure (bad
+/// path, bad extension, magic mismatch, malformed data URI) is a bug in the
+/// agent's call and becomes an actionable `InvalidParams`-facing error.
+fn attach_audio(params: &mut AskRequest) -> Result<(), String> {
+    let Some(src) = params.audio.take() else { return Ok(()) };
+    // Never echo a multi-megabyte data URI back into an error message.
+    let subject = if src.is_uri() {
+        let head: String = src.as_str().chars().take(40).collect();
+        format!("{head}…")
+    } else {
+        src.as_str().to_string()
+    };
+    // Only a real file path is worth recording/revealing; a data URI has
+    // nothing durable behind it.
+    params.audio_path = (!src.is_uri()).then(|| src.as_str().to_string());
+    match crate::audio::load_audio(&src) {
+        Ok(loaded) => {
+            params.audio_uri = Some(loaded.data_uri);
+            Ok(())
+        }
+        Err(e) if e.is_oversize() => {
+            params.audio_oversize = Some(AudioOversizeNote {
+                bytes: e.oversize_bytes().unwrap_or(0),
+                max: crate::audio::MAX_AUDIO_BYTES,
+                source_path: params.audio_path.clone(),
+            });
+            Ok(())
+        }
+        Err(e) => Err(format!("invalid audio: {}", e.message(&subject))),
+    }
+}
+
 #[tool_router]
 impl CennoServer {
     #[tool(
@@ -143,7 +186,11 @@ impl CennoServer {
                        Every panel — including choice, scale and confirm — also \
                        renders a free-form text field with a mic, so the user can \
                        always reply in their own words. Treat `choices` as \
-                       suggestions, and expect an answer that is not in the list."
+                       suggestions, and expect an answer that is not in the list. \
+                       Attach a clip with `audio` (an absolute local path, or a \
+                       data:audio/...;base64 URI; mp3/wav/m4a/ogg, <= 5 MiB): \
+                       the panel plays it above the question and the countdown \
+                       pauses while it plays."
     )]
     async fn ask_user(
         &self,
@@ -163,6 +210,11 @@ impl CennoServer {
             crate::a2ui_guard::validate_a2ui(a2ui)
                 .map_err(|msg| format!("invalid a2ui payload: {msg}"))?;
         }
+        // Same boundary discipline for audio: validate/resolve it before the
+        // prompt is registered, so a bad reference is a tool error instead of
+        // a panel that opens silent for no stated reason.
+        attach_audio(&mut params)?;
+        // NOTE: `params.audio` is now None (moved into audio_uri/audio_oversize).
         // TODO(plan4): observe context.ct (client cancellation) so a dead agent
         // unparks the prompt instead of burning the full timeout_s.
         let created_at = Utc::now();
@@ -174,7 +226,15 @@ impl CennoServer {
         let captured_id2 = captured_id.clone();
 
         // Serialise the params once for the CloudKit payload (fire-and-forget).
-        let payload_for_relay = serde_json::to_string(&params).unwrap_or_default();
+        // The validated audio data URI is stripped first: it can be megabytes,
+        // and CloudKit records have a hard 1 MB field limit — a jingle would
+        // silently fail the whole relay write. Companion devices get the
+        // question and the oversize note, never the payload.
+        let payload_for_relay = {
+            let mut lean = params.clone();
+            lean.audio_uri = None;
+            serde_json::to_string(&lean).unwrap_or_default()
+        };
         let timeout_for_relay = params.timeout_secs(Some(self.default_timeout_s));
         // Resolve cross-device routing from policy + the agent's hint.
         let routed = self.resolve_routing(params.device_hint.as_deref());
@@ -279,9 +339,16 @@ impl CennoServer {
                     .map_err(|msg| format!("invalid a2ui payload in question {i}: {msg}"))?;
             }
         }
+        // Audio is validated per question, but BEFORE the run starts — same
+        // reason as a2ui above: never ask three questions and then fail on the
+        // fourth's clip.
+        let mut questions = params.questions;
+        for (i, q) in questions.iter_mut().enumerate() {
+            attach_audio(q).map_err(|msg| format!("question {i}: {msg}"))?;
+        }
 
-        let mut answers = Vec::with_capacity(params.questions.len());
-        for (i, question) in params.questions.into_iter().enumerate() {
+        let mut answers = Vec::with_capacity(questions.len());
+        for (i, question) in questions.into_iter().enumerate() {
             let index = i as u32;
             let last = index + 1 == total;
 
@@ -543,5 +610,124 @@ mod tests {
         let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json"))
             .expect("tauri.conf.json is valid JSON");
         assert_eq!(conf["identifier"], APP_IDENTIFIER);
+    }
+
+    mod audio_boundary {
+        use super::super::attach_audio;
+        use crate::protocol::AskRequest;
+
+        /// Minimal RIFF/WAVE header — enough for the magic-byte check.
+        const WAV: &[u8] = b"RIFF\x24\x00\x00\x00WAVEfmt ";
+
+        fn tmp_path(name: &str) -> std::path::PathBuf {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static N: AtomicU32 = AtomicU32::new(0);
+            let dir = std::env::temp_dir().join(format!(
+                "cenno-mcp-audio-{}-{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::SeqCst)
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            dir.join(name)
+        }
+
+        fn req_with_audio(value: &str) -> AskRequest {
+            serde_json::from_value(serde_json::json!({"title": "t", "audio": value})).unwrap()
+        }
+
+        /// The happy path: the raw `audio` reference is consumed and replaced
+        /// by a validated data URI, so the webview never resolves a path itself
+        /// and the raw value cannot reach the DB or the relay payload.
+        #[test]
+        fn valid_file_becomes_a_data_uri() {
+            let path = tmp_path("clip.wav");
+            std::fs::write(&path, WAV).unwrap();
+            let mut req = req_with_audio(path.to_str().unwrap());
+            attach_audio(&mut req).expect("valid wav should load");
+            assert!(req.audio.is_none(), "raw reference must be consumed");
+            assert!(req.audio_oversize.is_none());
+            let uri = req.audio_uri.expect("data uri set");
+            assert!(uri.starts_with("data:audio/wav;base64,"), "got {uri}");
+        }
+
+        /// The DB row must record the clip's path — the regression this test
+        /// exists for is `audio` being consumed by validation before
+        /// `record_prompt` could read it, leaving every row NULL.
+        #[test]
+        fn recording_the_path_survives_validation_consuming_the_reference() {
+            let path = tmp_path("recorded.wav");
+            std::fs::write(&path, WAV).unwrap();
+            let mut req = req_with_audio(path.to_str().unwrap());
+            attach_audio(&mut req).expect("valid wav should load");
+            assert_eq!(req.audio_path.as_deref(), path.to_str(), "path kept for history");
+        }
+
+        #[test]
+        fn a_data_uri_records_no_path() {
+            let uri = format!(
+                "data:audio/wav;base64,{}",
+                {
+                    use base64::Engine;
+                    base64::engine::general_purpose::STANDARD.encode(WAV)
+                }
+            );
+            let mut req = req_with_audio(&uri);
+            attach_audio(&mut req).expect("valid data uri should load");
+            assert!(req.audio_path.is_none(), "nothing durable to record");
+            assert!(req.audio_uri.is_some());
+        }
+
+        /// An oversize clip must NOT fail the question — it becomes a notice so
+        /// the prompt is still asked, with the path kept for "Open in Finder".
+        #[test]
+        fn oversize_file_becomes_a_notice_not_an_error() {
+            let path = tmp_path("big.mp3");
+            let big = vec![0x49, 0x44, 0x33];
+            let mut buf = big.clone();
+            buf.resize(crate::audio::MAX_AUDIO_BYTES + 16, 0);
+            std::fs::write(&path, &buf).unwrap();
+            let mut req = req_with_audio(path.to_str().unwrap());
+            attach_audio(&mut req).expect("oversize must not error");
+            assert!(req.audio_uri.is_none(), "nothing to play");
+            let note = req.audio_oversize.expect("notice set");
+            assert_eq!(note.max, crate::audio::MAX_AUDIO_BYTES);
+            assert!(note.bytes > note.max);
+            assert_eq!(note.source_path.as_deref(), path.to_str());
+        }
+
+        /// An oversize DATA URI has nothing on disk, so no reveal offer.
+        #[test]
+        fn oversize_data_uri_offers_no_reveal() {
+            let payload = "A".repeat(8 * 1024 * 1024);
+            let mut req = req_with_audio(&format!("data:audio/mpeg;base64,{payload}"));
+            attach_audio(&mut req).expect("oversize must not error");
+            let note = req.audio_oversize.expect("notice set");
+            assert!(note.source_path.is_none(), "no path to reveal");
+        }
+
+        /// Real agent bugs (bad path, bad extension, lying MIME) are
+        /// actionable errors rather than a silently silent panel.
+        #[test]
+        fn bad_references_are_errors() {
+            let mut req = req_with_audio("/tmp/cenno-no-such-clip-xyz.mp3");
+            let err = attach_audio(&mut req).expect_err("missing file must error");
+            assert!(err.contains("invalid audio"), "got {err}");
+
+            let path = tmp_path("clip.txt");
+            std::fs::write(&path, WAV).unwrap();
+            let mut req = req_with_audio(path.to_str().unwrap());
+            assert!(attach_audio(&mut req).is_err(), "bad extension must error");
+
+            let mut req = req_with_audio("data:audio/wav;base64,QUJD");
+            assert!(attach_audio(&mut req).is_err(), "magic mismatch must error");
+        }
+
+        /// A prompt with no audio is untouched.
+        #[test]
+        fn no_audio_is_a_no_op() {
+            let mut req: AskRequest = serde_json::from_str(r#"{"title":"t"}"#).unwrap();
+            attach_audio(&mut req).expect("no audio is fine");
+            assert!(req.audio_uri.is_none() && req.audio_oversize.is_none());
+        }
     }
 }

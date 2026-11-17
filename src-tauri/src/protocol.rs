@@ -165,6 +165,29 @@ pub struct AskRequest {
     /// The final mute state is echoed back on `Answered.muted`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub muted: Option<bool>,
+    /// Audio for the panel to play (a generated clip, a jingle). Autoplays
+    /// unless the prompt is muted; pauses the countdown while it plays. One of
+    /// `data:audio/…;base64,…` or an absolute local path (mp3/wav/m4a/ogg).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioSource>,
+    /// Server-set: `audio` after validation, as a ready-to-decode `data:` URI.
+    /// The webview never resolves paths or base64 itself — it decodes this.
+    /// Filled in by the MCP layer, never read from tool arguments.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    #[schemars(skip)]
+    pub audio_uri: Option<String>,
+    /// Server-set: present only when `audio` was rejected as oversized, so the
+    /// panel can say why it is silent. Never read from tool arguments.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    #[schemars(skip)]
+    pub audio_oversize: Option<AudioOversizeNote>,
+    /// Server-set: the clip's local file path when the agent supplied one, for
+    /// the history row. Recorded here rather than read from `audio` at insert
+    /// time because `audio` is consumed during validation — otherwise every
+    /// prompt with a clip would persist a NULL path.
+    #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]
+    #[schemars(skip)]
+    pub audio_path: Option<String>,
     /// Name of the MCP client that asked (its `initialize` clientInfo, e.g.
     /// `claude-code`), shown in the panel header. Filled in by the server —
     /// never read from tool arguments (skip_deserializing) and hidden from the
@@ -186,6 +209,50 @@ impl AskRequest {
     pub fn timeout_secs(&self, config_default: Option<u64>) -> u64 {
         self.timeout_s.or(config_default).unwrap_or(DEFAULT_TIMEOUT_S)
     }
+}
+
+/// An agent-supplied audio payload for the panel to play: a generated voice
+/// clip, a jingle, a music snippet.
+///
+/// One JSON string, either way: a value starting with `data:` is a data URI,
+/// anything else an absolute local path (mp3/wav/m4a/ogg). Both are bounded and
+/// magic-byte validated by `crate::audio` before the webview ever sees them.
+///
+/// Deliberately NOT a two-variant untagged enum: because both variants are a
+/// bare `String`, serde would put every value into the first one, so the
+/// distinction has to live in the value (the `data:` prefix), not the type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(transparent)]
+pub struct AudioSource(pub String);
+
+impl AudioSource {
+    /// True when this is a `data:` URI rather than a file path.
+    pub fn is_uri(&self) -> bool {
+        crate::audio::is_data_uri(&self.0)
+    }
+
+    /// The reference as the agent wrote it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Raised when the agent's audio was refused as too large.
+///
+/// Not an error for the agent: the question is still asked, just silently
+/// without the clip, and the panel explains why so the user can go and look at
+/// the file themselves. That is a better trade than losing the whole prompt to
+/// a 12 MB export.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AudioOversizeNote {
+    /// Size the source claimed, in bytes.
+    pub bytes: usize,
+    /// The cap that refused it, in bytes.
+    pub max: usize,
+    /// Set when the source was a file path — the panel offers “Open in Finder”.
+    /// `None` for data URIs: there is nothing on disk to reveal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]

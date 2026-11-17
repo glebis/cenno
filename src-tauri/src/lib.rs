@@ -1,4 +1,5 @@
 pub mod a2ui_guard;
+pub mod audio;
 pub mod bridge;
 pub mod capture_guard;
 pub mod cli;
@@ -266,6 +267,15 @@ fn mark_shown(state: tauri::State<PromptRegistry>, id: String) {
 #[tauri::command]
 fn keepalive(state: tauri::State<PromptRegistry>, id: String, secs: u64) {
     state.keepalive(&id, secs);
+}
+
+/// Audio attached to `id` started or stopped playing, so the countdown should
+/// suspend or resume. The webview calls this on every real playback transition
+/// (never on renders) and on unmount; the registry ignores unknown/expired ids.
+/// Returns whether the state actually changed.
+#[tauri::command]
+fn mark_audio_playing(state: tauri::State<PromptRegistry>, id: String, playing: bool) -> bool {
+    state.set_audio_playing(&id, playing)
 }
 
 /// Startup decision for launch-at-login: `(enabled, persist_default)`.
@@ -1106,7 +1116,8 @@ pub fn run() {
             tts::tts_download_model,
             tts::list_audio_outputs,
             tts::tts_delete_model,
-            image::load_image
+            image::load_image,
+            mark_audio_playing
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

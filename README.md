@@ -117,8 +117,25 @@ Once installed it activates on its own whenever a task calls for asking the user
 | `muted` | boolean | open silently regardless of urgency gating |
 | `device_hint` | `phone` · `ipad` · `watch` | a *proposal* — your `~/.cenno` routing policy decides |
 | `a2ui` | array | optional rich layout ([A2UI](https://a2ui.org) v0.9 messages, validated at the boundary; see [docs/design/CONTROLS.md](docs/design/CONTROLS.md)) |
+| `audio` | string | a clip to play above the question — an absolute local path or a `data:audio/…;base64,` URI (mp3 · wav · m4a · ogg, ≤ 5 MiB) |
 
 Returns `{answer, via, elapsed_s, muted}`, or `{answered: false, prompt_id}` on timeout. `muted` is the panel's final voice state and may be absent on older frontends.
+
+### Audio (`audio`)
+
+A prompt can carry one clip — a generated jingle, a TTS take, a reference recording — and the panel renders a play/pause control, a scrubber and a `0:23 / 1:47` readout above the body. It autoplays unless the prompt is `muted`, and **the countdown pauses while it plays**, so a 40-second clip does not eat the user's answer budget.
+
+```jsonc
+{ "title": "Which mix?", "audio": "/Users/me/Music/take-3.mp3", "input": {"kind": "choice"}, "choices": ["A", "B"] }
+{ "title": "Listen", "audio": "data:audio/wav;base64,UklGRiQAAABXQVZF…" }
+```
+
+The `data:` prefix decides how the string is read; there is no second field to set. Validation is the same as for images: extension allowlist, magic-byte check, and a 5 MiB cap, all at the boundary — a bad reference returns an actionable error rather than a silently silent panel. Two deliberate limits:
+
+- **No remote URLs.** cenno never fetches. Download the clip first and pass its path, or post the bytes as a data URI.
+- **Oversize is a notice, not a failure.** A clip over the cap does not lose the question: the panel says *Audio too large (8.0 MB > 5.0 MB)* and offers **Open in Finder** for a file path, so the user can go and listen to it themselves.
+
+Playback is WebAudio (`AudioContext.decodeAudioData`), not an `<audio>` element — one decode, sample-accurate seeking, and no `media-src` CSP surface. History records `audio_path` (the file path, never the base64) and nothing else.
 
 ### Rich panels (`a2ui`)
 

@@ -53,8 +53,15 @@ struct Pending {
     /// can start its timeout from that moment.
     shown: Arc<Notify>,
     /// Notifies the parked ask() when `min_deadline` moves (keep-alive), so it
-    /// recomputes its sleep against the new effective deadline.
+    /// recomputes its sleep against the new effective deadline. Also fires when
+    /// audio playback pauses/resumes, so the countdown re-arms either way.
     extend: Arc<Notify>,
+    /// Set while audio attached to this prompt is playing. The countdown is
+    /// suspended for that whole time: a prompt whose audio is still playing
+    /// must not expire out from under the user's ears. On resume the deadlines
+    /// shift forward by exactly the paused duration, so pausing never costs the
+    /// agent budget and never grants extra time either.
+    paused_at: Option<Instant>,
 }
 
 impl Pending {
@@ -66,6 +73,13 @@ impl Pending {
             (d, None) => d,
             (None, m) => m,
         }
+    }
+
+    /// Shift both deadlines forward by `by` — used when a pause ends so the
+    /// suspended interval is not charged against the prompt's budget.
+    fn shift_deadlines(&mut self, by: Duration) {
+        self.deadline = self.deadline.map(|d| d + by);
+        self.min_deadline = self.min_deadline.map(|m| m + by);
     }
 }
 
@@ -130,6 +144,7 @@ impl PromptRegistry {
                 min_deadline: None,
                 shown: shown.clone(),
                 extend: extend.clone(),
+                paused_at: None,
             },
         );
         notify(&id, &req);
@@ -163,15 +178,33 @@ impl PromptRegistry {
         // re-checks under the lock before giving up (the floor may have moved in
         // the race). This is what stops a prompt from vanishing mid-typing.
         loop {
-            let effective = self
+            let (effective, paused) = self
                 .inner
                 .lock()
                 .get(&id)
-                .and_then(Pending::effective_deadline);
+                .map(|p| (p.effective_deadline(), p.paused_at.is_some()))
+                .unwrap_or((None, false));
             let Some(deadline) = effective else {
                 // Prompt vanished from the map (resolved/removed elsewhere).
                 return AskResponse::TimedOut { answered: false, prompt_id: id };
             };
+            if paused {
+                // Audio is playing: the countdown is suspended. Park on the
+                // answer, a resume, or a keep-alive — never on a clock.
+                tokio::select! {
+                    res = &mut rx => {
+                        self.inner.lock().remove(&id);
+                        return match res {
+                            Ok((answer, via, muted)) => AskResponse::Answered {
+                                answer, via, elapsed_s: started.elapsed().as_secs_f64(), muted,
+                            },
+                            Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
+                        };
+                    }
+                    _ = extend.notified() => { /* resumed (or keep-alive) — re-arm */ }
+                }
+                continue;
+            }
             let now = Instant::now();
             let sleep_for = deadline.saturating_duration_since(now);
             tokio::select! {
@@ -187,17 +220,21 @@ impl PromptRegistry {
                 }
                 _ = tokio::time::sleep(sleep_for) => {
                     // Reached the deadline — but a keep-alive may have pushed the
-                    // floor out in the gap. Only give up if it's REALLY expired.
+                    // floor out in the gap, and playback may have started. Only
+                    // give up if it's REALLY expired.
                     let still_expired = self
                         .inner
                         .lock()
                         .get(&id)
-                        .and_then(Pending::effective_deadline)
-                        .is_none_or(|d| Instant::now() >= d);
+                        .map(|p| {
+                            p.paused_at.is_none()
+                                && p.effective_deadline().is_none_or(|d| Instant::now() >= d)
+                        })
+                        .unwrap_or(true);
                     if still_expired {
                         return AskResponse::TimedOut { answered: false, prompt_id: id };
                     }
-                    // Floor moved — loop and re-arm against the new deadline.
+                    // Floor moved (or playback started) — re-arm.
                 }
                 _ = extend.notified() => { /* keep-alive: re-arm against new floor */ }
             }
@@ -261,6 +298,37 @@ impl PromptRegistry {
         self.inner.lock().keys().cloned().collect()
     }
 
+    /// Suspend (`playing = true`) or resume the countdown for `id` because
+    /// audio attached to the prompt started or stopped playing.
+    ///
+    /// Suspending is exact rather than approximate: while paused the parked
+    /// `ask()` parks on the answer instead of a clock, and on resume both
+    /// deadlines are shifted forward by the paused interval — so playback
+    /// neither costs the agent budget nor grants the user extra time. A no-op
+    /// for an unknown, unshown, or already-resolved prompt (nothing to pause).
+    /// Returns whether the state actually changed.
+    pub fn set_audio_playing(&self, id: &str, playing: bool) -> bool {
+        let mut map = self.inner.lock();
+        let Some(p) = map.get_mut(id) else { return false };
+        if playing {
+            if p.paused_at.is_some() || p.tx.is_none() || p.deadline.is_none() {
+                return false;
+            }
+            p.paused_at = Some(Instant::now());
+            p.extend.notify_one(); // wake the parked ask() so it stops sleeping
+            true
+        } else {
+            match p.paused_at.take() {
+                Some(since) => {
+                    p.shift_deadlines(since.elapsed());
+                    p.extend.notify_one();
+                    true
+                }
+                None => false,
+            }
+        }
+    }
+
     /// Prompts whose ask() is still awaiting an answer — i.e. replayable to a
     /// webview that mounted after the `prompt` event was emitted (cold-start
     /// race). Excludes resolved (tx consumed) and timed-out (deadline passed)
@@ -277,14 +345,23 @@ impl PromptRegistry {
             .inner
             .lock()
             .iter()
-            // Answerable = sender still present AND (not yet shown, OR shown but
-            // not past its deadline). An unshown prompt is always answerable.
-            .filter(|(_, p)| p.tx.is_some() && p.deadline.map_or(true, |d| now < d))
+            // Answerable = sender still present AND (playing audio, OR not yet
+            // shown, OR shown but not past its deadline). An unshown prompt is
+            // always answerable, and a paused one must not vanish from the
+            // queue just because the clock it is not being charged for has run
+            // out.
+            .filter(|(_, p)| {
+                p.tx.is_some()
+                    && (p.paused_at.is_some() || p.deadline.map_or(true, |d| now < d))
+            })
             .map(|(id, p)| {
                 // Remaining budget: time left if shown, the whole budget if not.
-                let remaining_s = match p.deadline {
-                    Some(d) => (d - now).as_secs_f64().ceil() as u64,
-                    None => p.timeout.as_secs(),
+                // While audio plays the clock is suspended, so measure against
+                // the paused instant instead of the wall clock.
+                let remaining_s = match (p.deadline, p.paused_at) {
+                    (Some(d), Some(since)) => (d - since).as_secs_f64().max(0.0).ceil() as u64,
+                    (Some(d), None) => (d - now).as_secs_f64().ceil() as u64,
+                    (None, _) => p.timeout.as_secs(),
                 };
                 (id.clone(), p.request.clone(), remaining_s)
             })
@@ -479,6 +556,42 @@ mod tests {
         let id = pending[0].0.clone();
         assert!(reg.resolve(&id, "done".into(), Via::Text, None));
         task.await.unwrap();
+    }
+
+    /// Audio playback suspends the countdown: a prompt whose clip is playing
+    /// must not expire, and once playback stops the remaining budget resumes
+    /// from where it was suspended (not from zero).
+    #[tokio::test]
+    async fn audio_playback_suspends_and_resumes_the_countdown() {
+        let reg = PromptRegistry::new();
+        let reg2 = reg.clone();
+        let task = tokio::spawn(async move { reg2.ask(req(), |_id, _req| {}).await }); // 1s budget
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let id = reg.pending_ids()[0].clone();
+        reg.mark_shown(&id);
+
+        // Start playing almost immediately, then wait well past the budget.
+        assert!(reg.set_audio_playing(&id, true));
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        assert!(!task.is_finished(), "ask() must not time out while audio plays");
+        let remaining = reg.pending()[0].2;
+        assert!(remaining >= 1, "budget must be suspended, got {remaining}s");
+
+        // Stop playing: the parked ask() must now be able to expire.
+        assert!(reg.set_audio_playing(&id, false));
+        match tokio::time::timeout(std::time::Duration::from_millis(2500), task)
+            .await
+            .expect("ask() should resume and time out after audio stops")
+            .unwrap()
+        {
+            AskResponse::TimedOut { .. } => {}
+            other => panic!("expected TimedOut, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn audio_playback_state_is_ignored_for_unknown_prompt() {
+        assert!(!PromptRegistry::new().set_audio_playing("nope", true));
     }
 
     #[tokio::test]

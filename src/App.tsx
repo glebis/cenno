@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -37,6 +37,14 @@ interface PromptEvent {
     agent?: string;
     // Native A2UI payload (already vetted by src-tauri/src/a2ui_guard.rs).
     a2ui?: unknown;
+    // Server-set: validated audio, already a ready-to-decode data URI.
+    audio_uri?: string;
+    // Server-set: the agent's audio was refused as oversized.
+    audio_oversize?: {
+      bytes: number;
+      max: number;
+      source_path?: string | null;
+    };
   };
   // Seconds until the Rust side times this prompt out. Full timeout_s on a
   // live event; partially elapsed on a prompt replayed via pending_prompts.
@@ -71,6 +79,8 @@ function toPrompt({ id, request, seq }: PromptEvent): Prompt {
     muted: request.muted,
     agent: request.agent,
     a2ui: request.a2ui,
+    audio_uri: request.audio_uri,
+    audio_oversize: request.audio_oversize,
     seq,
   };
 }
@@ -245,6 +255,14 @@ function App() {
   const shownAtRef = useRef(0);
   const interactionFloorRef = useRef(0);
   const [keepaliveTick, setKeepaliveTick] = useState(0);
+  // Audio playback and the auto-hide budget. The Rust countdown suspends while
+  // audio plays; this timer must agree, or the panel would vanish mid-jingle
+  // from the frontend side alone. `audioPausedMsRef` accumulates the audio
+  // time already spent (a finished or interrupted stretch) and
+  // `audioPausedAtRef` holds the start of the stretch in progress, so the
+  // budget is shifted by exactly the paused interval and nothing else.
+  const audioPausedMsRef = useRef(0);
+  const audioPausedAtRef = useRef<number | null>(null);
   // Render-synced mirrors so the `prompt` listener (created once) can read the
   // latest state without re-subscribing.
   const activeRef = useRef<ActivePrompt | null>(null);
@@ -380,6 +398,8 @@ function App() {
     // interaction floor carried over from the previous prompt.
     shownAtRef.current = Date.now();
     interactionFloorRef.current = 0;
+    audioPausedMsRef.current = 0;
+    audioPausedAtRef.current = null;
     // Read-back half of the draft safety net (the save side lives in the
     // keep-alive effect): if this prompt was torn down mid-typing, its text
     // was stashed under cenno-draft-<id>. Restore it now — once, before paint
@@ -418,7 +438,18 @@ function App() {
       // A newer prompt was installed after this timer was armed — hiding now
       // would hide THAT prompt.
       if (hideGenerationRef.current !== generation) return;
-      const deadline = Math.max(budgetDeadline, interactionFloorRef.current);
+      // Audio in progress is time not charged against the prompt's budget: the
+      // countdown is suspended while it plays (Rust does the same), so shift
+      // the deadline by the paused span. A running stretch grows with the
+      // clock, which keeps `left` from counting down while it plays.
+      const pausedNow =
+        audioPausedAtRef.current === null
+          ? 0
+          : Date.now() - audioPausedAtRef.current;
+      const deadline = Math.max(
+        budgetDeadline + audioPausedMsRef.current + pausedNow,
+        interactionFloorRef.current,
+      );
       const left = deadline - Date.now();
       if (left <= 0) {
         // Timed out (and the user isn't mid-edit): show the next queued prompt
@@ -494,6 +525,29 @@ function App() {
   useEffect(() => {
     setUserMuted(null);
   }, [active?.prompt.id]);
+
+  // Audio playback → countdown suspension. Every real transition is forwarded
+  // to Rust (which owns the parked ask()'s deadline) and folded into this
+  // side's budget clock, so both timers suspend and resume together. The
+  // elapsed stretch is banked on the falling edge, so pausing audio never
+  // costs the agent budget and never grants extra time either.
+  const handleAudioPlayingChange = useCallback((playing: boolean) => {
+    if (playing) {
+      if (audioPausedAtRef.current === null) {
+        audioPausedAtRef.current = Date.now();
+      }
+    } else if (audioPausedAtRef.current !== null) {
+      audioPausedMsRef.current += Date.now() - audioPausedAtRef.current;
+      audioPausedAtRef.current = null;
+    }
+    setKeepaliveTick((t) => t + 1);
+    const id = activeRef.current?.prompt.id;
+    if (id) {
+      void invoke("mark_audio_playing", { id, playing }).catch((e) => {
+        console.error("mark_audio_playing failed:", e);
+      });
+    }
+  }, []);
 
   async function handleAnswer(id: string, answer: string, via: Via) {
     const muted = userMuted ?? active?.prompt.muted ?? false;
@@ -623,6 +677,7 @@ function App() {
       prompt={active.prompt}
       onAnswer={handleAnswer}
       onDismiss={handleDismiss}
+      onAudioPlayingChange={handleAudioPlayingChange}
       onStopReading={
         tts.speaking
           ? () => {

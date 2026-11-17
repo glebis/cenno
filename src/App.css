@@ -189,3 +189,135 @@ body {
   color: var(--cenno-text-dim);
   letter-spacing: 0.08em;
 }
+
+/* --- Audio player (src/audio/AudioPlayer.tsx) --------------------------- */
+/* One row above the body: play/pause, scrubber, time. Sits inside
+   .prompt-panel__content so it participates in the content-height measurement
+   (panelResize.ts) — the window grows by exactly this row. Colors come from
+   the semantic vars only, so the row reads correctly on every flow surface. */
+.cenno-audio {
+  display: flex;
+  align-items: center;
+  gap: var(--cenno-space-1);
+  /* A hair of air below, so the body never touches the scrubber. */
+  margin: 0 0 var(--cenno-space-1);
+  min-height: 24px;
+  font-size: var(--cenno-type-caption);
+  color: var(--cenno-text-dim);
+}
+
+/* Round ghost button — 24px tap target without shouting. */
+.cenno-audio__toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--cenno-line);
+  border-radius: 50%;
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.cenno-audio__toggle:hover:not(:disabled) {
+  color: var(--cenno-text);
+  border-color: var(--cenno-text);
+}
+
+.cenno-audio__toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cenno-audio__toggle:focus-visible {
+  outline: 2px solid var(--cenno-text);
+  outline-offset: 2px;
+}
+
+/* Scrubber: a thin track with a filled portion, drawn with the range input's
+   own pseudo-elements (no extra DOM). --cenno-audio-progress is set inline. */
+.cenno-audio__scrub {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.cenno-audio__scrub::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to right,
+    currentColor 0 var(--cenno-audio-progress, 0%),
+    var(--cenno-line) var(--cenno-audio-progress, 0%) 100%
+  );
+}
+
+.cenno-audio__scrub::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 8px;
+  height: 8px;
+  margin-top: -3px;
+  border: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.cenno-audio__scrub:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cenno-audio__scrub:focus-visible {
+  outline: 2px solid var(--cenno-text);
+  outline-offset: 2px;
+}
+
+/* Monospaced-ish digits so the readout does not jitter as it counts. */
+.cenno-audio__time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Oversize / decode-failure notice — same slot, same height, so the panel does
+   not jump when audio is missing. */
+.cenno-audio--notice {
+  justify-content: flex-start;
+  gap: var(--cenno-space-1);
+}
+
+.cenno-audio__notice-text {
+  min-width: 0;
+}
+
+.cenno-audio__reveal {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.cenno-audio__reveal:hover {
+  color: var(--cenno-text);
+}
+
+.cenno-audio__reveal:focus-visible {
+  outline: 2px solid var(--cenno-text);
+  outline-offset: 2px;
+}

@@ -41,6 +41,7 @@ import { getAgentColors, getWidgets } from "./userConfig";
 import { observePanelContent } from "./panelResize";
 import { AgentMark } from "./agentLogos";
 import { resolvePanelColor, type Flow } from "./panelColor";
+import { AudioPlayer } from "./audio/AudioPlayer";
 
 // Once at module level. Guarded: jsdom (vitest) has no adoptedStyleSheets,
 // and the helper assumes it exists.
@@ -79,6 +80,21 @@ export interface Prompt {
    * `last === true` (or absent) hides as usual. See handleAnswer in App.tsx.
    */
   seq?: { index: number; total: number; last: boolean };
+  /**
+   * Validated `data:audio/…;base64,…` URI for the panel to play (server-set by
+   * the MCP layer — the frontend never resolves paths or decodes base64 from
+   * the agent's raw `audio` field). Absent when the request carried no audio.
+   */
+  audio_uri?: string;
+  /**
+   * Present only when the agent supplied audio that was refused as oversized.
+   * The panel says so and offers to reveal the file instead of playing it.
+   */
+  audio_oversize?: {
+    bytes: number;
+    max: number;
+    source_path?: string | null;
+  };
 }
 
 export type Via = "text" | "choice" | "voice_text";
@@ -119,6 +135,7 @@ export default function PromptPanel({
   onDismiss,
   onStopReading,
   onReadAloud,
+  onAudioPlayingChange,
 }: {
   prompt: Prompt;
   onAnswer: (id: string, answer: string, via: Via) => void;
@@ -140,6 +157,12 @@ export default function PromptPanel({
    * Renders a speaker-on control that reads the prompt aloud now (unmute).
    */
   onReadAloud?: () => void;
+  /**
+   * Report real audio playback transitions so App can tell Rust to suspend or
+   * resume this prompt's countdown. Absent → audio still plays, the countdown
+   * just keeps running.
+   */
+  onAudioPlayingChange?: (playing: boolean) => void;
 }) {
   // Refs keep the action handler (created once per prompt.id) pointed at the
   // latest props without rebuilding the processor on every render.
@@ -283,8 +306,7 @@ export default function PromptPanel({
       data-agent-color={panelColor.fromAgent ? "true" : undefined}
       style={panelStyle}
       data-tauri-drag-region
-    >
-      <div className="prompt-panel__drag-strip" data-tauri-drag-region aria-hidden="true" />
+    >      <div className="prompt-panel__drag-strip" data-tauri-drag-region aria-hidden="true" />
       {/* Chrome layer — OUTSIDE the A2UI surface so simple and rich payloads
           both get the wordmark + dismiss ✕. Absolutely positioned across the
           top (App.css). The row and the caller name ARE drag regions (Tauri
@@ -362,6 +384,15 @@ export default function PromptPanel({
           first click lands here, and a draggable wrapper would turn a tap
           on body text into a window drag. Root + top strip cover dragging. */}
       <div ref={contentRef} className="prompt-panel__content">
+        {/* Audio sits above the body, below the title — the clip is part of the
+            question, so it must not be buried under the answer controls. The
+            component renders nothing when the prompt carries no audio. */}
+        <AudioPlayer
+          dataUri={prompt.audio_uri}
+          oversize={prompt.audio_oversize}
+          autoplay={!prompt.muted}
+          onPlayingChange={onAudioPlayingChange}
+        />
         <SurfaceErrorBoundary
           key={prompt.id}
           fallback={fallback ? <A2uiSurface surface={fallback} /> : null}

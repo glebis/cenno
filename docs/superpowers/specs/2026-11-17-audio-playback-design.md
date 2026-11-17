@@ -255,14 +255,20 @@ No new network calls. Data URIs decode locally; file paths read locally. AGENTS.
 - `src-tauri/src/protocol.rs` — `AudioSource`, `AskRequest.audio`, `PromptPayload.audio_oversize`, `AudioOversizeNote`.
 - `src-tauri/src/audio.rs` — **new**.
 - `src-tauri/src/mcp.rs` — load audio; populate `audio_oversize` on oversize.
-- `src-tauri/src/registry.rs` — accept `audio-playback-state` events; pause/resume timeout.
+- `src-tauri/src/registry.rs` — pause/resume the countdown on playback state; keep a suspended prompt answerable in `pending()`.
 - `src-tauri/src/db.rs` — new `audio_path` column + insert/include in queries.
-- `src-tauri/src/bridge.rs` — wire new event into the frontend channel.
 - `src/PromptPanel.tsx` — render `AudioPlayer` above body; handle oversize note; wire mute.
 - `src/audio/AudioPlayer.tsx` — **new** component + helpers.
+- `src/audio/useAudioPlayer.ts` — **new**, the WebAudio engine (kept out of the component so it can be tested directly).
 - `src/audio/AudioPlayer.test.tsx` — **new**.
-- `scripts/demo.sh` — new scenario.
-- `README.md` / `docs/` — one short section describing the new field.
+- `src/App.tsx`, `src/App.css` — plumb `audio_uri`/`audio_oversize`, suspend the frontend budget clock, player styles.
+- `scripts/demo.sh` — `audio` and `audio-oversize` scenarios.
+- `README.md`, `skills/cenno/SKILL.md` — one short section describing the new field.
+
+### As built, two deviations from the text above
+
+- **No `bridge.rs` touch.** `src-tauri/src/bridge.rs` is only the stdio↔socket pipe. Playback state reaches Rust over a Tauri command (`mark_audio_playing`), registered in `lib.rs` — the same channel every other panel→backend signal uses.
+- **`AudioSource` is a transparent newtype over `String`, not a two-variant untagged enum.** Both variants would be a bare `String`, so serde put *every* value into the first variant (`"/tmp/x.mp3"` parsed as `Uri`, and `{"File": …}` failed to parse at all). The URI-vs-path distinction lives in the value (`data:` prefix, case-insensitive), matching the spec's original rule.
 
 ## Open questions
 
