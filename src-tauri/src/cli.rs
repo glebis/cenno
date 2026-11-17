@@ -58,6 +58,16 @@ pub enum SecretCommand {
         #[arg(long)]
         json: bool,
     },
+    /// List the built-in format ids `--format` / `secret_format` accept
+    ///
+    /// Ids are the wire contract for `input.secret_format` in an `ask_user`
+    /// prompt, so an agent needs a way to look one up instead of guessing and
+    /// learning from an error.
+    Formats {
+        /// Emit JSON instead of a table
+        #[arg(long)]
+        json: bool,
+    },
     /// Print a secret value to stdout
     Get {
         /// Secret name (as stored, e.g. openai_api_key)
@@ -207,5 +217,44 @@ mod tests {
     fn parse_since_invalid_gives_error() {
         assert!(parse_since("not-a-date").is_err());
         assert!(parse_since("2025/06/10").is_err());
+    }
+
+    /// `secret formats` exists so an agent can look up a wire id instead of
+    /// guessing and learning from the error message.
+    #[test]
+    fn parses_secret_formats_with_and_without_json() {
+        let cli = Cli::try_parse_from(["cenno", "secret", "formats"]).unwrap();
+        match cli.command {
+            Some(Command::Secret(SecretCommand::Formats { json })) => assert!(!json),
+            _ => panic!("expected `secret formats`"),
+        }
+        let cli = Cli::try_parse_from(["cenno", "secret", "formats", "--json"]).unwrap();
+        match cli.command {
+            Some(Command::Secret(SecretCommand::Formats { json })) => assert!(json),
+            _ => panic!("expected `secret formats --json`"),
+        }
+    }
+
+    /// Every catalogued id must be spellable on the command line, i.e. no id
+    /// may need quoting or clash with a flag.
+    #[test]
+    fn every_format_id_parses_as_a_secret_format_value() {
+        for f in crate::secret_formats::FORMATS {
+            let cli = Cli::try_parse_from([
+                "cenno",
+                "secret",
+                "set",
+                "k",
+                "--format",
+                f.id,
+            ])
+            .unwrap_or_else(|e| panic!("format id {:?} failed to parse: {e}", f.id));
+            match cli.command {
+                Some(Command::Secret(SecretCommand::Set { format, .. })) => {
+                    assert_eq!(format.as_deref(), Some(f.id));
+                }
+                _ => panic!("expected `secret set`"),
+            }
+        }
     }
 }

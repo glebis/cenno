@@ -242,7 +242,11 @@ impl CennoServer {
                        credential. The panel shows an obscured field, the value is \
                        encrypted to the user's age key via sops, and YOU NEVER \
                        RECEIVE IT: the call returns {stored: true, secret: {name, \
-                       format, hint, path: ...}} instead of the value. Use the \
+                       backend, format, hint, path}} instead of the value; `hint` is \
+                       a masked sk-pro…7a2f, enough to confirm, not to use. Run \
+                       `cenno secret formats` to list the accepted format ids \
+                       (44 built-in shapes; a mismatch only warns, the user can \
+                       still save). Use the \
                        secret at runtime without reading it by running \
                        `cenno secret run <name> -- <command>` (the value arrives as \
                        an env var inside that child process). Never ask the user to \
@@ -396,7 +400,12 @@ impl CennoServer {
                        timeout ends the run early. Returns JSON: \
                        {answers: [...]} — one entry per question that ran, in order. \
                        The final entry is {answered: false, prompt_id} if that question \
-                       timed out (and the run then stops)."
+                       timed out (and the run then stops). A question may be a \
+                       secret one (input.kind=\"secret\"); its entry is the same \
+                       {stored, secret:{...}} receipt ask_user would return, never a value. \
+                       Every secret question's name and format is validated BEFORE \
+                       question 1 runs, so one typo fails the whole call instead of \
+                       surfacing after the user has already answered two prompts."
     )]
     async fn ask_sequence(
         &self,

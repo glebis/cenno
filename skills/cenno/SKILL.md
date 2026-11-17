@@ -97,7 +97,7 @@ You get back:
 {"stored": true, "secret": {"name": "openai", "backend": "sops", "format": "openai_api_key", "hint": "sk-pro…7a2f", "path": "…/openai.sops.json"}}
 ```
 
-- `secret_name` is required and becomes the storage handle; `secret_format` (optional) picks a built-in key shape for live validation. A mismatch only warns — the user can still save.
+- `secret_name` is required and becomes the storage handle; `secret_format` (optional) picks a built-in key shape for live validation. A mismatch only warns — the user can still save. Run `cenno secret formats` to see the accepted ids (44 shapes) rather than guessing one.
 - **Never echo, log, or ask the user to paste the value into chat again.** You cannot read it back; that is the point.
 - To *use* the credential, tell the user to run `cenno secret run <name> -- <command>`, which injects `CENNO_SECRET_<NAME>` into that child process's environment. Do **not** suggest `cenno secret get` unless the user explicitly wants the value printed.
 - `choices` and `a2ui` are rejected on a secret prompt, and the panel is forced local. One credential per panel.

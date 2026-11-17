@@ -83,6 +83,17 @@ app does not inherit your shell `PATH` — this is the usual first-run failure).
 Requires sops ≥ 3.8 and an age key. Check with `cenno secret list`; it reports
 a clear error rather than failing at the first save.
 
+When cenno resolves a recipient itself (steps 1–3) it passes `--config /dev/null`
+to sops. Without that, sops walks up from `~/.cenno/secrets` to `$HOME`, finds an
+unrelated `~/.sops.yaml` (typically a `\.env.*$`-only rule), matches nothing for
+`<name>.sops.json`, and fails with `no matching creation rules found` — even
+though `--age` was given. An explicit recipient is the more specific
+instruction and wins; with no recipient (step 4) discovery stays on.
+
+Related: `cenno secret formats` lists the 44 built-in format ids that
+`--format` and a prompt's `input.secret_format` accept. They are advisory —
+never a gate.
+
 ## Per-agent panel colors
 
 `agent_colors` maps an agent name (the exact name the agent reports, e.g.

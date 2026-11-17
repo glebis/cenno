@@ -138,7 +138,13 @@ fn run_secret(cmd: SecretCommand) -> ! {
                 );
             }
             Ok(items) if items.is_empty() => {
-                eprintln!("no secrets stored in ~/.cenno/secrets");
+                // Name the real directory: `secrets.dir` is configurable, so a
+                // hardcoded `~/.cenno/secrets` would send the user looking in
+                // the wrong place.
+                let dir = cenno_lib::secret::secrets_dir(&cfg)
+                    .map(|d| d.display().to_string())
+                    .unwrap_or_else(|_| "~/.cenno/secrets".to_string());
+                eprintln!("no secrets stored in {dir}");
             }
             Ok(items) => {
                 for m in items {
@@ -160,6 +166,30 @@ fn run_secret(cmd: SecretCommand) -> ! {
                 std::process::exit(1);
             }
         },
+        SecretCommand::Formats { json } => {
+            let formats = cenno_lib::secret_formats::FORMATS;
+            if json {
+                let rows: Vec<serde_json::Value> = formats
+                    .iter()
+                    .map(|f| {
+                        serde_json::json!({
+                            "id": f.id,
+                            "label": f.label,
+                            "pattern": f.pattern,
+                            "hint": f.hint,
+                        })
+                    })
+                    .collect();
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&rows).expect("serde_json::Value is serializable")
+                );
+            } else {
+                for f in formats {
+                    println!("{}\t{}\t{}", f.id, f.label, f.hint);
+                }
+            }
+        }
         SecretCommand::Get { name } => match cenno_lib::secret::get(&cfg, &name) {
             // No trailing newline: the canonical use is `$(cenno secret get x)`.
             Ok(value) => {

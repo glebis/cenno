@@ -17,11 +17,13 @@ All notable changes to cenno are documented here. The format follows
   history database, the CloudKit relay, `localStorage` drafts, or text-to-speech.
   You spend it yourself: `cenno secret run openai -- python deploy.py` puts it in
   the child process's environment without passing through a shell history line
-  or an argument list. `cenno secret list | get | set | delete` round out the
-  CLI. A live caption checks the value against ~46 built-in key shapes and
+  or an argument list. `cenno secret list | formats | get | set | delete` round out
+  the CLI. A live caption checks the value against 44 built-in key shapes and
   **warns without blocking** — a rotated, proxied or private-endpoint key
   legitimately does not match the published pattern. The field is held to one
   line and shrinks its type to fit, so a normal key never wraps mid-token.
+  `cenno secret formats` lists the accepted ids for an agent that would
+  otherwise guess.
 - A secret panel on the site's live widget gallery, and a `secret` row in the
   presentation's input vocabulary.
 

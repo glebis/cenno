@@ -217,7 +217,7 @@ function SecretField() {
   const [sent, setSent] = useState<string | null>(null);
   // The site has no Rust backend, so the catalogue is supplied here instead of
   // being fetched. One shape is enough to show the caption doing its job; the
-  // app itself ships ~46.
+  // app itself ships 44.
   const formats = new Map<string, SecretFormatInfo>([
     [
       "openai_api_key",

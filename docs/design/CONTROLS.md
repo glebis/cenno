@@ -66,7 +66,7 @@ views.tsx    — plain React, no A2UI imports; styled by catalog.css
 | `Text` | standard `TextApi` | — (variant → type role) | `TextView` |
 | `Row` / `Column` | standard | — | flex divs |
 | `Button` | standard `ButtonApi` | — (borderless → secondary) | `ButtonView` |
-| `TextField` | standard, extended | `voice`, `submitAction` (Enter) | `TextFieldView` |
+| `TextField` | standard, extended | `voice`, `submitAction` (Enter); `obscured` (credential field: masked, no mic, hold-to-reveal, shrink-to-fit one line) + `secretFormat` (live advisory caption) | `TextFieldView` |
 | `ChoicePicker` | standard, extended | `selectAction` (tap); `displayStyle: "checkbox"` renders the radio/checkbox list instead of chips | `ChipsView` / `CheckListView` |
 | `Slider` | standard `SliderApi`, extended | `minLabel`, `maxLabel`, `selectAction` (thumb release / Enter) | `SliderView` |
 | `DateTimeInput` | standard, extended | `submitAction` (Enter) | `DateTimeView` |
@@ -110,6 +110,28 @@ and a local file path (read through the `load_image` command, 512 KiB cap)
 both render while a remote URL is rejected with a named reason in the panel.
 A failed image keeps its box (and, in `ImageChoice`, stays selectable) so the
 panel never jumps and a missing preview is never mistaken for a missing option.
+
+`TextField` with `obscured: true` is the credential field, and its rules are
+not stylistic:
+
+- **No mic.** `voice` is dropped in the adapter even if a payload sets it: a
+dictated key would be transcribed by a third-party speech service and spoken
+back.
+- **One line while hidden.** The masked box is `white-space: pre` with a
+scrollbar-less `overflow-x`, and `fitFontSize` (`src/a2ui/fitFont.ts`) steps
+the type down to a floor of 11px so a normal key never wraps mid-token. A
+wrapped key reads as two values; a clipped one cannot be glance-checked.
+- **Reveal is momentary and complete.** Holding the eye resets the size to
+base, wraps and grows — unmasked glyphs are wider than the discs, so the
+masked size is wrong for them, and at that instant the user is reading.
+Releasing re-masks with no transition, so a credential is never left legible.
+- **The masked box never auto-grows.** Its height would leak the value's
+length to anyone glancing at the screen.
+
+The panel owns this field (`src/a2ui/desugar.ts` returns before widget lookup
+and before `withFreeform`), because a second plaintext box beside it, or a
+composed widget under the same name, would send the credential back as an
+ordinary answer.
 
 ### Considered and not added (and why)
 

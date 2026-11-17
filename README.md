@@ -136,7 +136,7 @@ An agent sometimes needs a credential the user has to type — an API key, a tok
 }
 ```
 
-The panel renders an obscured field with a hold-to-reveal toggle and **no mic** (a dictated credential would be transcribed by a third-party speech service), plus a live format caption driven by ~46 built-in key shapes. A mismatch **warns and still saves** — a rotated, proxied or private-endpoint key legitimately does not match the published shape, and refusing it would be worse than accepting a typo the user can see.
+The panel renders an obscured field with a hold-to-reveal toggle and **no mic** (a dictated credential would be transcribed by a third-party speech service), plus a live format caption driven by 44 built-in key shapes. A mismatch **warns and still saves** — a rotated, proxied or private-endpoint key legitimately does not match the published shape, and refusing it would be worse than accepting a typo the user can see.
 
 What the asking agent receives instead of the value:
 
@@ -147,7 +147,8 @@ What the asking agent receives instead of the value:
 The value never reaches the tool result, `cenno.db` (history records only that a secret was stored), the CloudKit relay (secret prompts are forced local), `localStorage` drafts, or text-to-speech. Storage is [sops](https://github.com/getsops/sops) with an age key, one file per secret, `0600`. Retrieval is the user's own CLI:
 
 ```bash
-cenno secret list
+cenno secret list                             # names + metadata, never values (--json for scripts)
+cenno secret formats                          # the 44 built-in format ids, for prompts and --format
 cenno secret run openai -- python deploy.py   # injects CENNO_SECRET_OPENAI into the child
 cenno secret get openai                       # explicit opt-in: prints the value
 cenno secret set openai --format openai_api_key   # paste on stdin
@@ -216,6 +217,7 @@ cenno export --format csv
 cenno export --since 2026-06-01
 
 cenno secret list               # stored credentials (name, format, updated)
+cenno secret formats            # the 44 built-in format ids --format accepts
 cenno secret run <name> -- <cmd>  # inject CENNO_SECRET_<NAME>, exec the child
 cenno secret get <name>         # print the value (no trailing newline)
 cenno secret set <name> [--format <id>] [--label <text>]   # value on stdin
