@@ -468,9 +468,18 @@
   display: none;
 }
 
-/* Hold-to-reveal drops the masking while the user is deliberately looking. */
+/* Hold-to-reveal drops the masking while the user is deliberately looking. It
+   also relaxes the single-line rule: unmasked glyphs are wider than the discs
+   that stood in for them, so a run that fit while hidden can overflow once
+   shown. Wrapping and growing beats shrinking — at this moment the user is
+   reading, not glance-checking. */
 .cenno-field__input--revealed {
   -webkit-text-security: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+  /* Height is set inline by the auto-grow effect while revealed. */
+  height: auto;
 }
 
 .cenno-field__reveal {

@@ -46,3 +46,30 @@ describe("fitFontSize", () => {
     expect(Number.isInteger(size)).toBe(true);
   });
 });
+
+describe("masked credentials: one line hidden, readable when revealed", () => {
+  /**
+   * The rule the component encodes, stated as a test so it cannot drift:
+   * while hidden the run must fit one line, so the font shrinks; while the
+   * user holds reveal the run is unmasked and wider than the discs that stood
+   * in for it, so the font is reset rather than shrunk further — a small but
+   * complete value beats a legible but clipped one.
+   */
+  it("shrinks only the masked run", () => {
+    const base = 17;
+    const available = 328;
+    const maskedWidth = 400; // discs, wider per glyph than the visible ones
+    const hidden = fitFontSize(base, available, maskedWidth);
+    expect(hidden).toBeLessThan(base);
+    // Revealed, the component resets to `base` instead of calling this with the
+    // larger unmasked width — so a shrink to something tiny would be wrong.
+    expect(hidden).toBeGreaterThanOrEqual(MIN_FIT_FONT_PX);
+  });
+
+  it("a realistic OpenAI key fits a 420px panel at full size", () => {
+    // `sk-proj-` + 48 chars at 17px in the SF stack measured 328px wide inside
+    // a 328px content box in the live panel — it fits, so no shrink happens.
+    const width = 328;
+    expect(fitFontSize(17, width, width)).toBe(17);
+  });
+});

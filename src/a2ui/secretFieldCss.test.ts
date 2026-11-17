@@ -42,6 +42,18 @@ describe("masked field: one line, no wrap", () => {
     );
   });
 
+  it("lets a revealed value wrap instead of overflowing", () => {
+    // Unmasked glyphs are wider than the discs that hid them, so the size
+    // chosen for the masked run is wrong for the visible one. While revealed
+    // the field wraps and grows — a small but clipped value would be worse
+    // than one that takes two lines for the moment it is being read.
+    const revealed = block(".cenno-field__input--revealed");
+    expect(revealed).toContain("white-space: pre-wrap");
+    expect(revealed).toContain("height: auto");
+    // ...and the nowrap rule on the masked class must not win back.
+    expect(block(".cenno-field__input--secret")).toContain("white-space: pre");
+  });
+
   it("hides the scrollbar so it cannot eat the baseline", () => {
     expect(block(".cenno-field__input--secret")).toContain(
       "scrollbar-width: none",

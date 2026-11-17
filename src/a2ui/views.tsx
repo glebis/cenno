@@ -397,9 +397,14 @@ export function TextFieldView({
   // it streams in, not hidden off the right edge of a one-line field), then
   // scroll to the newest words once it hits its max height.
   const taRef = useRef<HTMLTextAreaElement>(null);
-  // The width the current shrink decision was made at. A window resize (or a
-  // token change) invalidates the font size chosen for the old width, so the
-  // effect re-runs against the new one.
+  // Reveal is momentary: holding the toggle unmasks, releasing re-masks, so a
+  // credential cannot be left on screen by walking away. Declared before the
+  // effects below because they all read it.
+  const [revealed, setRevealed] = useState(false);
+
+  // The width the shrink decision was made at. A window resize (or a token
+  // change) invalidates the font size chosen for the old width, so the effect
+  // re-runs against the new one.
   const [fieldWidth, setFieldWidth] = useState(0);
   useEffect(() => {
     const el = taRef.current;
@@ -408,28 +413,24 @@ export function TextFieldView({
     ro.observe(el);
     return () => ro.disconnect();
   }, [obscured]);
-  useEffect(() => {
-    const el = taRef.current;
-    // Obscured: there is nothing to read, and a growing masked box would leak
-    // the value's length to anyone glancing at the screen.
-    if (!el || obscured) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-    el.scrollTop = el.scrollHeight; // keep the latest line in view
-  }, [draft, obscured]);
 
-  // Reveal is momentary: holding the toggle unmasks, releasing re-masks, so a
-  // credential cannot be left on screen by walking away.
-  const [revealed, setRevealed] = useState(false);
-
-  // Shrink-to-fit for a masked credential. A key is one long token; the field
-  // must show all of it without wrapping and without scrolling, because a
-  // partly-visible key cannot be checked and a wrapped one reads as two values.
-  // Steps the font down until the whole run fits, floored at 11px so an absurd
-  // value degrades to a scroll rather than unreadable type.
+  // Shrink-to-fit for a masked credential. A key is one long token; while it is
+  // hidden the field must show all of it on one line, because a wrapped key
+  // reads as two values and a clipped one cannot be glance-checked. Steps the
+  // font down until the run fits, floored at 11px so an absurd value degrades to
+  // a scroll rather than unreadable type.
+  //
+  // Not applied while revealed: unmasked glyphs are wider than the discs that
+  // replace them, so the size chosen for the masked run is wrong for the visible
+  // one — and at that moment the user is reading, so wrapping and growing is
+  // better than shrinking further.
   useEffect(() => {
     const el = taRef.current;
     if (!el || !obscured) return;
+    if (revealed) {
+      el.style.fontSize = "";
+      return;
+    }
     const available = el.clientWidth;
     if (available <= 0) return;
     // Clear the inline size FIRST: reading computed style after a previous
@@ -448,6 +449,23 @@ export function TextFieldView({
       size -= 1;
     }
   }, [draft, obscured, revealed, fieldWidth]);
+
+  // Auto-grow, for ordinary text and for a credential the user is holding open.
+  // A masked-but-hidden credential must NOT grow: its height would leak the
+  // value's length to anyone glancing at the screen.
+  const maskedButHidden = Boolean(obscured) && !revealed;
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    if (maskedButHidden) {
+      // Hand the height back to the stylesheet's fixed 44px.
+      el.style.height = "";
+      return;
+    }
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+    el.scrollTop = el.scrollHeight; // keep the latest line in view
+  }, [draft, maskedButHidden, fieldWidth]);
 
   return (
     <div className="cenno-field-wrap">
