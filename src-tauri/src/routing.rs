@@ -108,6 +108,17 @@ pub struct Routed {
     pub grace_s: u64,
 }
 
+impl Routed {
+    /// No eligible companion: the prompt is answered on this Mac only.
+    ///
+    /// Used to force secret prompts local regardless of policy — see
+    /// `mcp::ask_user`. An empty `targets` also suppresses the CloudKit write
+    /// and the state update, so nothing about the prompt leaves the machine.
+    pub fn local() -> Self {
+        Self { targets: String::new(), grace_s: 0 }
+    }
+}
+
 impl RoutingConfig {
     fn mode_of(&self, class: DeviceClass) -> DeviceMode {
         match class {

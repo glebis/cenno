@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use clap::Parser as _;
-use cenno_lib::cli::{Cli, Command};
+use cenno_lib::cli::{Cli, Command, SecretCommand};
 
 fn main() {
     let cli = Cli::parse();
@@ -13,6 +13,9 @@ fn main() {
         }
         Some(Command::Export { format, since }) => {
             run_export(format, since);
+        }
+        Some(Command::Secret(cmd)) => {
+            run_secret(cmd);
         }
         None => {
             // No subcommand → either bridge stdio to the MCP socket, or
@@ -117,6 +120,168 @@ fn run_mcp_stdio() -> ! {
     }
 }
 
+/// `cenno secret …`: list / get / set / delete / run encrypted credentials.
+///
+/// Deliberately headless — no app required. `run` is the interesting one: it
+/// injects decrypted values into a child process's environment so an agent can
+/// USE a credential without the value ever appearing in its context or in the
+/// history database.
+fn run_secret(cmd: SecretCommand) -> ! {
+    let cfg = cenno_lib::config::Config::load().secrets;
+
+    match cmd {
+        SecretCommand::List { json } => match cenno_lib::secret::list(&cfg) {
+            Ok(items) if json => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&items).expect("SecretMeta is serializable")
+                );
+            }
+            Ok(items) if items.is_empty() => {
+                eprintln!("no secrets stored in ~/.cenno/secrets");
+            }
+            Ok(items) => {
+                for m in items {
+                    let mut line = m.name;
+                    if let Some(f) = m.format {
+                        line.push_str(&format!("\t{f}"));
+                    }
+                    if let Some(l) = m.label {
+                        line.push_str(&format!("\t{l}"));
+                    }
+                    if let Some(u) = m.updated_at {
+                        line.push_str(&format!("\t{u}"));
+                    }
+                    println!("{line}");
+                }
+            }
+            Err(e) => {
+                eprintln!("cenno secret list: {e}");
+                std::process::exit(1);
+            }
+        },
+        SecretCommand::Get { name } => match cenno_lib::secret::get(&cfg, &name) {
+            // No trailing newline: the canonical use is `$(cenno secret get x)`.
+            Ok(value) => {
+                use std::io::Write as _;
+                let _ = std::io::stdout().write_all(value.as_bytes());
+            }
+            Err(e) => {
+                eprintln!("cenno secret get: {e}");
+                std::process::exit(1);
+            }
+        },
+        SecretCommand::Set { name, format, label } => {
+            // Read the value from stdin, never from argv: argv is world-readable
+            // via `ps` and lands in shell history.
+            let value = match read_secret_stdin(&name) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("cenno secret set: {e}");
+                    std::process::exit(1);
+                }
+            };
+            match cenno_lib::secret::store(&cfg, &name, &value, format.as_deref(), label.as_deref())
+            {
+                Ok(meta) => {
+                    // Warn-but-store on a format mismatch, matching the panel:
+                    // never block a legitimate, rotated or proxied key.
+                    if let (Some(fmt), Ok(false)) = (
+                        meta.format.as_deref(),
+                        cenno_lib::secret_formats::validate(
+                            meta.format.as_deref().unwrap_or_default(),
+                            &value,
+                        ),
+                    ) {
+                        eprintln!(
+                            "cenno secret set: value does not look like a {fmt} — stored anyway"
+                        );
+                    }
+                    eprintln!("stored {name} ({})", cenno_lib::secret::hint(&value));
+                }
+                Err(e) => {
+                    eprintln!("cenno secret set: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        SecretCommand::Delete { name } => match cenno_lib::secret::delete(&cfg, &name) {
+            Ok(true) => eprintln!("deleted {name}"),
+            Ok(false) => {
+                eprintln!("cenno secret delete: no secret named {name:?}");
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("cenno secret delete: {e}");
+                std::process::exit(1);
+            }
+        },
+        SecretCommand::Run {
+            name,
+            with,
+            command,
+        } => {
+            let (program, args) = command.split_first().expect("clap requires a command");
+            let mut cmd = std::process::Command::new(program);
+            cmd.args(args);
+            for name in std::iter::once(&name).chain(with.iter()) {
+                let value = match cenno_lib::secret::get(&cfg, name) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        eprintln!("cenno secret run: {e}");
+                        std::process::exit(1);
+                    }
+                };
+                cmd.env(env_var_for(name), value);
+            }
+            // Inherit stdio; propagate the child's exit code so this is a
+            // drop-in prefix for any command.
+            let status = match cmd.status() {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("cenno secret run: could not run {program}: {e}");
+                    std::process::exit(127);
+                }
+            };
+            std::process::exit(status.code().unwrap_or(1));
+        }
+    }
+
+    std::process::exit(0);
+}
+
+/// Map a secret name to the env var it becomes under `cenno secret run`:
+/// `openai_api_key` → `CENNO_SECRET_OPENAI_API_KEY`.
+fn env_var_for(name: &str) -> String {
+    let upper: String = name
+        .chars()
+        .map(|c| match c {
+            'a'..='z' => c.to_ascii_uppercase(),
+            '0'..='9' => c,
+            _ => '_',
+        })
+        .collect();
+    format!("CENNO_SECRET_{upper}")
+}
+
+/// Read a secret value from stdin, stripped of the trailing newline a pipe or
+/// `echo` adds. Refuses an empty value so `cenno secret set x < /dev/null`
+/// cannot silently wipe a working credential.
+fn read_secret_stdin(name: &str) -> Result<String, String> {
+    use std::io::Read as _;
+    let mut buf = String::new();
+    std::io::stdin()
+        .read_to_string(&mut buf)
+        .map_err(|e| format!("reading the value from stdin: {e}"))?;
+    let value = buf.trim_end_matches(['\n', '\r']).to_string();
+    if value.is_empty() {
+        return Err(format!(
+            "no value on stdin — pipe it in (e.g. `pbpaste | cenno secret set {name}`)"
+        ));
+    }
+    Ok(value)
+}
+
 fn run_ask(title: String, body: String, say: String, timeout: u64, muted: bool) {
     let sock_path = cenno_lib::mcp::socket_path();
 
@@ -154,6 +319,7 @@ fn run_ask(title: String, body: String, say: String, timeout: u64, muted: bool) 
             use cenno_lib::protocol::AskResponse;
             match serde_json::from_value::<AskResponse>(value.clone()) {
                 Ok(AskResponse::Answered { .. }) => {} // exit 0
+                Ok(AskResponse::SecretStored { .. }) => {} // exit 0
                 Ok(AskResponse::TimedOut { .. }) => std::process::exit(2),
                 Err(e) => {
                     eprintln!("cenno ask: unrecognized response shape ({e}): {value}");

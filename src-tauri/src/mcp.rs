@@ -117,6 +117,51 @@ impl CennoServer {
 /// The calling agent's self-reported name from the MCP `initialize` handshake
 /// (`clientInfo.title`, else `clientInfo.name`). The `--mcp-stdio` bridge is a
 /// byte pipe, so this is the real agent's handshake, not the bridge's.
+/// Validate the parts of a secret request that cross the agent boundary.
+///
+/// The name becomes a filename under `~/.cenno/secrets/` and the format id
+/// selects a regex, so both are untrusted input from the agent. Rejecting here
+/// — before the prompt is registered — turns a bad request into an actionable
+/// tool error instead of a panel that fails only when the user hits submit
+/// (by which point they have already typed a credential into it).
+///
+/// Also enforces that a secret prompt cannot smuggle in the affordances of an
+/// ordinary prompt: `choices`, `a2ui` and `audio` are rejected, because each one
+/// is a channel the value could come back through (choices would let the answer
+/// be one of the labels; a custom a2ui surface could render a plaintext field).
+fn validate_secret_request(r: &AskRequest) -> Result<(), String> {
+    let name = r
+        .input
+        .secret_name
+        .as_deref()
+        .ok_or("secret prompts require input.secret_name (e.g. \"openai_api_key\")")?;
+    crate::secret::validate_name(name)?;
+    if let Some(fmt) = r.input.secret_format.as_deref() {
+        crate::secret_formats::find(fmt)
+            .ok_or_else(|| {
+                let known: Vec<&str> = crate::secret_formats::FORMATS.iter().map(|f| f.id).collect();
+                format!(
+                    "unknown input.secret_format {fmt:?}; known formats: {}",
+                    known.join(", ")
+                )
+            })?;
+    }
+    if r.choices.as_ref().is_some_and(|c| !c.is_empty()) {
+        return Err("secret prompts cannot offer choices — the value must be typed".into());
+    }
+    if r.a2ui.is_some() {
+        return Err(
+            "secret prompts cannot set a2ui — the panel owns the field so the value \
+             cannot be routed into a plaintext widget"
+                .into(),
+        );
+    }
+    if r.audio.is_some() || r.audio_uri.is_some() {
+        return Err("secret prompts cannot attach audio".into());
+    }
+    Ok(())
+}
+
 fn caller_name(peer: &Peer<RoleServer>) -> Option<String> {
     let info = &peer.peer_info()?.client_info;
     let name = info.title.as_deref().unwrap_or(&info.name).trim();
@@ -190,7 +235,18 @@ impl CennoServer {
                        Attach a clip with `audio` (an absolute local path, or a \
                        data:audio/...;base64 URI; mp3/wav/m4a/ogg, <= 5 MiB): \
                        the panel plays it above the question and the countdown \
-                       pauses while it plays."
+                       pauses while it plays. \
+                       \
+                       SECRETS: use input.kind=\"secret\" (with input.secret_name \
+                       and an optional built-in input.secret_format) to collect a \
+                       credential. The panel shows an obscured field, the value is \
+                       encrypted to the user's age key via sops, and YOU NEVER \
+                       RECEIVE IT: the call returns {stored: true, secret: {name, \
+                       format, hint, path: ...}} instead of the value. Use the \
+                       secret at runtime without reading it by running \
+                       `cenno secret run <name> -- <command>` (the value arrives as \
+                       an env var inside that child process). Never ask the user to \
+                       paste a secret into ordinary chat text."
     )]
     async fn ask_user(
         &self,
@@ -201,6 +257,13 @@ impl CennoServer {
         // Resolve the timeout against config now, so the registry and the
         // panel's auto-hide budget all see the same concrete value.
         params.timeout_s = Some(params.timeout_secs(Some(self.default_timeout_s)));
+        // Boundary guard for secret prompts: the name becomes a filename and the
+        // format id selects a regex, so both are validated HERE — before a prompt
+        // is registered — and a bad request is an actionable tool error rather
+        // than a panel that fails when the user finally submits.
+        if params.is_secret() {
+            validate_secret_request(&params)?;
+        }
         // Boundary guard: the web renderer silently drops malformed/mis-versioned
         // a2ui messages, so reject HERE — before a prompt is registered — and
         // hand the agent an actionable error instead of a surface that never
@@ -230,14 +293,24 @@ impl CennoServer {
         // and CloudKit records have a hard 1 MB field limit — a jingle would
         // silently fail the whole relay write. Companion devices get the
         // question and the oversize note, never the payload.
+        //
+        // Secret prompts are NEVER relayed. Two independent reasons: the age key
+        // that can decrypt the result lives on this Mac, and a prompt answered on
+        // a phone would have to carry the value back through CloudKit. A
+        // credential is typed on the machine that stores it, or not at all.
         let payload_for_relay = {
             let mut lean = params.clone();
             lean.audio_uri = None;
             serde_json::to_string(&lean).unwrap_or_default()
         };
         let timeout_for_relay = params.timeout_secs(Some(self.default_timeout_s));
-        // Resolve cross-device routing from policy + the agent's hint.
-        let routed = self.resolve_routing(params.device_hint.as_deref());
+        // Resolve cross-device routing from policy + the agent's hint. A secret
+        // prompt stays local regardless of what the policy or the agent asked for.
+        let routed = if params.is_secret() {
+            crate::routing::Routed::local()
+        } else {
+            self.resolve_routing(params.device_hint.as_deref())
+        };
 
         let resp = self
             .registry
@@ -260,6 +333,7 @@ impl CennoServer {
         {
             let prompt_id = match &resp {
                 crate::protocol::AskResponse::Answered { .. } => captured_id.lock().clone(),
+                crate::protocol::AskResponse::SecretStored { .. } => captured_id.lock().clone(),
                 crate::protocol::AskResponse::TimedOut { prompt_id, .. } => prompt_id.clone(),
             };
             if let Some(db) = &self.db {
@@ -269,12 +343,16 @@ impl CennoServer {
             }
             // Update CloudKit state so the companion hides the prompt — only if
             // the prompt was actually published (a companion device was eligible).
+            // A stored secret is reported to companions as answered WITHOUT an
+            // answer payload: they must never learn the value, and the receipt
+            // (name, hint, path) is of no use to a device that cannot decrypt it.
             if !routed.targets.is_empty() {
                 let (state, answer_json) = match &resp {
                     crate::protocol::AskResponse::Answered { .. } => {
                         let j = serde_json::to_string(&resp).unwrap_or_default();
                         ("answered", Some(j))
                     }
+                    crate::protocol::AskResponse::SecretStored { .. } => ("answered", None),
                     crate::protocol::AskResponse::TimedOut { .. } => ("timed_out", None),
                 };
                 crate::relay::update_state(&prompt_id, state, answer_json.as_deref());
@@ -346,6 +424,15 @@ impl CennoServer {
         for (i, q) in questions.iter_mut().enumerate() {
             attach_audio(q).map_err(|msg| format!("question {i}: {msg}"))?;
         }
+        // Secret questions get the same up-front treatment: the name and format
+        // are validated before question 1 runs, so a typo cannot surface after
+        // the user already answered two prompts.
+        for (i, q) in questions.iter().enumerate() {
+            if q.is_secret() {
+                validate_secret_request(q)
+                    .map_err(|msg| format!("question {i}: {msg}"))?;
+            }
+        }
 
         let mut answers = Vec::with_capacity(questions.len());
         for (i, question) in questions.into_iter().enumerate() {
@@ -383,6 +470,7 @@ impl CennoServer {
             if let Some(db) = &self.db {
                 let prompt_id = match &resp {
                     crate::protocol::AskResponse::Answered { .. } => captured_id.lock().clone(),
+                    crate::protocol::AskResponse::SecretStored { .. } => captured_id.lock().clone(),
                     crate::protocol::AskResponse::TimedOut { prompt_id, .. } => prompt_id.clone(),
                 };
                 if let Err(e) = db.record_prompt(&question, &prompt_id, &resp, created_at) {
@@ -728,6 +816,121 @@ mod tests {
             let mut req: AskRequest = serde_json::from_str(r#"{"title":"t"}"#).unwrap();
             attach_audio(&mut req).expect("no audio is fine");
             assert!(req.audio_uri.is_none() && req.audio_oversize.is_none());
+        }
+    }
+
+    /// The agent-facing guarantees of a secret prompt. Each of these is a way an
+    /// agent could accidentally (or deliberately) get a credential to flow back
+    /// to itself as plain text, so each is a hard error at the boundary.
+    mod secret_boundary {
+        use super::super::validate_secret_request;
+        use crate::protocol::AskRequest;
+
+        fn req(json: serde_json::Value) -> AskRequest {
+            serde_json::from_value(json).expect("valid AskRequest")
+        }
+
+        fn secret_req(name: &str) -> AskRequest {
+            req(serde_json::json!({
+                "title": "Paste your OpenAI key",
+                "input": { "kind": "secret", "secret_name": name },
+            }))
+        }
+
+        #[test]
+        fn well_formed_secret_request_passes() {
+            validate_secret_request(&secret_req("openai_api_key")).unwrap();
+            let mut r = secret_req("stripe_key");
+            r.input.secret_format = Some("stripe_secret_key".into());
+            r.input.secret_label = Some("Stripe (test mode)".into());
+            validate_secret_request(&r).unwrap();
+        }
+
+        #[test]
+        fn missing_secret_name_is_rejected() {
+            let r = req(serde_json::json!({
+                "title": "key?",
+                "input": { "kind": "secret" },
+            }));
+            let err = validate_secret_request(&r).unwrap_err();
+            assert!(err.contains("secret_name"), "got {err}");
+        }
+
+        #[test]
+        fn path_traversal_in_name_is_rejected() {
+            for bad in ["../escape", "a/b", "OpenAI", ".hidden", "-flag", "has space"] {
+                let err = validate_secret_request(&secret_req(bad)).unwrap_err();
+                assert!(!err.is_empty(), "{bad:?} must be rejected");
+            }
+        }
+
+        /// An unknown format id is a typo, not a licence to skip validation —
+        /// and the error must list what IS available so the agent can recover.
+        #[test]
+        fn unknown_format_is_rejected_with_the_known_ids() {
+            let mut r = secret_req("k");
+            r.input.secret_format = Some("openai".into()); // not the real id
+            let err = validate_secret_request(&r).unwrap_err();
+            assert!(err.contains("unknown input.secret_format"), "got {err}");
+            assert!(err.contains("openai_api_key"), "error should list known ids: {err}");
+        }
+
+        /// `choices` would let the agent make the "secret" one of its own
+        /// labels — a value it already knows, defeating the whole feature.
+        #[test]
+        fn choices_are_rejected() {
+            let mut r = secret_req("k");
+            r.choices = Some(vec!["sk-abc".into(), "sk-def".into()]);
+            let err = validate_secret_request(&r).unwrap_err();
+            assert!(err.contains("cannot offer choices"), "got {err}");
+        }
+
+        /// A custom a2ui surface could render a plaintext TextField (or an Image
+        /// choice) and route the value into a normal answer string.
+        #[test]
+        fn a2ui_is_rejected() {
+            let mut r = secret_req("k");
+            r.a2ui = Some(serde_json::json!([]));
+            let err = validate_secret_request(&r).unwrap_err();
+            assert!(err.contains("cannot set a2ui"), "got {err}");
+        }
+
+        #[test]
+        fn audio_is_rejected() {
+            let mut r = secret_req("k");
+            r.audio = Some(crate::protocol::AudioSource("/tmp/a.wav".into()));
+            let err = validate_secret_request(&r).unwrap_err();
+            assert!(err.contains("cannot attach audio"), "got {err}");
+
+            // The server-set post-validation field is guarded too, so a caller
+            // that somehow skips attach_audio still cannot slip audio through.
+            let mut r = secret_req("k");
+            r.audio_uri = Some("data:audio/wav;base64,QUJD".into());
+            assert!(validate_secret_request(&r).is_err());
+        }
+
+        /// The wire shape the agent sees: a receipt, never a value. This pins the
+        /// shape so a future field cannot quietly start carrying the secret.
+        #[test]
+        fn secret_response_serialises_without_the_value() {
+            use crate::protocol::AskResponse;
+            let receipt = crate::protocol::SecretReceipt {
+                stored: true,
+                name: "openai_api_key".into(),
+                backend: "sops".into(),
+                format: Some("openai_api_key".into()),
+                hint: "sk-pro…7a2f".into(),
+                path: "/Users/x/.cenno/secrets/openai_api_key.sops.json".into(),
+            };
+            let json = serde_json::to_string(&AskResponse::SecretStored {
+                stored: true,
+                secret: receipt,
+            })
+            .unwrap();
+            assert!(json.contains(r#""stored":true"#), "got {json}");
+            assert!(json.contains("openai_api_key"), "got {json}");
+            // The receipt's own field set is the whole contract: no `answer`.
+            assert!(!json.contains(r#""answer""#), "a value could hide here: {json}");
         }
     }
 }

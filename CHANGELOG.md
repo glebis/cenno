@@ -6,6 +6,36 @@ All notable changes to cenno are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Agents can collect a credential without receiving it.** A new
+  `input.kind: "secret"` renders a masked field with a hold-to-reveal eye and
+  no microphone — a dictated key would be transcribed by a third-party speech
+  service. The value is encrypted with [sops](https://github.com/getsops/sops)
+  and an age key, one `0600` file per secret under `~/.cenno/secrets/`, and it
+  never reaches the tool result (the agent gets a masked `sk-pro…7a2f` hint), the
+  history database, the CloudKit relay, `localStorage` drafts, or text-to-speech.
+  You spend it yourself: `cenno secret run openai -- python deploy.py` puts it in
+  the child process's environment without passing through a shell history line
+  or an argument list. `cenno secret list | get | set | delete` round out the
+  CLI. A live caption checks the value against ~46 built-in key shapes and
+  **warns without blocking** — a rotated, proxied or private-endpoint key
+  legitimately does not match the published pattern. The field is held to one
+  line and shrinks its type to fit, so a normal key never wraps mid-token.
+- A secret panel on the site's live widget gallery, and a `secret` row in the
+  presentation's input vocabulary.
+
+### Fixed
+
+- **A `.sops.yaml` in a parent directory no longer blocks storage.** sops walks
+  up from `~/.cenno/secrets` and, on finding a rules file that matches nothing,
+  failed with `no matching creation rules found` even though an age recipient
+  was named explicitly. cenno now passes `--config /dev/null` whenever it has
+  its own recipient, so the more specific instruction wins; with no recipient
+  configured, `~/.sops.yaml` discovery still applies.
+- `cenno secret run` no longer panics on a second variadic argument; extra
+  secrets are named with `--with`.
+
 ## [0.6.0] — 2026-11-11
 
 ### Added

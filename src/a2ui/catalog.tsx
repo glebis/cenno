@@ -26,9 +26,15 @@
  * Adapters are intentionally untested here; they are covered by the Task 6
  * renderer integration.
  */
-import { Fragment, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useVoiceDictation } from "../voice";
+import {
+  loadSecretFormats,
+  verdictFor,
+  type FormatVerdict,
+  type SecretFormatInfo,
+} from "../secretFormat";
 import {
   Catalog,
   ActionSchema,
@@ -203,28 +209,81 @@ export const CennoTextFieldApi = {
     submitAction: ActionSchema.optional().describe(
       "Action fired when the user submits the field with Enter.",
     ),
+    obscured: z
+      .boolean()
+      .optional()
+      .describe(
+        "Mask the typed value (credentials). Suppresses dictation and auto-grow.",
+      ),
+    secretFormat: z
+      .string()
+      .optional()
+      .describe(
+        "Built-in secret format id to validate the value against (e.g. " +
+          "openai_api_key). Validation is advisory: a mismatch warns and " +
+          "still submits.",
+      ),
   }),
 };
+
+/**
+ * Fetches the built-in format catalogue once (cached module-side in
+ * secretFormat.ts) and recomputes the advisory verdict as the value changes.
+ * A failed fetch yields no caption rather than a false warning — an
+ * unavailable catalogue is not evidence that the key is wrong.
+ */
+function useSecretFormatVerdict(
+  formatId: string | null | undefined,
+  value: string,
+  enabled: boolean,
+): FormatVerdict | null {
+  const [formats, setFormats] = useState<Map<string, SecretFormatInfo> | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!enabled || !formatId) return;
+    let live = true;
+    loadSecretFormats().then((list) => {
+      if (live) setFormats(list);
+    });
+    return () => {
+      live = false;
+    };
+  }, [enabled, formatId]);
+  if (!enabled || !formatId) return null;
+  return verdictFor(formats, formatId, value);
+}
 
 export const CennoTextField = createComponentImplementation(
   CennoTextFieldApi,
   ({ props }) => {
     const value = typeof props.value === "string" ? props.value : "";
+    const obscured = props.obscured === true;
     // Latest bound value for the dictation base, without re-arming the hook.
     const valueRef = useRef(value);
     valueRef.current = value;
     const dictation = useVoiceDictation({
-      enabled: props.voice === true,
+      // An obscured field never dictates: the value would be routed through a
+      // third-party speech service, which is exactly what must not happen to a
+      // credential.
+      enabled: props.voice === true && !obscured,
       getBase: () => valueRef.current,
       onText: (text) => props.setValue(text),
     });
+    const formatCheck = useSecretFormatVerdict(
+      props.secretFormat,
+      value,
+      obscured,
+    );
     return (
       <TextFieldView
         value={value}
         label={typeof props.label === "string" ? props.label : undefined}
-        voice={props.voice === true}
+        voice={props.voice === true && !obscured}
         recording={dictation.recording}
         voiceError={dictation.error}
+        obscured={obscured}
+        formatCheck={formatCheck}
         onMicToggle={dictation.toggle}
         onChange={(text) => props.setValue(text)}
         onSubmit={(text) => {

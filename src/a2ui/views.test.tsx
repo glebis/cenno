@@ -483,6 +483,147 @@ describe("TextFieldView", () => {
   });
 });
 
+describe("TextFieldView (secret)", () => {
+  it("masks the value, suppresses the mic, and offers hold-to-reveal", () => {
+    render(
+      <TextFieldView
+        obscured
+        // voice is deliberately also passed: obscured must win, because a mic
+        // would have a third-party speech service transcribe the credential.
+        voice
+        label="Paste your OpenAI key"
+        onSubmit={vi.fn()}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "Paste your OpenAI key" });
+    // Masked via the CSS class (`-webkit-text-security`), not an inline style:
+    // React's CSSOM path drops unknown properties silently.
+    expect(input.className).toContain("cenno-field__input--secret");
+    expect(input.className).not.toContain("cenno-field__input--revealed");
+    // No dictation affordance, even though `voice` was requested.
+    expect(screen.queryByRole("button", { name: /dictat/i })).toBeNull();
+    const reveal = screen.getByRole("button", {
+      name: "Hold to show the value",
+    });
+    expect(reveal.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("reveals only while held", () => {
+    render(<TextFieldView obscured label="Key" onSubmit={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: "Key" });
+    const reveal = screen.getByRole("button", {
+      name: "Hold to show the value",
+    });
+    fireEvent.mouseDown(reveal);
+    expect(input.className).toContain("cenno-field__input--revealed");
+    expect(
+      screen.getByRole("button", { name: "Hide the value" }).getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+    fireEvent.mouseUp(reveal);
+    expect(input.className).not.toContain("cenno-field__input--revealed");
+  });
+
+  it("reveals on Space held on the keyboard too", () => {
+    render(<TextFieldView obscured label="Key" onSubmit={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: "Key" });
+    const reveal = screen.getByRole("button", {
+      name: "Hold to show the value",
+    });
+    fireEvent.keyDown(reveal, { key: " " });
+    expect(input.className).toContain("cenno-field__input--revealed");
+    fireEvent.keyUp(reveal, { key: " " });
+    expect(input.className).not.toContain("cenno-field__input--revealed");
+  });
+
+  it("re-masks if the pointer leaves or focus is lost while held", () => {
+    render(<TextFieldView obscured label="Key" onSubmit={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: "Key" });
+    const reveal = screen.getByRole("button", {
+      name: "Hold to show the value",
+    });
+    fireEvent.mouseDown(reveal);
+    expect(input.className).toContain("cenno-field__input--revealed");
+    fireEvent.mouseLeave(reveal);
+    expect(input.className).not.toContain("cenno-field__input--revealed");
+  });
+
+  it("submits the typed credential on Enter", () => {
+    const onSubmit = vi.fn();
+    render(<TextFieldView obscured label="Key" onSubmit={onSubmit} />);
+    const input = screen.getByRole("textbox", { name: "Key" });
+    fireEvent.change(input, { target: { value: "sk-proj-abc123" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith("sk-proj-abc123");
+  });
+
+  it("captions a format match", () => {
+    render(
+      <TextFieldView
+        obscured
+        label="Key"
+        formatCheck={{ state: "match", message: "Looks like an OpenAI API key." }}
+        onSubmit={vi.fn()}
+      />,
+    );
+    const caption = screen.getByRole("status");
+    expect(caption.textContent).toContain("Looks like an OpenAI API key.");
+    expect(caption.className).not.toContain("warn");
+  });
+
+  it("captions a mismatch as a warning, and the field still submits", () => {
+    const onSubmit = vi.fn();
+    render(
+      <TextFieldView
+        obscured
+        label="Key"
+        formatCheck={{
+          state: "mismatch",
+          message: "Not the usual shape — saving anyway.",
+        }}
+        onSubmit={onSubmit}
+      />,
+    );
+    const caption = screen.getByRole("status");
+    expect(caption.className).toContain("cenno-field__format--warn");
+    const input = screen.getByRole("textbox", { name: "Key" });
+    fireEvent.change(input, { target: { value: "weird" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // Warn, never block.
+    expect(onSubmit).toHaveBeenCalledWith("weird");
+  });
+
+  it("says nothing for empty or unknown verdicts", () => {
+    const { rerender } = render(
+      <TextFieldView
+        obscured
+        label="Key"
+        formatCheck={{ state: "empty", message: "" }}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+    rerender(
+      <TextFieldView
+        obscured
+        label="Key"
+        formatCheck={{ state: "unknown", message: "" }}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("leaves an ordinary field unmasked with no reveal control", () => {
+    render(<TextFieldView label="Your reply" onSubmit={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: "Your reply" });
+    expect(input.className).toBe("cenno-field__input");
+    expect(input.className).not.toContain("--secret");
+    expect(screen.queryByRole("button", { name: /show the value/i })).toBeNull();
+  });
+});
+
 describe("ButtonView", () => {
   it("fires action", () => {
     const onClick = vi.fn();

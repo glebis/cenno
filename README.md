@@ -107,7 +107,10 @@ Once installed it activates on its own whenever a task calls for asking the user
 |---|---|---|
 | `title` | string | the question |
 | `body_md` | string | optional markdown body |
-| `input.kind` | `text` · `voice_text` · `choice` · `scale` · `confirm` · `none` | answer control |
+| `input.kind` | `text` · `voice_text` · `choice` · `scale` · `confirm` · `none` · `secret` | answer control |
+| `input.secret_name` | string | `secret` only: the name the credential is stored under |
+| `input.secret_format` | string | `secret` only: built-in format id to validate against (advisory) |
+| `input.secret_label` | string | `secret` only: field label, e.g. “Paste your OpenAI key” |
 | `choices` | string[] | for `choice` |
 | `flow` | `mood` · `question` · `ema` · `reminder` · `ambient` | panel color theme |
 | `progress` | `{step, total}` | dot pagination for multi-step flows |
@@ -119,7 +122,39 @@ Once installed it activates on its own whenever a task calls for asking the user
 | `a2ui` | array | optional rich layout ([A2UI](https://a2ui.org) v0.9 messages, validated at the boundary; see [docs/design/CONTROLS.md](docs/design/CONTROLS.md)) |
 | `audio` | string | a clip to play above the question — an absolute local path or a `data:audio/…;base64,` URI (mp3 · wav · m4a · ogg, ≤ 5 MiB) |
 
-Returns `{answer, via, elapsed_s, muted}`, or `{answered: false, prompt_id}` on timeout. `muted` is the panel's final voice state and may be absent on older frontends.
+Returns `{answer, via, elapsed_s, muted}`, or `{answered: false, prompt_id}` on timeout. `muted` is the panel's final voice state and may be absent on older frontends. A `secret` prompt returns `{stored: true, secret: {name, backend, format, hint, path}}` instead — see [Secrets](#secrets).
+
+### Secrets
+
+An agent sometimes needs a credential the user has to type — an API key, a token, a passphrase. `input.kind: "secret"` collects it without the agent ever seeing it:
+
+```jsonc
+{
+  "title": "OpenAI API key",
+  "body_md": "Stored encrypted on this Mac. I never see it.",
+  "input": { "kind": "secret", "secret_name": "openai", "secret_format": "openai_api_key" }
+}
+```
+
+The panel renders an obscured field with a hold-to-reveal toggle and **no mic** (a dictated credential would be transcribed by a third-party speech service), plus a live format caption driven by ~46 built-in key shapes. A mismatch **warns and still saves** — a rotated, proxied or private-endpoint key legitimately does not match the published shape, and refusing it would be worse than accepting a typo the user can see.
+
+What the asking agent receives instead of the value:
+
+```json
+{"stored": true, "secret": {"name": "openai", "backend": "sops", "format": "openai_api_key", "hint": "sk-pro…7a2f", "path": "~/.cenno/secrets/openai.sops.json"}}
+```
+
+The value never reaches the tool result, `cenno.db` (history records only that a secret was stored), the CloudKit relay (secret prompts are forced local), `localStorage` drafts, or text-to-speech. Storage is [sops](https://github.com/getsops/sops) with an age key, one file per secret, `0600`. Retrieval is the user's own CLI:
+
+```bash
+cenno secret list
+cenno secret run openai -- python deploy.py   # injects CENNO_SECRET_OPENAI into the child
+cenno secret get openai                       # explicit opt-in: prints the value
+cenno secret set openai --format openai_api_key   # paste on stdin
+cenno secret delete openai
+```
+
+`cenno secret run` is the intended path: the value goes into a child process's environment and never through the agent's context, a shell history line, or an argument list (`ps` is world-readable).
 
 ### Audio (`audio`)
 
@@ -179,6 +214,12 @@ cenno --mcp-stdio     # MCP bridge; auto-launches the app if needed
 cenno export                    # full history as JSON
 cenno export --format csv
 cenno export --since 2026-06-01
+
+cenno secret list               # stored credentials (name, format, updated)
+cenno secret run <name> -- <cmd>  # inject CENNO_SECRET_<NAME>, exec the child
+cenno secret get <name>         # print the value (no trailing newline)
+cenno secret set <name> [--format <id>] [--label <text>]   # value on stdin
+cenno secret delete <name>
 ```
 
 ## History

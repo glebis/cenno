@@ -38,6 +38,11 @@ Working examples: [`docs/examples/dot-cenno/`](examples/dot-cenno/).
     "denylist_hosts": ["private.example"],
     "redaction": true
   },
+  "secrets": {
+    "dir": "~/.cenno/secrets",     // where <name>.sops.json files live
+    "age_recipient": null,         // explicit age1… recipient; else SOPS_AGE_RECIPIENTS, else ~/.config/sops/age/keys.txt
+    "sops_binary": null            // absolute path when sops is not on PATH
+  },
   "widgets": { /* see below */ }
 }
 ```
@@ -58,6 +63,25 @@ redaction default on; passive sampling defaults off.
 It sets where a fresh panel appears; cenno still remembers where you drag it.
 Unknown keys are rejected (so typos surface as "ignored malformed config" rather
 than silently doing nothing).
+
+## Secrets (`secrets`)
+
+Credential entry (`input.kind: "secret"`) stores each value as its own
+[sops](https://github.com/getsops/sops)-encrypted file, `~/.cenno/secrets/<name>.sops.json`,
+mode `0600`. The age recipient is resolved in this order:
+
+1. `secrets.age_recipient` — an explicit `age1…` public key.
+2. `SOPS_AGE_RECIPIENTS` in the environment (first of a comma list).
+3. The `# public key: age1…` comment line in `~/.config/sops/age/keys.txt`.
+4. Otherwise none is passed, and sops resolves a `.sops.yaml` on its own.
+
+Only the `value` field is encrypted; `name`, `format` and `label` are stored
+plaintext (sops `_unencrypted` suffix) so listing never decrypts. Set
+`secrets.sops_binary` when `sops` is not on the app's `PATH` (a GUI-launched
+app does not inherit your shell `PATH` — this is the usual first-run failure).
+
+Requires sops ≥ 3.8 and an age key. Check with `cenno secret list`; it reports
+a clear error rather than failing at the first save.
 
 ## Per-agent panel colors
 

@@ -488,3 +488,104 @@ async fn suppressed_notify_skips_display_but_prompt_still_registers() {
     assert_eq!(result["answer"], "back");
     assert!(displayed.load(Ordering::SeqCst), "post-resume prompt must display");
 }
+
+/// A secret prompt resolves through `resolve_secret`, and the value never
+/// appears in the wire response or the history row.
+///
+/// The socket layer is the authority the agent actually talks to, so this is
+/// the end-to-end proof of the contract: even with a database attached and the
+/// secret path taken, nothing that reaches the agent or the disk can carry the
+/// credential.
+#[tokio::test]
+async fn secret_prompt_returns_a_receipt_and_stores_no_value() {
+    use cenno_lib::protocol::SecretReceipt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("mcp.sock");
+    let db_path = dir.path().join("cenno.db");
+    let db = Db::open(&db_path).unwrap();
+
+    let reg = PromptRegistry::new();
+    start_socket_server(
+        sock.clone(),
+        reg.clone(),
+        |_id, _req, _seq| {},
+        || {},
+        Some(db.clone()),
+        120,
+        off_routing(),
+        default_screen_context(),
+    )
+    .await
+    .unwrap();
+
+    let leaked = "sk-proj-endtoendsecretvalue0123456789";
+    let reg2 = reg.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            for id in reg2.pending_ids() {
+                // The real path stores the value and builds this receipt; the
+                // receipt carries only a hint, so a value can never travel here.
+                reg2.resolve_secret(
+                    &id,
+                    SecretReceipt {
+                        stored: true,
+                        name: "openai".into(),
+                        backend: "sops".into(),
+                        format: Some("openai_api_key".into()),
+                        hint: "sk-pro…6789".into(),
+                        path: "/tmp/none/openai.sops.json".into(),
+                    },
+                );
+            }
+        }
+    });
+
+    let result = cenno_lib::mcp::test_support::call_ask_user(
+        &sock,
+        serde_json::json!({
+            "title": "OpenAI API key",
+            "timeout_s": 5,
+            "input": {"kind": "secret", "secret_name": "openai", "secret_format": "openai_api_key"},
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result["stored"], true, "secret answer shape: {result}");
+    assert_eq!(result["secret"]["name"], "openai");
+    assert_eq!(result["secret"]["hint"], "sk-pro…6789");
+    assert!(result.get("answer").is_none(), "must not look like an answer: {result}");
+    assert!(
+        !serde_json::to_string(&result).unwrap().contains(leaked),
+        "the value must not reach the agent"
+    );
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    // History records the event, not the credential.
+    let conn = db.raw_conn();
+    let conn = conn.lock();
+    let (status, answer, via): (String, Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT status, answer, via FROM prompts ORDER BY id DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(status, "answered");
+    assert_eq!(answer, None, "no value may be persisted");
+    assert_eq!(via.as_deref(), Some("secret"));
+
+    // Belt and braces: scan every text column of every row for the value.
+    let dump: String = conn
+        .query_row(
+            "SELECT coalesce(group_concat(prompt_id || title || body_md || coalesce(answer,'') \
+             || coalesce(via,'') || coalesce(agent,'') || coalesce(audio_path,'')), '') FROM prompts",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(!dump.contains("endtoendsecretvalue"), "value found in the database: {dump}");
+}

@@ -13,6 +13,8 @@ pub mod registry;
 pub mod relay;
 pub mod routing;
 pub mod screen_context;
+pub mod secret;
+pub mod secret_formats;
 pub mod supertonic;
 pub mod suppress;
 pub mod tray;
@@ -22,7 +24,7 @@ pub mod voice;
 
 use tauri::{Emitter, Manager};
 
-use crate::protocol::{AskRequest, SeqMeta, Via};
+use crate::protocol::{AskRequest, InputKind, SecretReceipt, SeqMeta, Via};
 use crate::registry::PromptRegistry;
 use crate::suppress::SuppressionState;
 
@@ -239,6 +241,92 @@ fn answer_prompt(
         _ => Via::Text,
     };
     state.resolve(&id, answer, via, muted)
+}
+
+/// Store a credential captured by a `kind: "secret"` panel.
+///
+/// This is the ONLY path from the webview to secret storage, and it is
+/// deliberately unable to answer a normal prompt: it refuses any id whose
+/// request is not `InputKind::Secret`, so a compromised or buggy panel cannot
+/// route an ordinary answer through the secret sink (or vice versa).
+///
+/// The value is encrypted BEFORE the parked `ask()` is resolved, so the parked
+/// future — and everything downstream of it (the MCP tool result, the DB row,
+/// the CloudKit record) — only ever sees a [`SecretReceipt`].
+///
+/// Returns the receipt, or a message to show the user on failure (a missing
+/// `sops` binary, an unreadable age key). The prompt stays pending on error, so
+/// the user can fix things and retry rather than losing what they typed.
+#[tauri::command]
+fn store_secret(
+    state: tauri::State<PromptRegistry>,
+    id: String,
+    value: String,
+    cfg: tauri::State<'_, crate::config::Config>,
+) -> Result<SecretReceipt, String> {
+    let request = state
+        .request(&id)
+        .ok_or_else(|| format!("prompt {id} is no longer pending"))?;
+    if request.input.kind != InputKind::Secret {
+        return Err(format!("prompt {id} is not a secret prompt"));
+    }
+    let name = request
+        .input
+        .secret_name
+        .as_deref()
+        .ok_or("secret prompt is missing input.secret_name")?;
+
+    let stored = crate::secret::store(
+        &cfg.secrets,
+        name,
+        &value,
+        request.input.secret_format.as_deref(),
+        request.input.secret_label.as_deref(),
+    )?;
+    let path = crate::secret::secrets_dir(&cfg.secrets)?
+        .join(format!("{name}.sops.json"));
+
+    let receipt = SecretReceipt {
+        stored: true,
+        name: stored.name,
+        backend: "sops".to_string(),
+        format: stored.format,
+        hint: crate::secret::hint(&value),
+        path: path.display().to_string(),
+    };
+    // Only resolve once the bytes are on disk and fsynced — a receipt must never
+    // describe a secret that failed to land.
+    if !state.resolve_secret(&id, receipt.clone()) {
+        return Err(format!("prompt {id} already resolved"));
+    }
+    Ok(receipt)
+}
+
+/// The built-in format catalogue, for the panel's live validation caption.
+///
+/// Read-only and non-sensitive: these are regex source strings and hints, not
+/// secrets. The webview compiles them itself so validation never round-trips
+/// through Rust on every keystroke.
+#[tauri::command]
+fn secret_formats() -> Vec<SecretFormatInfo> {
+    crate::secret_formats::FORMATS
+        .iter()
+        .map(|f| SecretFormatInfo {
+            id: f.id,
+            label: f.label,
+            pattern: f.pattern,
+            hint: f.hint,
+        })
+        .collect()
+}
+
+/// One row of the format catalogue (see [`secret_formats`]).
+#[derive(serde::Serialize)]
+struct SecretFormatInfo {
+    id: &'static str,
+    label: &'static str,
+    pattern: &'static str,
+    hint: &'static str,
 }
 
 /// User dismissed the panel (clicked ✕): end the parked `ask()` as a
@@ -1093,6 +1181,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             answer_prompt,
+            store_secret,
+            secret_formats,
             dismiss_prompt,
             mark_shown,
             keepalive,

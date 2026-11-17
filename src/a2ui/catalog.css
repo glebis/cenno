@@ -430,6 +430,92 @@
   color: var(--cenno-text-dim);
 }
 
+/* ---- secret field: masked input, hold-to-reveal, format caption ----
+   No new palette: the semantic contract is text / text-dim / line only. A
+   matching format is quiet (dim); a mismatch promotes the same caption to
+   full-strength text so it reads as attention without inventing a red. */
+
+.cenno-field__input--secret {
+  /* Mask the glyphs with `-webkit-text-security`. Prefixed on purpose: WebKit
+     honours it and no standard property exists. Declared in CSS, not inline,
+     because React writes inline styles through the CSSOM and drops unknown
+     properties silently — the class survives. An engine without the property
+     renders the value plainly, which the reveal toggle already allows, so
+     there is nothing worse to fall back to. */
+  -webkit-text-security: disc;
+  /* Tabular figures keep a masked run from reflowing differently than the
+     characters it hides. */
+  font-variant-numeric: tabular-nums;
+  /* Fixed height: auto-grow is suppressed for masked values (a growing box
+     leaks the credential's length). */
+  height: 44px;
+  /* One line, always. A key is a single token — wrapping it onto a second line
+     makes it look like two values and hides half the string from the
+     glance-check the reveal toggle exists for. Nowrap + horizontal scroll keeps
+     it intact; a textarea wraps by default, so this must be overridden. */
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: hidden;
+  word-break: normal;
+  overflow-wrap: normal;
+  /* No visible scrollbar: the field is 44px tall and a bar would eat the
+     baseline. Scrolling still works by drag and by caret. `scrollbar-width`
+     covers Firefox; WebKit needs the pseudo-element. */
+  scrollbar-width: none;
+}
+
+.cenno-field__input--secret::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hold-to-reveal drops the masking while the user is deliberately looking. */
+.cenno-field__input--revealed {
+  -webkit-text-security: none;
+}
+
+.cenno-field__reveal {
+  appearance: none;
+  flex: none;
+  /* A round 28px icon button, matching the mic's weight without competing
+     with it: same glyph size, smaller target, no pill chrome. */
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--cenno-text-dim);
+  cursor: pointer;
+  /* No transition: reveal is momentary (press-and-hold), so a fade would
+     make the credential briefly legible after release. */
+}
+
+.cenno-field__reveal:hover,
+.cenno-field__reveal:focus-visible,
+.cenno-field__reveal[aria-pressed="true"] {
+  color: var(--cenno-text);
+  background: color-mix(in oklab, var(--cenno-text) 10%, transparent);
+}
+
+.cenno-field__reveal:focus-visible {
+  outline: 1px solid var(--cenno-text);
+  outline-offset: 2px;
+}
+
+.cenno-field__format {
+  margin: 0;
+  font-size: var(--cenno-type-caption);
+  line-height: var(--cenno-leading-caption, 1.3);
+  color: var(--cenno-text-dim);
+}
+
+.cenno-field__format--warn {
+  color: var(--cenno-text);
+}
+
 /* ---- datetime: native picker, text-field underline ---- */
 
 .cenno-datetime__input {

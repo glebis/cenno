@@ -70,7 +70,7 @@ export const SURFACE_ID = "main";
 /** Must match the Catalog id in src/a2ui/catalog.tsx. */
 export const CATALOG_ID = "cenno:catalog/v1";
 
-type Via = "text" | "choice" | "voice_text";
+type Via = "text" | "choice" | "voice_text" | "secret";
 
 function submitAction(name: string, value: unknown, via: Via) {
   return { event: { name, context: { value, via } } };
@@ -167,6 +167,46 @@ function desugarInput(
   dataModel: Record<string, unknown>;
 } {
   const kind = req.input?.kind;
+  // A secret panel is built FIRST and returns early, before both the custom
+  // widget lookup and the freeform escape hatch:
+  //
+  // - A configured widget could compose a plaintext TextField (or a choice)
+  //   under the "secret" name, which would send the credential back as an
+  //   ordinary answer. The panel owns the field, so widgets never apply here.
+  // - `withFreeform` appends a voice-capable plaintext field to every other
+  //   kind. On a credential that is exactly the bug this feature exists to
+  //   prevent: a second, un-obscured box right below the obscured one, whose
+  //   contents are answered as plain text and stored in history.
+  if (kind === "secret") {
+    return {
+      childIds: ["input", "send"],
+      components: [
+        {
+          id: "input",
+          component: "TextField",
+          // The caller's label, else a neutral one. Never the prompt title —
+          // the title is already rendered above.
+          label: req.input?.secret_label ?? "Paste it here",
+          value: { path: "/draft" },
+          // Obscured = password-style rendering. No mic: a dictated credential
+          // would be transcribed by a third-party speech service and spoken
+          // back — the opposite of "never see it".
+          obscured: true,
+          voice: false,
+          // Read by PromptPanel's TextFieldView for the live format caption.
+          secretFormat: req.input?.secret_format ?? null,
+          submitAction: submitAction("submit", { path: "/draft" }, "secret"),
+        },
+        ...button(
+          "send",
+          "Save",
+          "quiet",
+          submitAction("submit", { path: "/draft" }, "secret"),
+        ),
+      ],
+      dataModel: { draft: "" },
+    };
+  }
   // A configured custom widget takes precedence over the built-in kinds: the
   // agent invokes it by name (input.kind) and we expand its declarative
   // template (a composition of built-in controls — no code).

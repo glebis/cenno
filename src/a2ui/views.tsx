@@ -12,6 +12,7 @@
  * transparent — the panel root owns --cenno-surface.
  */
 import { useEffect, useRef, useState } from "react";
+import { MIN_FIT_FONT_PX, fitFontSize } from "./fitFont";
 import type {
   AnchorHTMLAttributes,
   CSSProperties,
@@ -22,6 +23,7 @@ import type {
 import ReactMarkdown from "react-markdown";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ImageLoadError, resolveImageUrl } from "./image";
+import type { FormatVerdict } from "../secretFormat";
 import "./catalog.css";
 
 export type TextRole = "question-l" | "question-m" | "body" | "caption";
@@ -346,6 +348,11 @@ export function ChoicePickerView({
  * mic circle toggles push-to-talk dictation: idle = circle with a mic glyph,
  * recording = pulsing dot (no waveforms — BRAND.md). A dictation failure
  * surfaces as a caption-size error line under the field.
+ *
+ * `obscured` renders a credential field: characters masked, no mic (a dictated
+ * secret would be transcribed by a third-party speech service), no auto-grow
+ * (a growing masked box leaks length), and a hold-to-reveal toggle.
+ * `formatCheck` captions an advisory format verdict under the field.
  */
 export function TextFieldView({
   value = "",
@@ -354,6 +361,8 @@ export function TextFieldView({
   voice = false,
   recording = false,
   voiceError = null,
+  obscured = false,
+  formatCheck = null,
   onMicToggle,
   onChange,
   onSubmit,
@@ -367,6 +376,13 @@ export function TextFieldView({
   recording?: boolean;
   /** Graceful error state (permission denied, recognizer unavailable, …). */
   voiceError?: string | null;
+  /** Mask the value; suppress dictation and auto-grow. For credentials. */
+  obscured?: boolean;
+  /**
+   * Advisory format verdict to caption under the field, or null/undefined to
+   * show nothing. A mismatch is shown but never blocks the submit.
+   */
+  formatCheck?: FormatVerdict | null;
   /** Mic tap handler; without one the mic renders disabled. */
   onMicToggle?: () => void;
   onChange?: (text: string) => void;
@@ -381,24 +397,84 @@ export function TextFieldView({
   // it streams in, not hidden off the right edge of a one-line field), then
   // scroll to the newest words once it hits its max height.
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // The width the current shrink decision was made at. A window resize (or a
+  // token change) invalidates the font size chosen for the old width, so the
+  // effect re-runs against the new one.
+  const [fieldWidth, setFieldWidth] = useState(0);
   useEffect(() => {
     const el = taRef.current;
-    if (!el) return;
+    if (!el || !obscured || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setFieldWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [obscured]);
+  useEffect(() => {
+    const el = taRef.current;
+    // Obscured: there is nothing to read, and a growing masked box would leak
+    // the value's length to anyone glancing at the screen.
+    if (!el || obscured) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
     el.scrollTop = el.scrollHeight; // keep the latest line in view
-  }, [draft]);
+  }, [draft, obscured]);
+
+  // Reveal is momentary: holding the toggle unmasks, releasing re-masks, so a
+  // credential cannot be left on screen by walking away.
+  const [revealed, setRevealed] = useState(false);
+
+  // Shrink-to-fit for a masked credential. A key is one long token; the field
+  // must show all of it without wrapping and without scrolling, because a
+  // partly-visible key cannot be checked and a wrapped one reads as two values.
+  // Steps the font down until the whole run fits, floored at 11px so an absurd
+  // value degrades to a scroll rather than unreadable type.
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el || !obscured) return;
+    const available = el.clientWidth;
+    if (available <= 0) return;
+    // Clear the inline size FIRST: reading computed style after a previous
+    // shrink would return that shrunken size and the font would ratchet down
+    // on every keystroke.
+    el.style.fontSize = "";
+    const base = parseFloat(getComputedStyle(el).fontSize) || 17;
+    const fitted = fitFontSize(base, available, el.scrollWidth);
+    if (fitted === base) return;
+    // Nudge: glyph advance does not scale perfectly with font size, so the
+    // linear estimate can land a pixel wide. Step down until it fits.
+    let size = fitted;
+    for (let i = 0; i < 5; i += 1) {
+      el.style.fontSize = `${size}px`;
+      if (el.scrollWidth <= available || size <= MIN_FIT_FONT_PX) break;
+      size -= 1;
+    }
+  }, [draft, obscured, revealed, fieldWidth]);
 
   return (
     <div className="cenno-field-wrap">
       <div className="cenno-field">
         <textarea
           ref={taRef}
-          className="cenno-field__input"
+          className={
+            obscured
+              ? // Masking lives in CSS (`.cenno-field__input--secret`), not an
+                // inline style: React writes style props through the CSSOM and
+                // silently drops unknown ones, and a browser that does not know
+                // `-webkit-text-security` must still fall back to the class.
+                revealed
+                ? "cenno-field__input cenno-field__input--secret cenno-field__input--revealed"
+                : "cenno-field__input cenno-field__input--secret"
+              : "cenno-field__input"
+          }
           value={draft}
           rows={1}
           aria-label={label}
           placeholder={placeholder ?? label}
+          // Browsers and password managers must not offer to save a credential
+          // typed into a floating agent panel.
+          autoComplete={obscured ? "off" : undefined}
+          autoCorrect={obscured ? "off" : undefined}
+          autoCapitalize={obscured ? "off" : undefined}
+          spellCheck={obscured ? false : undefined}
           onChange={(e) => {
             setDraft(e.target.value);
             onChange?.(e.target.value);
@@ -416,7 +492,71 @@ export function TextFieldView({
             }
           }}
         />
-        {voice && (
+        {obscured && (
+          <button
+            type="button"
+            className="cenno-field__reveal"
+            aria-label={revealed ? "Hide the value" : "Hold to show the value"}
+            aria-pressed={revealed}
+            // Title carries the "hold" hint the label can't say in an icon.
+            title="Hold to show"
+            onMouseDown={() => setRevealed(true)}
+            onMouseUp={() => setRevealed(false)}
+            onMouseLeave={() => setRevealed(false)}
+            onBlur={() => setRevealed(false)}
+            // Keyboard equivalent of holding: press reveals, release hides.
+            onKeyDown={(e) => {
+              if (e.key === " " || e.key === "Enter") setRevealed(true);
+            }}
+            onKeyUp={(e) => {
+              if (e.key === " " || e.key === "Enter") setRevealed(false);
+            }}
+          >
+            {/* Eye / eye-with-slash, drawn inline so it follows currentColor
+                and matches the mic glyph's weight. No text label: a control
+                that says "show" next to a masked field reads as a button you
+                press and leave pressed. */}
+            {revealed ? (
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3.5 12s3.2-5.5 8.5-5.5S20.5 12 20.5 12s-3.2 5.5-8.5 5.5S3.5 12 3.5 12Z" />
+                <circle cx="12" cy="12" r="2.6" />
+              </svg>
+            ) : (
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3.5 12s3.2-5.5 8.5-5.5S20.5 12 20.5 12s-3.2 5.5-8.5 5.5S3.5 12 3.5 12Z" />
+                <circle cx="12" cy="12" r="2.6" />
+                {/* The slash says "currently hidden" — the same convention as
+                    password managers, and it costs no extra label. */}
+                <line x1="4" y1="20" x2="20" y2="4" />
+              </svg>
+            )}
+          </button>
+        )}
+        {/* Dictation is suppressed for obscured fields no matter what the
+            caller passes: a dictated credential would be transcribed by a
+            third-party speech service. Guarded here as well as in the catalog
+            adapter, because this is the invariant, not a caller's choice. */}
+        {voice && !obscured && (
           <button
             type="button"
             className={
@@ -464,6 +604,21 @@ export function TextFieldView({
           {voiceError}
         </p>
       )}
+      {formatCheck &&
+        (formatCheck.state === "match" || formatCheck.state === "mismatch") && (
+          <p
+            className={
+              formatCheck.state === "match"
+                ? "cenno-field__format"
+                : "cenno-field__format cenno-field__format--warn"
+            }
+            // role="status": announced politely as the value settles, and it
+            // must never pull focus while the user is typing.
+            role="status"
+          >
+            {formatCheck.message}
+          </p>
+        )}
     </div>
   );
 }

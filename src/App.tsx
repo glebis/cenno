@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import PromptPanel, { Prompt, Via } from "./PromptPanel";
+import type { SecretReceipt } from "./secretFormat";
 import { nextNotedWord } from "./notedWords";
 import { PANEL_MIN_HEIGHT } from "./panelResize";
 import {
@@ -23,7 +24,12 @@ interface PromptEvent {
   request: {
     title: string;
     body_md: string;
-    input: { kind: string };
+    input: {
+      kind: string;
+      secret_name?: string;
+      secret_format?: string;
+      secret_label?: string;
+    };
     choices?: string[];
     flow?: Prompt["flow"];
     progress?: { step: number; total: number };
@@ -240,6 +246,10 @@ function App() {
   // once per answer (state, not a render-time call: re-renders during the
   // linger must not advance the cycle).
   const [confirmation, setConfirmation] = useState("");
+  // Error from the credential store, shown INSIDE the panel (the panel stays up
+  // on a failed save so the user can retry). Cleared on the next attempt and
+  // whenever a new prompt is installed.
+  const [secretError, setSecretError] = useState<string | null>(null);
   // Bumped synchronously whenever a prompt is installed (live event or
   // cold-start pull). Hide timers capture the value at arm time and bail if
   // it moved: effect cleanup only clears a timer at the next React commit,
@@ -292,6 +302,7 @@ function App() {
     hideGenerationRef.current += 1;
     awaitingSwapRef.current = false;
     setAnswered(false);
+    setSecretError(null);
     if (next) {
       setActive({ prompt: toPrompt(next), remainingS: next.remaining_s });
     } else {
@@ -318,8 +329,10 @@ function App() {
       awaitingSwapRef.current = false;
       hideGenerationRef.current += 1;
       setActive({ prompt: toPrompt(event.payload), remainingS: event.payload.remaining_s });
-      // A new prompt cancels any in-flight answered linger.
+      // A new prompt cancels any in-flight answered linger, and must not
+      // inherit a previous prompt's credential-store error.
       setAnswered(false);
+      setSecretError(null);
     });
     // Cold-start race: on a bridge autolaunch the agent's ask (and its
     // `prompt` event) can land before this listener existed — the event is
@@ -374,6 +387,7 @@ function App() {
       hideGenerationRef.current += 1;
       awaitingSwapRef.current = false;
       setAnswered(false);
+      setSecretError(null);
       setActive(null);
       void hideWindow();
     });
@@ -485,6 +499,11 @@ function App() {
     const onEdit = (e: Event) => {
       if (!isTextEntry(e.target)) return;
       floor(KEEPALIVE_EDIT_S);
+      // A credential must never be written to localStorage: it is readable by
+      // every other webview on the machine, survives the prompt, and would be
+      // the one place the value outlives the encrypted store. Only the
+      // keep-alive floor applies to secret prompts.
+      if (active.prompt.input?.kind === "secret") return;
       // Safety net: persist the in-progress text per prompt so it survives even
       // an unexpected teardown. Cleared once the prompt is answered/dismissed,
       // or when the field is emptied (saveDraft removes an empty draft).
@@ -549,21 +568,11 @@ function App() {
     }
   }, []);
 
-  async function handleAnswer(id: string, answer: string, via: Via) {
-    const muted = userMuted ?? active?.prompt.muted ?? false;
-    let resolved: boolean;
-    try {
-      resolved = await invoke<boolean>("answer_prompt", { id, answer, via, muted });
-    } catch (e) {
-      // Keep the panel up so the user can retry instead of silently losing it.
-      console.error("answer_prompt failed:", e);
-      return;
-    }
-    if (!resolved) {
-      // Prompt already timed out (or unknown id) — the agent never saw this
-      // answer. Skeleton behavior: log it, still confirm-and-hide.
-      console.warn(`prompt ${id} already expired; answer was not delivered`);
-    }
+  /**
+   * Shared tail of both answer paths: drop the draft, then either advance the
+   * sequence in place or show the "noted." linger and shrink the panel.
+   */
+  function finishAnswered(id: string) {
     // Answered → the saved draft is no longer needed.
     try {
       localStorage.removeItem(draftKey(id));
@@ -598,6 +607,59 @@ function App() {
     });
   }
 
+  /**
+   * Credential path. The value goes to `store_secret`, which encrypts it on
+   * disk and resolves the parked ask() with a receipt holding only a hint —
+   * the agent never receives the value. On failure the panel STAYS UP so the
+   * user can retry: silently losing a credential that the agent is waiting on
+   * would be worse than an error message.
+   */
+  async function handleSecret(id: string, value: string) {
+    if (!value) {
+      // Nothing to store: let the panel's own disabled/validation state speak
+      // rather than writing an empty secret.
+      console.warn("cenno: empty secret submit ignored");
+      return;
+    }
+    try {
+      await invoke<SecretReceipt>("store_secret", { id, value });
+    } catch (e) {
+      console.error("store_secret failed:", e);
+      setSecretError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    setSecretError(null);
+    finishAnswered(id);
+  }
+
+  async function handleAnswer(id: string, answer: string, via: Via) {
+    // A secret answer is the ONE path where the value must not travel as an
+    // ordinary answer: `answer_prompt` would hand it to the waiting agent and
+    // write it into the history row. `store_secret` encrypts it, keeps it on
+    // this machine, and resolves the prompt with a receipt that carries only a
+    // hint. Rust re-reads the prompt's own request for the name/format, so the
+    // webview is not the authority on where a credential is written.
+    if (via === "secret" || active?.prompt.input?.kind === "secret") {
+      await handleSecret(id, answer);
+      return;
+    }
+    const muted = userMuted ?? active?.prompt.muted ?? false;
+    let resolved: boolean;
+    try {
+      resolved = await invoke<boolean>("answer_prompt", { id, answer, via, muted });
+    } catch (e) {
+      // Keep the panel up so the user can retry instead of silently losing it.
+      console.error("answer_prompt failed:", e);
+      return;
+    }
+    if (!resolved) {
+      // Prompt already timed out (or unknown id) — the agent never saw this
+      // answer. Skeleton behavior: log it, still confirm-and-hide.
+      console.warn(`prompt ${id} already expired; answer was not delivered`);
+    }
+    finishAnswered(id);
+  }
+
   // User clicked the panel's ✕: end the parked ask() as a no-answer
   // (dismiss_prompt → registry.dismiss → ask() returns TimedOut, the same
   // wire shape the agent already handles on timeout) and take the panel down
@@ -626,8 +688,13 @@ function App() {
   // sound-out: speak the prompt aloud when it appears, gated by urgency +
   // ~/.cenno config. Called before the early returns so hook order stays
   // stable; with no active prompt it gets null and stays silent.
+  // Secret prompts are skipped: the request text itself is not sensitive, but
+  // announcing "enter your Anthropic API key" out loud reveals to everyone in
+  // the room that a credential is being handed to the machine — a disclosure
+  // the agent does not get to make on the user's behalf. The panel is still
+  // fully readable on screen.
   const tts = useTtsPlayer(
-    active
+    active && active.prompt.input?.kind !== "secret"
       ? {
           id: active.prompt.id,
           title: active.prompt.title,
@@ -676,6 +743,7 @@ function App() {
       key={active.prompt.id}
       prompt={active.prompt}
       onAnswer={handleAnswer}
+      secretError={secretError}
       onDismiss={handleDismiss}
       onAudioPlayingChange={handleAudioPlayingChange}
       onStopReading={

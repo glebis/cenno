@@ -20,7 +20,9 @@ src-tauri/src/          Rust backend
   db.rs                 SQLite history (~/Library/Application Support/app.cenno/cenno.db)
   tray.rs               menu-bar UI, pause/quiet-mode policy
   suppress.rs           fullscreen detection, prompt queueing/replay
-  cli.rs                `cenno ask`, `cenno export`, `--tray`, `--mcp-stdio`
+  cli.rs                `cenno ask`, `cenno export`, `cenno secret …`, `--tray`, `--mcp-stdio`
+  secret.rs             sops+age credential store (~/.cenno/secrets/<name>.sops.json, 0600)
+  secret_formats.rs     built-in API-key/token shape catalogue (Rust regex + JS RegExp compatible)
   updater.rs            GitHub-releases updater (user-initiated only)
   a2ui_guard.rs         A2UI payload validation at the boundary
   image.rs              bounded local-image loader → data: URI (extension + magic-byte checked)
@@ -69,6 +71,8 @@ The Homebrew cask (`version` + DMG `sha256` in [`glebis/homebrew-tap`](https://g
 
 - Bundle identifier is `app.cenno`; keep paths user-agnostic (no hardcoded home directories).
 - Validate everything that crosses the agent boundary (see `a2ui_guard.rs`, `protocol.rs`) — prompts are untrusted input.
+- **A credential value must never reach an agent.** `input.kind: "secret"` resolves its prompt through `registry.resolve_secret` (a receipt with only a hint), never `resolve` (an answer string). If you add a code path that handles `AskResponse`, handle `SecretStored` too — and keep it out of the relay, the DB `answer` column, `localStorage` drafts, and TTS. `src-tauri/src/mcp.rs` `validate_secret_request` and `src-tauri/src/a2ui_guard.rs` (obscured TextField rejection) are the boundary gates; both have tests.
+- `secret_formats.rs` patterns must compile in **both** the Rust `regex` crate and JS `RegExp` — the same string drives the backend and the panel's live caption. Write to the narrower (Rust) dialect: no lookaround, no backreferences, no `(?s)` (use `[\s\S]`), no `\A` (use `^`). `cargo test` covers compilation; do not hand-translate patterns into the frontend.
 - [SECURITY.md](SECURITY.md) has the threat model; [AUTHORSHIP.md](AUTHORSHIP.md) records authorship.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->

@@ -45,6 +45,58 @@ pub enum Command {
         #[arg(long)]
         since: Option<String>,
     },
+    /// Manage encrypted credentials in ~/.cenno/secrets/ (sops + age)
+    #[command(subcommand)]
+    Secret(SecretCommand),
+}
+
+#[derive(Subcommand)]
+pub enum SecretCommand {
+    /// List stored secret names and their format metadata (never values)
+    List {
+        /// Emit JSON instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print a secret value to stdout
+    Get {
+        /// Secret name (as stored, e.g. openai_api_key)
+        name: String,
+    },
+    /// Store or replace a secret, reading the value from stdin
+    ///
+    /// Prefer this over `ask_user` when the agent must not be involved at all:
+    /// the value never enters a prompt, a model context, or the history DB.
+    Set {
+        /// Secret name (lowercase letters, digits, `_`, `.`, `-`)
+        name: String,
+        /// Format id for validation metadata (e.g. openai_api_key)
+        #[arg(long)]
+        format: Option<String>,
+        /// Human label for `secret list`
+        #[arg(long)]
+        label: Option<String>,
+    },
+    /// Delete a stored secret
+    Delete {
+        /// Secret name
+        name: String,
+    },
+    /// Run a command with secrets injected as environment variables
+    ///
+    /// The values are read, placed in the child's environment, and never
+    /// printed. This is the intended way for an agent to USE a credential
+    /// without SEEING it: `cenno secret run openai_api_key -- curl ...`.
+    Run {
+        /// Secret name to inject as `CENNO_SECRET_<UPPER_NAME>`
+        name: String,
+        /// Additional secret names to inject alongside it (repeatable)
+        #[arg(long = "with", value_name = "NAME")]
+        with: Vec<String>,
+        /// Command and arguments, after `--`
+        #[arg(trailing_var_arg = true, required = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Clone, Debug, ValueEnum)]

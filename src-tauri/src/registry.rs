@@ -12,6 +12,23 @@ fn urgency_rank(u: &Urgency) -> u8 {
 use std::{collections::HashMap, sync::Arc, time::{Duration, Instant}};
 use tokio::sync::{oneshot, Notify};
 
+/// Turn a settled `oneshot` into the wire response. Shared by every park point
+/// in `ask_inner` so the secret variant is handled in exactly one place.
+fn settle(
+    res: Result<PendingAnswer, oneshot::error::RecvError>,
+    elapsed_s: f64,
+    id: String,
+) -> AskResponse {
+    match res {
+        Ok(PendingAnswer::Answer(answer, via, muted)) => {
+            AskResponse::Answered { answer, via, elapsed_s, muted }
+        }
+        Ok(PendingAnswer::Secret(secret)) => AskResponse::SecretStored { stored: true, secret },
+        // Sender dropped by dismiss() → TimedOut wire shape.
+        Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
+    }
+}
+
 /// In-memory pending-prompt store. Timed-out prompts stay in the map by design
 /// (tray-inbox semantics) — the map grows unboundedly until plan 4 adds
 /// eviction/persistence and `get_response`.
@@ -30,9 +47,21 @@ pub struct PromptRegistry {
 /// The registry change-watcher callback (see `PromptRegistry::watcher`).
 type Watcher = Arc<dyn Fn() + Send + Sync>;
 
+/// What a parked `ask()` receives when the prompt settles.
+///
+/// A secret arrives as a receiver-only variant: the value was encrypted by the
+/// command layer before resolving, so the parked future never holds the
+/// plaintext at all.
+enum PendingAnswer {
+    /// A normal answer: the text plus how it was given.
+    Answer(String, Via, Option<bool>),
+    /// A credential that is already encrypted at rest.
+    Secret(SecretReceipt),
+}
+
 struct Pending {
     /// None after a resolve() consumed the sender (including a late resolve on a timed-out prompt).
-    tx: Option<oneshot::Sender<(String, Via, Option<bool>)>>,
+    tx: Option<oneshot::Sender<PendingAnswer>>,
     pub request: AskRequest,
     /// The prompt's timeout budget. The clock does NOT start at registration —
     /// it starts when the panel first DISPLAYS the prompt (mark_shown), so a
@@ -159,13 +188,8 @@ impl PromptRegistry {
             tokio::select! {
                 res = &mut rx => {
                     self.inner.lock().remove(&id);
-                    return match res {
-                        Ok((answer, via, muted)) => AskResponse::Answered {
-                            answer, via, elapsed_s: started.elapsed().as_secs_f64(), muted,
-                        },
-                        // Sender dropped by dismiss() before the prompt was shown.
-                        Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
-                    };
+                    // Sender dropped by dismiss() before the prompt was shown.
+                    return settle(res, started.elapsed().as_secs_f64(), id);
                 }
                 _ = shown.notified() => { /* now shown — fall through to the timeout */ }
             }
@@ -194,12 +218,7 @@ impl PromptRegistry {
                 tokio::select! {
                     res = &mut rx => {
                         self.inner.lock().remove(&id);
-                        return match res {
-                            Ok((answer, via, muted)) => AskResponse::Answered {
-                                answer, via, elapsed_s: started.elapsed().as_secs_f64(), muted,
-                            },
-                            Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
-                        };
+                        return settle(res, started.elapsed().as_secs_f64(), id);
                     }
                     _ = extend.notified() => { /* resumed (or keep-alive) — re-arm */ }
                 }
@@ -210,13 +229,8 @@ impl PromptRegistry {
             tokio::select! {
                 res = &mut rx => {
                     self.inner.lock().remove(&id);
-                    return match res {
-                        Ok((answer, via, muted)) => AskResponse::Answered {
-                            answer, via, elapsed_s: started.elapsed().as_secs_f64(), muted,
-                        },
-                        // Sender dropped by dismiss() → TimedOut wire shape.
-                        Err(_) => AskResponse::TimedOut { answered: false, prompt_id: id },
-                    };
+                    // Sender dropped by dismiss() → TimedOut wire shape.
+                    return settle(res, started.elapsed().as_secs_f64(), id);
                 }
                 _ = tokio::time::sleep(sleep_for) => {
                     // Reached the deadline — but a keep-alive may have pushed the
@@ -271,9 +285,20 @@ impl PromptRegistry {
     }
 
     pub fn resolve(&self, id: &str, answer: String, via: Via, muted: Option<bool>) -> bool {
+        self.send(id, PendingAnswer::Answer(answer, via, muted))
+    }
+
+    /// Resolve a `kind: "secret"` prompt with an already-encrypted receipt.
+    /// Separate from [`Self::resolve`] so the plaintext value can never reach
+    /// this method — callers must go through `secret::store` first.
+    pub fn resolve_secret(&self, id: &str, receipt: SecretReceipt) -> bool {
+        self.send(id, PendingAnswer::Secret(receipt))
+    }
+
+    fn send(&self, id: &str, answer: PendingAnswer) -> bool {
         let mut map = self.inner.lock();
         match map.get_mut(id).and_then(|p| p.tx.take()) {
-            Some(tx) => tx.send((answer, via, muted)).is_ok(),
+            Some(tx) => tx.send(answer).is_ok(),
             None => false,
         }
     }
@@ -296,6 +321,18 @@ impl PromptRegistry {
 
     pub fn pending_ids(&self) -> Vec<String> {
         self.inner.lock().keys().cloned().collect()
+    }
+
+    /// A copy of the pending prompt's request, if it is still answerable.
+    ///
+    /// The secret path needs this to learn the caller-declared secret name and
+    /// format: the webview must not be the authority on WHERE a credential is
+    /// written, only on the value being written.
+    pub fn request(&self, id: &str) -> Option<AskRequest> {
+        let mut map = self.inner.lock();
+        map.get_mut(id)
+            .filter(|p| p.tx.is_some())
+            .map(|p| p.request.clone())
     }
 
     /// Suspend (`playing = true`) or resume the countdown for `id` because

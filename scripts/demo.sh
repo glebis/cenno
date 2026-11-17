@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Fire a demo prompt of each kind at the running (or auto-launched) cenno.
-# Usage: scripts/demo.sh [text|voice|choice|scale|confirm|mood|table|matrix|sliders|stepscore|images|image-error|image-remote|audio|audio-oversize|all]
+# Usage: scripts/demo.sh [text|voice|choice|scale|confirm|mood|secret|table|matrix|sliders|stepscore|images|image-error|image-remote|audio|audio-oversize|all]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BIN="${CENNO_BIN:-src-tauri/target/release/cenno}"
@@ -21,6 +21,11 @@ case "${1:-all}" in
   scale)   ask '{"title":"How focused were you this hour?","input":{"kind":"scale"},"flow":"ema","progress":{"step":1,"total":3},"timeout_s":40}' ;;
   confirm) ask '{"title":"Stand up and stretch.","input":{"kind":"confirm"},"flow":"reminder","timeout_s":40}' ;;
   mood)    ask '{"title":"How are you feeling?","input":{"kind":"choice"},"choices":["great","good","okay","low","rough"],"flow":"mood","timeout_s":40}' ;;
+  # Secret entry: the value is sops-encrypted on this machine and NEVER returned
+  # to the asker — this prints a receipt with a hint, not the key. Try a real
+  # key, or just type nonsense to see the format caption warn (it still saves).
+  # Inspect afterwards with: cenno secret list / cenno secret delete demo_key
+  secret)  ask '{"title":"Demo API key","body_md":"Stored encrypted under ~/.cenno/secrets. The agent only gets a masked hint.","input":{"kind":"secret","secret_name":"demo_key","secret_format":"openai_api_key","secret_label":"Paste any string"},"timeout_s":90}' ;;
   table)   ask '{"title":"Which plan fits?","a2ui":[{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"cenno:catalog/v1"}},{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Column","children":["t"]},{"id":"t","component":"Table","caption":"Plans","columns":[{"label":"Plan"},{"label":"Seats","align":"end"},{"label":"Cost","align":"end"}],"rows":[["free","1","$0"],["pro","3","$20"],["team","10","$60"]]}]}},{"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/","value":{}}}],"timeout_s":60}' ;;
   matrix)  ask '{"title":"Rate this session.","a2ui":[{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"cenno:catalog/v1"}},{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Column","children":["m"]},{"id":"m","component":"RatingMatrix","mode":"matrix","rows":[{"value":"pace","label":"Pace"},{"value":"useful","label":"Usefulness"},{"value":"clarity","label":"Clarity"}],"min":1,"max":5,"minLabel":"low","maxLabel":"high","doneLabel":"Done","value":{"path":"/items"},"selectAction":{"event":{"name":"submit-matrix","context":{"value":{"path":"/items"},"via":"choice"}}}}]}},{"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/","value":{"items":{}}}}],"timeout_s":60}' ;;
   sliders) ask '{"title":"How was each part?","a2ui":[{"version":"v0.9","createSurface":{"surfaceId":"main","catalogId":"cenno:catalog/v1"}},{"version":"v0.9","updateComponents":{"surfaceId":"main","components":[{"id":"root","component":"Column","children":["s"]},{"id":"s","component":"RatingMatrix","mode":"sliders","rows":[{"value":"pace","label":"Pace"},{"value":"useful","label":"Usefulness"},{"value":"clarity","label":"Clarity"}],"min":0,"max":10,"minLabel":"not at all","maxLabel":"completely","value":{"path":"/items"},"selectAction":{"event":{"name":"submit-sliders","context":{"value":{"path":"/items"},"via":"choice"}}}}]}},{"version":"v0.9","updateDataModel":{"surfaceId":"main","path":"/","value":{"items":{}}}}],"timeout_s":60}' ;;
@@ -63,6 +68,6 @@ PY
     [ -f "$BIG" ] || dd if=/dev/zero of="$BIG" bs=1m count=8 2>/dev/null
     ask "{\"title\":\"Too big to play\",\"body_md\":\"The prompt survives an oversized clip.\",\"audio\":\"$BIG\",\"timeout_s\":60}"
     ;;
-  all)     for k in mood text voice choice scale confirm table matrix sliders stepscore images image-error image-remote audio; do "$0" "$k"; done ;;
-  *) echo "usage: $0 [text|voice|choice|scale|confirm|mood|table|matrix|sliders|stepscore|images|image-error|image-remote|audio|audio-oversize|all]"; exit 1 ;;
+  all)     for k in mood text voice choice scale confirm secret table matrix sliders stepscore images image-error image-remote audio; do "$0" "$k"; done ;;
+  *) echo "usage: $0 [text|voice|choice|scale|confirm|mood|secret|table|matrix|sliders|stepscore|images|image-error|image-remote|audio|audio-oversize|all]"; exit 1 ;;
 esac

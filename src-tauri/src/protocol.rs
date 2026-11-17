@@ -38,7 +38,7 @@ pub enum Urgency {
     High,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum InputKind {
     Text,
@@ -48,19 +48,37 @@ pub enum InputKind {
     Scale,
     Confirm,
     None,
+    /// A credential the agent must never read. The value goes to sops-encrypted
+    /// storage and the caller receives a [`SecretReceipt`], not the secret.
+    Secret,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct InputSpec {
     #[serde(default = "default_kind")]
     pub kind: InputKind,
+    /// `kind: "secret"` only — the name the secret is stored under
+    /// (`~/.cenno/secrets/<name>.sops.json`) and the handle the caller uses with
+    /// `cenno secret run` / `cenno secret get`. Required for secret prompts;
+    /// validated by [`crate::secret::validate_name`] before the panel opens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_name: Option<String>,
+    /// `kind: "secret"` only — a built-in format id from
+    /// [`crate::secret_formats::FORMATS`]. Drives the live "this does not look
+    /// like an OpenAI key" caption. Advisory: a mismatch warns, never blocks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_format: Option<String>,
+    /// `kind: "secret"` only — a human label shown above the field, e.g.
+    /// "Stripe secret key (test mode)".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_label: Option<String>,
 }
 fn default_kind() -> InputKind {
     InputKind::Text
 }
 impl Default for InputSpec {
     fn default() -> Self {
-        Self { kind: default_kind() }
+        Self { kind: default_kind(), secret_name: None, secret_format: None, secret_label: None }
     }
 }
 
@@ -209,6 +227,13 @@ impl AskRequest {
     pub fn timeout_secs(&self, config_default: Option<u64>) -> u64 {
         self.timeout_s.or(config_default).unwrap_or(DEFAULT_TIMEOUT_S)
     }
+
+    /// True when this prompt collects a credential whose value must never reach
+    /// the caller. Every layer that persists, relays, or serializes an answer
+    /// branches on this (see `db::record_prompt`, `mcp::ask_user`, `relay`).
+    pub fn is_secret(&self) -> bool {
+        matches!(self.input.kind, InputKind::Secret)
+    }
 }
 
 /// An agent-supplied audio payload for the panel to play: a generated voice
@@ -262,6 +287,33 @@ pub enum Via {
     VoiceText,
     Text,
     Choice,
+    /// A credential captured by a `kind: "secret"` panel. The answer value is
+    /// the secret itself; it is stored, never returned.
+    Secret,
+}
+
+/// What the caller learns after a secret was captured: proof of storage plus
+/// enough to tell two keys apart, and nothing usable.
+///
+/// The `hint` is deliberately lossy (first 6 + last 4 characters) — enough for
+/// the user and agent to confirm "that is the key I pasted", never enough to
+/// reconstruct it. There is intentionally NO field that can carry the value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SecretReceipt {
+    /// True once the value is encrypted at rest. Always true in this shape —
+    /// the field exists so the wire form is self-describing.
+    pub stored: bool,
+    /// Name the secret is stored under (`cenno secret run <name>`).
+    pub name: String,
+    /// Storage backend, currently always `"sops"`.
+    pub backend: String,
+    /// The format id the panel validated against, if the caller asked for one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// `sk-pro…7a2f` — for human recognition only.
+    pub hint: String,
+    /// Absolute path of the ciphertext file, so the user can inspect or move it.
+    pub path: String,
 }
 
 /// Result of an `ask_user` call.
@@ -285,6 +337,10 @@ pub enum AskResponse {
     /// this shape (`{"answered":false,"prompt_id":...}`) MEANS the prompt
     /// timed out; the field exists only because the wire format requires it.
     TimedOut { answered: bool, prompt_id: String },
+    /// Result of a `kind: "secret"` prompt: the value was captured and encrypted,
+    /// and the caller gets a receipt instead of the secret. Discriminated by the
+    /// disjoint `stored` key (Answered has `answer`, TimedOut has `answered`).
+    SecretStored { stored: bool, secret: SecretReceipt },
 }
 
 /// One `ask_sequence` call: N questions run back-to-back in a single panel.

@@ -67,6 +67,12 @@ impl Db {
                     ("answered", Some(answer.clone()), via_str, Some(*elapsed_s))
                 }
                 AskResponse::TimedOut { .. } => ("timed_out", None, None, None),
+                // A captured credential is NEVER persisted. The row records that
+                // a secret was stored (status answered, via secret, answer NULL)
+                // so history stays honest — "you stored openai_api_key at 14:02"
+                // — without keeping the value. `via = "secret"` is what tells
+                // this apart from an empty ack answer.
+                AskResponse::SecretStored { .. } => ("answered", None, Some("secret".into()), None),
             };
 
         self.0.lock().execute(
@@ -354,7 +360,7 @@ mod tests {
     fn input_kind_and_flow_stored_as_serde_strings() {
         let (db, _dir) = open_temp_db();
         let mut req = basic_req();
-        req.input = InputSpec { kind: InputKind::VoiceText };
+        req.input = InputSpec { kind: InputKind::VoiceText, ..Default::default() };
         req.flow = Some(Flow::Mood);
         req.urgency = Urgency::High;
         let created_at = Utc::now();
@@ -409,6 +415,59 @@ mod tests {
         assert_eq!(row["status"], "answered");
         assert_eq!(row["answer"], "exported");
         assert_eq!(row["via"], "text");
+    }
+
+    #[test]
+    fn stored_secret_row_keeps_no_value() {
+        // The whole point of the secret panel: history must record that a
+        // credential was stored without recording the credential. `via` is the
+        // discriminator — an ordinary ack would have via="text" and an answer.
+        let (db, _dir) = open_temp_db();
+        let value = "sk-proj-supersecretvalue123";
+        let mut req = basic_req();
+        req.input = InputSpec {
+            kind: InputKind::Secret,
+            secret_name: Some("openai_api_key".into()),
+            secret_format: Some("openai_api_key".into()),
+            secret_label: None,
+        };
+        let outcome = AskResponse::SecretStored {
+            stored: true,
+            secret: crate::protocol::SecretReceipt {
+                stored: true,
+                name: "openai_api_key".into(),
+                backend: "sops".into(),
+                format: Some("openai_api_key".into()),
+                hint: "sk-pro…t123".into(),
+                path: "/tmp/openai_api_key.sops.json".into(),
+            },
+        };
+        db.record_prompt(&req, "p_s", &outcome, Utc::now()).unwrap();
+
+        let conn = db.0.lock();
+        let (status, answer, via): (String, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT status, answer, via FROM prompts WHERE prompt_id = 'p_s'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+
+        assert_eq!(status, "answered", "a stored secret is a completed prompt");
+        assert!(answer.is_none(), "the value must never be persisted, got {answer:?}");
+        assert_eq!(via.as_deref(), Some("secret"));
+
+        // Belt and braces: nothing anywhere in the DB may contain the value.
+        let dump: String = conn
+            .query_row(
+                "SELECT group_concat(coalesce(answer,'') || coalesce(body_md,'') || title, ' ') \
+                 FROM prompts",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!dump.contains(value), "secret leaked into the history DB: {dump}");
+        assert!(!dump.contains("supersecret"), "secret fragment leaked: {dump}");
     }
 
     #[test]

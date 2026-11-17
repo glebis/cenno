@@ -804,6 +804,27 @@ fn check_component(component: &Value) -> Result<(), String> {
             }
             Ok(())
         }
+        Some("TextField") => {
+            // An obscured field is a credential sink. Allowing the agent to draw
+            // one inside an ordinary prompt would create a password-shaped box
+            // whose contents flow back as a plain `answer` string — stored
+            // plaintext in history and relayed to companions. Secret capture is
+            // owned by `input.kind: "secret"`, where the value is intercepted
+            // before it can be answered; so `obscured` is refused here, with an
+            // error that names the correct tool. The secret panel draws its own
+            // field internally (desugar), never through an agent-supplied
+            // component, so this refusal costs a legitimate caller nothing.
+            let label = component_label(obj, "TextField");
+            if obj.get("obscured").and_then(Value::as_bool) == Some(true) {
+                return Err(format!(
+                    "{label}: obscured TextField is not allowed in an a2ui payload — the agent \
+                     would receive the typed value as plain text. To collect a credential, call \
+                     ask_user with input.kind=\"secret\" (plus input.secret_name); the value is \
+                     then stored encrypted and never returned to you"
+                ));
+            }
+            Ok(())
+        }
         _ => Ok(()),
     }
 }

@@ -153,6 +153,25 @@ impl CaptureConfig {
     }
 }
 
+/// Secret storage policy (`kind: "secret"` panels).
+///
+/// Values are stored sops-encrypted on disk; see `crate::secret`. Every field is
+/// optional so the defaults (age key at `~/.config/sops/age/keys.txt`, the `sops`
+/// on `PATH`, `~/.cenno/secrets/`) work with no configuration at all.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SecretsConfig {
+    /// Directory holding `<name>.sops.json` files. `~` is expanded. Default
+    /// `~/.cenno/secrets`.
+    pub dir: Option<String>,
+    /// age recipient to encrypt to. Absent → `SOPS_AGE_RECIPIENTS`, then the
+    /// `# public key:` comment in `~/.config/sops/age/keys.txt`, then whatever a
+    /// `.sops.yaml` says (sops resolves it itself).
+    pub age_recipient: Option<String>,
+    /// Path or name of the sops executable. Default `sops` (from `PATH`).
+    pub sops_binary: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
@@ -177,6 +196,8 @@ pub struct Config {
     /// A2UI component-tree template the desugar layer expands (validated at the
     /// boundary like any agent payload — no code execution).
     pub widgets: std::collections::HashMap<String, serde_json::Value>,
+    /// Where `kind: "secret"` answers are encrypted to, and with which tools.
+    pub secrets: SecretsConfig,
 }
 
 impl Config {

@@ -59,7 +59,7 @@ Fallback order — take the first that works:
 }
 ```
 
-Returns `{"answer": "...", "via": "text"|"choice"|"voice_text", "elapsed_s": 1.4, "muted": false}`, or `{"answered": false, "prompt_id": "p_3"}` on timeout. `muted` is the panel's *final* voice state and may be absent on an older frontend — treat a missing value as "unknown", not `false`.
+Returns `{"answer": "...", "via": "text"|"choice"|"voice_text", "elapsed_s": 1.4, "muted": false}`, or `{"answered": false, "prompt_id": "p_3"}` on timeout. `muted` is the panel's *final* voice state and may be absent on an older frontend — treat a missing value as "unknown", not `false`. A `secret` prompt returns `{"stored": true, "secret": {...}}` — see [Collecting a credential](#collecting-a-credential).
 
 - **`say`** is a phrase for the ear, not a copy of the title: the panel shows the long version, the speaker gets one short line.
 - **`urgency`** gates whether the panel speaks and how insistently it appears. Omit it for a normal question; `low` for FYI-shaped prompts; `high` only when the answer blocks the user's next action.
@@ -77,8 +77,30 @@ Returns `{"answer": "...", "via": "text"|"choice"|"voice_text", "elapsed_s": 1.4
 | `text` | free-form input, names, sentences | the typed text |
 | `voice_text` | same as text, with a mic | the text |
 | `none` | information only | (auto-dismisses) |
+| `secret` | collect a credential (key, token, passphrase) — needs `input.secret_name` | a receipt, **not** the value |
 
 Flows only change the panel color: `mood` (warm), `question` (neutral), `ema` (check-in/survey), `reminder` (calm), `ambient` (quiet/info).
+
+### Collecting a credential
+
+When you need a key the user has to type, **never** ask for it as `text` — a text answer comes back to you in cleartext and lands in the answer history. Use `secret`:
+
+```json
+{"title": "OpenAI API key",
+ "body_md": "Stored encrypted on this Mac. I never see it.",
+ "input": {"kind": "secret", "secret_name": "openai", "secret_format": "openai_api_key", "secret_label": "Paste your OpenAI key"}}
+```
+
+You get back:
+
+```json
+{"stored": true, "secret": {"name": "openai", "backend": "sops", "format": "openai_api_key", "hint": "sk-pro…7a2f", "path": "…/openai.sops.json"}}
+```
+
+- `secret_name` is required and becomes the storage handle; `secret_format` (optional) picks a built-in key shape for live validation. A mismatch only warns — the user can still save.
+- **Never echo, log, or ask the user to paste the value into chat again.** You cannot read it back; that is the point.
+- To *use* the credential, tell the user to run `cenno secret run <name> -- <command>`, which injects `CENNO_SECRET_<NAME>` into that child process's environment. Do **not** suggest `cenno secret get` unless the user explicitly wants the value printed.
+- `choices` and `a2ui` are rejected on a secret prompt, and the panel is forced local. One credential per panel.
 
 ## Widget advisor — which widget for which question
 

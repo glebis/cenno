@@ -44,6 +44,39 @@ content returned to an agent.
 
 - `~/Library/Application Support/app.cenno/cenno.db`, created with `0600`
 permissions. Answers are stored in plaintext; FileVault covers data at rest.
+- **Exception: secrets.** A `kind: "secret"` prompt records only that a secret
+  was stored (`via = "secret"`, `answer` NULL). The value is never written to
+  the database — see [Secrets](#secrets-inputkind-secret).
+
+### Secrets (`input.kind: "secret"`)
+
+- The value typed into a secret panel is **never returned to the asking agent,
+  written to `cenno.db`, relayed to CloudKit, kept in a `localStorage` draft, or
+  spoken aloud** — enforced at four separate points, each with its own test.
+- At rest it is encrypted with [sops](https://github.com/getsops/sops) + age,
+  one file per secret under `~/.cenno/secrets/<name>.sops.json`, mode `0600`,
+  written to a temp file and `rename`d into place. Only the `value` field is
+  encrypted; `name`/`format`/`label` stay plaintext (sops `_unencrypted`
+  suffix) so `cenno secret list` never has to decrypt anything.
+- The plaintext travels webview → Rust → sops **stdin** (never `argv`, which is
+  world-readable via `ps`). The parent process holds it for the duration of the
+  exec only.
+- **What this does and does not defend.** sops buys protection at rest:
+  backups, Time Machine, sync folders, a shared or stolen laptop without the age
+  key. It does **not** defend against anything running as the same user —
+  the webview's process memory, the child sops process, or the age private key
+  itself (`~/.config/sops/age/keys.txt`). That is the same boundary as
+  `cenno.db`, and the reason `cenno secret run` is the intended retrieval path:
+  the value goes into a child's environment instead of an agent's context.
+- Secret prompts are **forced local** regardless of `device_hint` or the routing
+  policy — a credential is typed on the machine that stores it, or not at all.
+- An agent may not draw its own password field: an `obscured: true` TextField in
+  an `a2ui` payload is rejected at the boundary, because anything typed into it
+  would come back as an ordinary plaintext answer.
+- Secure keyboard entry (`EnableSecureEventInput`) is **not** used. It is a
+  system-global switch that affects every app while held, and macOS gives no
+  reliable per-webview scoping — the panel is a normal, non-activating window and
+  relies on macOS's usual same-user trust model.
 
 ### Screen capture and context
 

@@ -53,7 +53,15 @@ export interface Prompt {
   id: string;
   title: string;
   body_md: string;
-  input: { kind: string };
+  input: {
+    kind: string;
+    /** `kind: "secret"` only — storage name / handle for the credential. */
+    secret_name?: string;
+    /** `kind: "secret"` only — built-in format id driving live validation. */
+    secret_format?: string;
+    /** `kind: "secret"` only — label above the obscured field. */
+    secret_label?: string;
+  };
   choices?: string[];
   flow?: Flow;
   progress?: { step: number; total: number };
@@ -97,7 +105,7 @@ export interface Prompt {
   };
 }
 
-export type Via = "text" | "choice" | "voice_text";
+export type Via = "text" | "choice" | "voice_text" | "secret";
 
 /** The component id the React renderer mounts (@a2ui/react A2uiSurface). */
 const ROOT_COMPONENT_ID = "root";
@@ -136,6 +144,7 @@ export default function PromptPanel({
   onStopReading,
   onReadAloud,
   onAudioPlayingChange,
+  secretError = null,
 }: {
   prompt: Prompt;
   onAnswer: (id: string, answer: string, via: Via) => void;
@@ -163,6 +172,12 @@ export default function PromptPanel({
    * just keeps running.
    */
   onAudioPlayingChange?: (playing: boolean) => void;
+  /**
+   * Failed credential store (e.g. sops unavailable, bad name). Shown inside the
+   * panel because a failed secret save keeps the panel up for a retry — the
+   * error must not be confined to the console.
+   */
+  secretError?: string | null;
 }) {
   // Refs keep the action handler (created once per prompt.id) pointed at the
   // latest props without rebuilding the processor on every render.
@@ -170,6 +185,10 @@ export default function PromptPanel({
   onAnswerRef.current = onAnswer;
   const promptIdRef = useRef(prompt.id);
   promptIdRef.current = prompt.id;
+  // Latest prompt for the action handler: whether a "secret" via is honored
+  // depends on the server-declared kind, read at dispatch time.
+  const promptRef = useRef(prompt);
+  promptRef.current = prompt;
 
   const { surface, fallback } = useMemo(
     () => {
@@ -179,7 +198,7 @@ export default function PromptPanel({
           // a2ui payloads use the same action contract).
           if (!action.name.startsWith("submit")) return;
           // Harden against payload-authored contexts: via defaults to "text"
-          // unless it is literally "choice" or "voice_text"; value is coerced
+          // unless it is one of the literals cenno defines; value is coerced
           // via String() with null/undefined → "" (ack).
           const ctx = action.context as
             | { value?: unknown; via?: unknown }
@@ -188,7 +207,12 @@ export default function PromptPanel({
           const via: Via =
             ctx?.via === "choice" || ctx?.via === "voice_text"
               ? ctx.via
-              : "text";
+              : // "secret" is honored ONLY for a prompt the server actually
+                // declared secret: otherwise a rich payload could route an
+                // ordinary answer down the credential path.
+                ctx?.via === "secret" && promptRef.current.input?.kind === "secret"
+                ? "secret"
+                : "text";
           // A binding that resolves to an array is either a single choice
           // (ChoicePicker/Scale always bind arrays) or a real multi-selection.
           // Unwrap the 1-element case so the answer stays a plain token; JOIN
@@ -399,6 +423,11 @@ export default function PromptPanel({
         >
           <A2uiSurface surface={surface} />
         </SurfaceErrorBoundary>
+        {secretError && (
+          <p className="prompt-panel__secret-error" role="alert">
+            {secretError}
+          </p>
+        )}
       </div>
     </div>
   );
