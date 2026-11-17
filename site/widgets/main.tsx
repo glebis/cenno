@@ -9,8 +9,11 @@ import {
   ImageChoiceView,
   MatrixView,
   StepScoreView,
+  TextFieldView,
 } from "../../src/a2ui/views";
 import type { StepScoreAnswer } from "../../src/a2ui/views";
+import { verdictFor } from "../../src/secretFormat";
+import type { SecretFormatInfo } from "../../src/secretFormat";
 import "./widgets.css";
 
 const IMG = "/widgets/img";
@@ -25,6 +28,7 @@ function Card({
   payload,
   question,
   answer,
+  received,
   children,
 }: {
   flow?: Flow;
@@ -33,8 +37,19 @@ function Card({
   payload: string;
   question: string;
   answer: string | null;
+  /**
+   * Literal text for the "Agent gets" cell. Most cards show `{answer, via}`,
+   * but a secret panel's receipt is not shaped like an answer — it carries a
+   * hint, never the value — so it is written out verbatim.
+   */
+  received?: string;
   children: ReactNode;
 }) {
+  const cell =
+    received ??
+    (answer === null
+      ? "nothing yet — answer the panel"
+      : JSON.stringify({ answer, via: "choice" }));
   return (
     <article className="wg-card">
       <h3 className="wg-card__name">{name}</h3>
@@ -52,8 +67,11 @@ function Card({
         <dd><code>{payload}</code></dd>
         <dt>Agent gets</dt>
         <dd>
-          <code className={answer === null ? "is-empty" : undefined} aria-live="polite">
-            {answer === null ? "nothing yet — answer the panel" : JSON.stringify({ answer, via: "choice" })}
+          <code
+            className={answer === null && !received ? "is-empty" : undefined}
+            aria-live="polite"
+          >
+            {cell}
           </code>
         </dd>
       </dl>
@@ -194,6 +212,56 @@ function StylePick() {
   );
 }
 
+function SecretField() {
+  const [value, setValue] = useState("");
+  const [sent, setSent] = useState<string | null>(null);
+  // The site has no Rust backend, so the catalogue is supplied here instead of
+  // being fetched. One shape is enough to show the caption doing its job; the
+  // app itself ships ~46.
+  const formats = new Map<string, SecretFormatInfo>([
+    [
+      "openai_api_key",
+      {
+        id: "openai_api_key",
+        label: "OpenAI API key",
+        pattern: "^sk-(proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}$",
+        hint: "OpenAI keys start sk- (or sk-proj-, sk-svcacct-)",
+      },
+    ],
+  ]);
+  return (
+    <Card
+      flow="reminder"
+      name="Collect a secret"
+      note="Masked, no dictation, hold the eye to look. The caption checks the shape live — a mismatch warns but never blocks, because a rotated or proxied key legitimately looks wrong. What the agent gets back has no field that could carry the value."
+      payload={`input · "kind": "secret"`}
+      question="Paste your OpenAI API key"
+      answer={sent}
+      received={
+        sent
+          ? `{"stored": true, "secret": {"name": "openai", "backend": "sops", "hint": "sk-pro…7a2f"}}`
+          : undefined
+      }
+    >
+      <TextFieldView
+        label="OpenAI API key"
+        obscured
+        value={value}
+        formatCheck={verdictFor(formats, "openai_api_key", value)}
+        onChange={(v) => {
+          setValue(v);
+          setSent(null);
+        }}
+        onSubmit={() =>
+          // Any non-null value flips the card out of its empty state; the
+          // "Agent gets" cell is rendered from `received` below.
+          setSent("stored")
+        }
+      />
+    </Card>
+  );
+}
+
 function Matrix({ mode }: { mode: "matrix" | "sliders" }) {
   const [draft, setDraft] = useState<Record<string, number>>({});
   const [done, setDone] = useState<string | null>(null);
@@ -274,6 +342,7 @@ function Gallery() {
     <div className="wg-grid">
       <RadioList />
       <CheckList />
+      <SecretField />
       <IconPick />
       <StylePick />
       <Matrix mode="matrix" />

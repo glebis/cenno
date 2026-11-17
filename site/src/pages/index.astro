@@ -212,7 +212,8 @@ const panels = [
         <h2>More than yes or no</h2>
         <p class="lede widgets-lede">
           When a single choice won't do, the agent sends a richer panel: a checklist,
-          a grid of images, a few things to rate at once. These are the app's own
+          a grid of images, a few things to rate at once, a key you paste without
+          ever showing it to the agent. These are the app's own
           controls, live — answer one and see exactly what the agent gets back.
           Every panel also names the agent that's asking, with its logo and its own
           color, so Claude Code and Codex never look alike.
@@ -398,7 +399,7 @@ const panels = [
     <section class="panel" id="data" data-flow="reminder" aria-label="Privacy and policy">
       <div class="panel-body reveal">
         <h2>Whose data?<br />Yours, all of it</h2>
-        <ul class="claims claims--four">
+        <ul class="claims claims--five">
           <li>
             <h3>Local by design</h3>
             <p>Every exchange lands in a local SQLite file with user-only permissions. cenno goes online only when you ask: an update check, or the one-time voice download.</p>
@@ -410,6 +411,10 @@ const panels = [
           <li>
             <h3>Respectful by policy</h3>
             <p>Pause prompts from the tray — 15 minutes to “until tomorrow”. Fullscreen keeps panels quiet automatically. Agents just see a normal timeout.</p>
+          </li>
+          <li>
+            <h3>Hand over a key, not the key</h3>
+            <p>When an agent needs a credential, it asks for one with a masked field — no dictation, hold the eye to look. It is encrypted with <a href="https://github.com/getsops/sops">sops</a> and an age key, one file per secret, and the agent gets back only a masked hint. You spend it yourself: <code>cenno secret run openai -- python deploy.py</code>.</p>
           </li>
           <li>
             <h3>Screen context, on request</h3>
@@ -1147,6 +1152,9 @@ const panels = [
       .claims p { color: var(--cenno-color-text-dim); max-width: 36ch; }
       .claims code { color: var(--cenno-color-text-default); font-size: 15px; }
       .claims--four { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+      /* Five claims: the secret field joined the privacy row. Slightly narrower
+         columns so the row still reads as one band rather than an orphan. */
+      .claims--five { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
 
       /* dev section sits on paper: ink text, not white */
       .panel[data-flow="paper"] .claims p { color: rgb(20 23 26 / 75%); }
